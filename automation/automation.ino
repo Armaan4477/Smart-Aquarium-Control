@@ -14,6 +14,35 @@
 #include <DallasTemperature.h>
 #include <time.h>
 
+void handleRoot();
+void handleFavicon();
+void handleLogsPage();
+void handleRelay1();
+void handleRelay2();
+void handleRelay3();
+void handleTime();
+void handleGetSchedules();
+void handleAddSchedule();
+void handleDeleteSchedule();
+void handleUpdateSchedule();
+void handleRelayStatus();
+void handleClearError();
+void handleGetErrorStatus();
+void handleOneClickLight();
+void handleTemperature();
+void emailLoop(void*);
+void mainLoop(void*);
+void sendEmailWithLogs(const String&);
+void checkoverride1();
+void checkoverride2();
+void overrideLEDState();
+void checkSchedules();
+void checkScheduleslaunch();
+void activateRelay(int, bool);
+void deactivateRelay(int, bool);
+void toggleLightSequence();
+void broadcastRelayStates();
+
 struct Schedule {
   int id;
   int relayNumber;
@@ -916,6 +945,8 @@ void clearError() {
   digitalWrite(errorLEDPin, LOW);
   hasError = false;
   triggerederror = false;
+  timeSyncErrorLogged = false;
+  tempErrorLogged = false;
 }
 
 void saveSchedulesToEEPROM() {
@@ -996,218 +1027,402 @@ const char mainPage[] PROGMEM = R"html(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aquarium Control</title>
     <style>
+        :root {
+            --primary-color: #1976D2;
+            --primary-dark: #0D47A1;
+            --primary-light: #BBDEFB;
+            --accent-color: #03A9F4;
+            --success-color: #4CAF50;
+            --warning-color: #FFC107;
+            --error-color: #F44336;
+            --text-color: #333;
+            --text-light: #757575;
+            --background-color: #f5f7fa;
+            --card-color: #ffffff;
+            --border-radius: 8px;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f2f5;
-            color: #333;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
         }
+
         header {
-            background-color: #4CAF50;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
             color: white;
-            padding: 15px;
+            padding: 20px;
             text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
         }
-        #time {
-            font-size: 2em;
-            margin: 20px 0;
-            text-align: center;
+
+        header h1 {
+            margin: 0;
+            font-size: 2rem;
+            letter-spacing: 0.5px;
         }
-        #day {
-            font-size: 1.5em;
-            margin: 10px 0;
-            text-align: center;
-        }
-        #date {
-            font-size: 1.5em;
-            margin: 10px 0;
-            text-align: center;
-        }
-        #temperature {
-            font-size: 1.8em;
-            margin: 15px 0;
-            text-align: center;
-            padding: 15px;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            color: #4CAF50;
-        }
+
         .container {
             padding: 20px;
-            max-width: 800px;
+            max-width: 1000px;
             margin: auto;
         }
-        .buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            justify-content: center;
-            margin-bottom: 30px;
-        }
-        .button {
-            flex: 1 1 150px;
-            padding: 15px;
-            background-color: #008CBA;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            cursor: pointer;
-            transition: background-color 0.3s;
+
+        .time-container {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: var(--card-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
             text-align: center;
         }
-        .button.on {
-            background-color: #4CAF50;
+
+        #time {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin: 10px 0;
+            transition: var(--transition);
         }
-        .button.off {
-            background-color: #f44336;
+
+        #day {
+            font-size: 1.5rem;
+            color: var(--text-light);
+            margin: 5px 0;
         }
-        .button:hover {
-            opacity: 0.9;
+
+        #date {
+            font-size: 1.5rem;
+            color: var(--text-light);
+            margin: 5px 0;
         }
-        .schedule-form, .log-section {
-            background-color: white;
+
+        #temperature {
+            font-size: 2rem;
+            margin: 20px 0;
+            text-align: center;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+            background-color: var(--card-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            color: var(--primary-color);
+            transition: var(--transition);
         }
+
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .button {
+            padding: 15px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1.1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: center;
+            box-shadow: var(--shadow);
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .button:active {
+            transform: translateY(1px);
+        }
+
+        .button.on {
+            background-color: var(--success-color);
+        }
+
+        .button.off {
+            background-color: var(--error-color);
+        }
+
+        .card {
+            background-color: var(--card-color);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 25px;
+            transition: var(--transition);
+        }
+
+        .card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
+
+        .card h3 {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
+        }
+
+        .schedule-form, .log-section {
+            background-color: var(--card-color);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 25px;
+            transition: var(--transition);
+        }
+
+        .schedule-form:hover, .log-section:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
+
         .schedule-form h3, .log-section h3 {
-            margin-top: 0;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
         }
+
         .schedule-form label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-color);
         }
-        .schedule-form input, .schedule-form select, .schedule-form button {
+
+        .schedule-form input, .schedule-form select {
             width: 100%;
-            padding: 10px;
-            margin: 10px 0 20px 0;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            box-sizing: border-box;
-            font-size: 1em;
+            padding: 12px;
+            margin: 8px 0 20px 0;
+            border-radius: var(--border-radius);
+            border: 1px solid #ddd;
+            font-size: 1rem;
+            transition: var(--transition);
         }
+
+        .schedule-form input:focus, .schedule-form select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
         .schedule-form select {
             appearance: none;
             background-color: #fff;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="%23333" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
             background-repeat: no-repeat;
             background-position: right 10px center;
-            background-size: 10px 7px;
             padding-right: 40px;
             cursor: pointer;
         }
-        .schedule-form select:focus {
-            outline: none;
-            border-color: #4CAF50;
+
+        .schedule-form button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: var(--transition);
+            margin-top: 10px;
         }
+
+        .schedule-form button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+
+        .schedule-form button:active {
+            transform: translateY(1px);
+        }
+
         .schedule-table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             margin-top: 20px;
-            overflow-x: auto;
+            overflow: hidden;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
         }
+
         .schedule-table th, .schedule-table td {
-            padding: 12px;
-            border: 1px solid #ddd;
+            padding: 15px;
             text-align: center;
         }
+
         .schedule-table th {
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             color: white;
+            font-weight: 500;
         }
+
+        .schedule-table th:first-child {
+            border-top-left-radius: var(--border-radius);
+        }
+
+        .schedule-table th:last-child {
+            border-top-right-radius: var(--border-radius);
+        }
+
+        .schedule-table tr:last-child td:first-child {
+            border-bottom-left-radius: var(--border-radius);
+        }
+
+        .schedule-table tr:last-child td:last-child {
+            border-bottom-right-radius: var(--border-radius);
+        }
+
         .schedule-table tr:nth-child(even) {
             background-color: #f9f9f9;
         }
+
+        .schedule-table tr {
+            background-color: white;
+            transition: var(--transition);
+        }
+
         .schedule-table tr:hover {
             background-color: #f1f1f1;
         }
-        @media (max-width: 600px) {
-            .schedule-table {
-                display: block;
-                width: 100%;
-                overflow-x: auto;
-            }
 
-            .schedule-table th, .schedule-table td {
-                box-sizing: border-box;
-            }
+        .schedule-table td {
+            border-bottom: 1px solid #eee;
         }
+
         .action-button {
-            width: 100px;
-            padding: 8px 0;
+            min-width: 100px;
+            padding: 8px 12px;
             margin: 5px;
-            background-color: #008CBA;
-            color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 0.9em;
-            transition: background-color 0.3s;
-            box-sizing: border-box;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: var(--transition);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
-        .action-button.activate {
-            background-color: #4CAF50;
-        }
-        .action-button.deactivate {
-            background-color: #f44336;
-        }
-        .action-button.delete {
-            background-color: #d32f2f;
-        }
+
         .action-button:hover {
-            opacity: 0.9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
+
+        .action-button:active {
+            transform: translateY(1px);
+        }
+
+        .action-button.activate {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .action-button.deactivate {
+            background-color: var(--warning-color);
+            color: #333;
+        }
+
+        .action-button.delete {
+            background-color: var(--error-color);
+            color: white;
+        }
+
         #errorSection {
             text-align: center;
             margin: 20px 0;
-            color: #fff;
-            background-color: #f44336;
-            padding: 15px;
-            border-radius: 8px;
-            display: none;
-        }
-        #clearErrorBtn {
-            padding: 10px 20px;
-            background-color: #d32f2f;
             color: white;
+            background-color: var(--error-color);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            display: none;
+            animation: pulse 2s infinite;
+            box-shadow: 0 4px 10px rgba(244, 67, 54, 0.3);
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(244, 67, 54, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
+        }
+
+        #clearErrorBtn {
+            padding: 12px 24px;
+            background-color: white;
+            color: var(--error-color);
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 1em;
-            margin-top: 10px;
+            font-size: 1rem;
+            font-weight: 500;
+            margin-top: 15px;
+            transition: var(--transition);
         }
+
+        #clearErrorBtn:hover {
+            background-color: #f5f5f5;
+            transform: scale(1.05);
+        }
+
         #logSection {
             display: none;
         }
+
         pre {
-            background-color: #f4f4f4;
+            background-color: #f8f9fa;
             padding: 15px;
-            border-radius: 8px;
+            border-radius: var(--border-radius);
             max-height: 300px;
             overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            border: 1px solid #eee;
+            white-space: pre-wrap;
         }
+
         .error {
-            color: #f44336;
+            color: var(--error-color);
             display: none;
             margin-top: -15px;
-            margin-bottom: 8px;
-            font-size: 0.9em;
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+            transition: var(--transition);
         }
+
         .error2 {
-            color: #f44336;
+            color: var(--error-color);
             display: none;
             margin-top: 2px;
-            margin-bottom: 8px;
-            font-size: 0.9em;
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+            transition: var(--transition);
         }
+
         .ready {
-            background-color: #4CAF50;
+            background-color: var(--success-color);
             cursor: pointer;
         }
+
         #successDialog {
             display: none;
             position: fixed;
@@ -1215,81 +1430,141 @@ const char mainPage[] PROGMEM = R"html(
             left: 50%;
             top: 50%;
             transform: translate(-50%, -50%);
-            background-color: #4CAF50;
+            background-color: var(--success-color);
             color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
             text-align: center;
+            min-width: 300px;
+            animation: fadeIn 0.3s ease-out;
         }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, -60%); }
+            to { opacity: 1; transform: translate(-50%, -50%); }
+        }
+
+        #successDialog p {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+        }
+
         #successDialog button {
             margin-top: 15px;
-            padding: 10px 20px;
-            background-color: #fff;
-            color: #4CAF50;
+            padding: 10px 25px;
+            background-color: white;
+            color: var(--success-color);
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 1em;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: var(--transition);
         }
+
         #successDialog button:hover {
-            background-color: #f1f1f1;
+            background-color: #f5f5f5;
+            transform: scale(1.05);
         }
-        @media (max-width: 600px) {
-            .buttons {
-                flex-direction: column;
-            }
-            .button {
-                flex: 1 1 100%;
-            }
-            .action-button {
-                width: 100%;
-            }
+
+        .day-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
         }
+
         .day-checkboxes label {
-            display: inline-block;
-            margin-right: 10px;
+            display: inline-flex;
+            align-items: center;
             position: relative;
-            padding-left: 25px;
+            padding-left: 30px;
             cursor: pointer;
-            font-size: 1em;
+            font-size: 1rem;
+            user-select: none;
+            margin-right: 15px;
+            margin-bottom: 5px;
         }
+
         .day-checkboxes input {
             position: absolute;
             opacity: 0;
             cursor: pointer;
+            height: 0;
+            width: 0;
         }
+
         .day-checkboxes .checkmark {
             position: absolute;
             top: 0;
             left: 0;
-            height: 18px;
-            width: 18px;
+            height: 20px;
+            width: 20px;
             background-color: #eee;
             border-radius: 4px;
+            transition: var(--transition);
         }
+
         .day-checkboxes label:hover input ~ .checkmark {
             background-color: #ccc;
         }
+
         .day-checkboxes input:checked ~ .checkmark {
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
         }
+
         .day-checkboxes .checkmark:after {
             content: "";
             position: absolute;
             display: none;
-        }
-        .day-checkboxes input:checked ~ .checkmark:after {
-            display: block;
-        }
-        .day-checkboxes label .checkmark:after {
-            left: 6px;
-            top: 2px;
+            left: 7px;
+            top: 3px;
             width: 5px;
             height: 10px;
             border: solid white;
-            border-width: 0 3px 3px 0;
+            border-width: 0 2px 2px 0;
             transform: rotate(45deg);
+        }
+
+        .day-checkboxes input:checked ~ .checkmark:after {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .buttons {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+            
+            #time {
+                font-size: 2rem;
+            }
+            
+            #day, #date {
+                font-size: 1.2rem;
+            }
+            
+            .day-checkboxes {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .day-checkboxes label {
+                margin-right: 0;
+            }
+            
+            .schedule-table {
+                display: block;
+                width: 100%;
+                overflow-x: auto;
+            }
+            
+            .action-button {
+                padding: 8px;
+                margin: 3px;
+                font-size: 0.8rem;
+                min-width: 80px;
+            }
         }
     </style>
 </head>
@@ -1298,9 +1573,11 @@ const char mainPage[] PROGMEM = R"html(
         <h1>Aquarium Control Panel</h1>
     </header>
     <div class="container">
-        <div id="time">Loading time...</div>
-        <div id="day">Loading day...</div>
-        <div id="date">Loading date...</div>
+        <div class="time-container">
+            <div id="time">Loading time...</div>
+            <div id="day">Loading day...</div>
+            <div id="date">Loading date...</div>
+        </div>
         <div id="temperature">Temperature: -- °C</div>
         <div class="buttons">
             <button class="button" onclick="toggleRelay(1)" id="btn1">WaveMaker</button>
@@ -1672,78 +1949,195 @@ const char logsPage[] PROGMEM = R"html(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Logs</title>
     <style>
+        :root {
+            --primary-color: #1976D2;
+            --primary-dark: #0D47A1;
+            --primary-light: #BBDEFB;
+            --accent-color: #03A9F4;
+            --success-color: #4CAF50;
+            --warning-color: #FFC107;
+            --error-color: #F44336;
+            --text-color: #333;
+            --text-light: #757575;
+            --background-color: #f5f7fa;
+            --card-color: #ffffff;
+            --border-radius: 8px;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f0f2f5;
-            color: #333;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
         }
+
         header {
-            background-color: #4CAF50;
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
             color: white;
-            padding: 15px;
+            padding: 20px;
             text-align: center;
-            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+            margin-bottom: 30px;
         }
+
+        header h1 {
+            margin: 0;
+            font-size: 2rem;
+            letter-spacing: 0.5px;
+        }
+
         .container {
             padding: 20px;
             max-width: 1200px;
             margin: auto;
         }
+
         .logs-table {
             width: 100%;
-            border-collapse: collapse;
-            background-color: white;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            border-radius: 8px;
+            border-collapse: separate;
+            border-spacing: 0;
+            background-color: var(--card-color);
+            box-shadow: var(--shadow);
+            border-radius: var(--border-radius);
             overflow: hidden;
+            margin-bottom: 30px;
         }
+
         .logs-table th, .logs-table td {
-            padding: 12px 15px;
+            padding: 15px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
         }
+
         .logs-table th {
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             color: white;
+            font-weight: 500;
         }
+
         .logs-table tr:nth-child(even) {
             background-color: #f9f9f9;
         }
-        .logs-table tr:hover {
-            background-color: #f5f5f5;
+
+        .logs-table tr {
+            transition: var(--transition);
+            border-bottom: 1px solid #eee;
         }
+
+        .logs-table tr:last-child {
+            border-bottom: none;
+        }
+
+        .logs-table tr:hover {
+            background-color: #f1f1f1;
+        }
+
         .button {
             display: inline-block;
-            padding: 10px 20px;
-            background-color: #4CAF50;
+            padding: 12px 24px;
+            background-color: var(--primary-color);
             color: white;
             text-decoration: none;
-            border-radius: 4px;
-            margin: 20px 0;
-            transition: background-color 0.3s;
+            border-radius: var(--border-radius);
+            margin: 5px 0 20px 0;
+            transition: var(--transition);
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: var(--shadow);
+            text-align: center;
         }
+
         .button:hover {
-            background-color: #45a049;
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
         }
+
+        .button:active {
+            transform: translateY(1px);
+        }
+
         .refresh-button {
             float: right;
+            background-color: var(--success-color);
         }
+
+        .refresh-button:hover {
+            background-color: #388E3C;
+        }
+
         .header-actions {
             margin-bottom: 20px;
             overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }
-        @media (max-width: 600px) {
+
+        @media (max-width: 768px) {
             .logs-table {
                 font-size: 14px;
             }
+            
             .logs-table th, .logs-table td {
-                padding: 8px 10px;
+                padding: 10px;
             }
+            
             .container {
                 padding: 10px;
             }
+            
+            .header-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .button {
+                width: 100%;
+                margin: 5px 0;
+                text-align: center;
+            }
+            
+            .refresh-button {
+                float: none;
+            }
+        }
+
+        /* Loading animation */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -1755,6 +2149,10 @@ const char logsPage[] PROGMEM = R"html(
         <div class="header-actions">
             <a href="/" class="button">Back to Dashboard</a>
             <button onclick="refreshLogs()" class="button refresh-button">Refresh Logs</button>
+        </div>
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p>Loading logs...</p>
         </div>
         <table class="logs-table">
             <thead>
@@ -1770,6 +2168,8 @@ const char logsPage[] PROGMEM = R"html(
     </div>
     <script>
         function loadLogs() {
+            document.getElementById('loading').style.display = 'block';
+            
             fetch('/logs/data')
                 .then(response => response.json())
                 .then(data => {
@@ -1784,8 +2184,13 @@ const char logsPage[] PROGMEM = R"html(
                             row.insertCell(2).textContent = log.message;
                         });
                     }
+                    
+                    document.getElementById('loading').style.display = 'none';
                 })
-                .catch(error => console.error('Error loading logs:', error));
+                .catch(error => {
+                    console.error('Error loading logs:', error);
+                    document.getElementById('loading').style.display = 'none';
+                });
         }
 
         function refreshLogs() {
@@ -2344,6 +2749,7 @@ void handleTime() {
                         
   String formattedDate = String(timeinfo.tm_mday) + "/" + 
                          String(timeinfo.tm_mon + 1) + "/" + 
+ 
                          String(timeinfo.tm_year + 1900);
                          
   String response = formattedTime + " " + currentDayName + " " + formattedDate;
