@@ -46,6 +46,7 @@ bool relay3State = false;
 bool relay4State = false;
 bool timeSyncErrorLogged = false;
 bool tempErrorLogged = false;
+bool triggerederror = false;
 
 const char* ssid = "Free Public Wi-Fi";
 const char* password = "2A0R0M4AAN";
@@ -902,8 +903,11 @@ void setup() {
 }
 
 void indicateError() {
-  storeLogEntry("Error triggered.");
-  digitalWrite(errorLEDPin, HIGH);
+  if (!triggerederror) {
+    storeLogEntry("Error triggered.");
+    digitalWrite(errorLEDPin, HIGH);
+    triggerederror = true;
+  }
   hasError = true;
 }
 
@@ -911,6 +915,7 @@ void clearError() {
   storeLogEntry("Error cleared.");
   digitalWrite(errorLEDPin, LOW);
   hasError = false;
+  triggerederror = false;
 }
 
 void saveSchedulesToEEPROM() {
