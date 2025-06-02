@@ -9,10 +9,11 @@
 #include <string>
 #include <Ticker.h>
 #include <TimeLib.h>
-#include <SPIFFS.h>
+#include <LittleFS.h> // Changed from SPIFFS to LittleFS
 #include <ESP_Mail_Client.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <time.h>
 
 struct Schedule {
   int id;
@@ -56,7 +57,6 @@ unsigned long lastLoopTime = 0;
 const unsigned long watchdogTimeout = 10000;
 unsigned long lastTimeUpdate = 0;
 const long timeUpdateInterval = 1000;
-unsigned long epochTime = 0;
 unsigned long lastNTPSync = 0;
 unsigned long lastScheduleCheck = 0;
 unsigned long lastSecond = 0;
@@ -89,12 +89,12 @@ const std::vector<String> allowedIPs = {
 };
 unsigned long lastSwitch1Debounce = 0;
 unsigned long lastSwitch2Debounce = 0;
-const unsigned long DEBOUNCE_DELAY = 500;
+const unsigned long DEBOUNCE_DELAY = 800;
 unsigned long switch1PressStartTime = 0;
 unsigned long switch2PressStartTime = 0;
 bool switch1LastState = false;
 bool switch2LastState = false;
-const unsigned long HOLD_DURATION = 1000;
+const unsigned long HOLD_DURATION = 1500;
 extern unsigned long switch1PressStartTime;
 extern unsigned long switch2PressStartTime;
 extern bool switch1LastState;
@@ -682,16 +682,22 @@ const int MAX_TEMP_FAILURES = 3;
 int consecutiveTempFailures = 0;
 bool hasTempError = false;
 
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 19800; // 5 hours 30 minutes offset for IST
+const int daylightOffset_sec = 0; // 0 for no daylight saving time
+unsigned long lastNtpRetry = 0;
+const unsigned long NTP_RETRY_INTERVAL = 30000;
+
 void handleGetLogs() {
   if (!spiffsInitialized) {
-    server.send(500, "application/json", "{\"error\":\"SPIFFS not initialized!\"}");
+    server.send(500, "application/json", "{\"error\":\"LittleFS not initialized!\"}");
     return;
   }
 
   StaticJsonDocument<2352> doc;
   doc.clear();
 
-  File file = SPIFFS.open("/logs.json", "r");
+  File file = LittleFS.open("/logs.json", "r");
   if (!file) {
     server.send(404, "application/json", "{\"logs\":[]}");
     return;
@@ -710,61 +716,56 @@ void handleGetLogs() {
 }
 
 void storeLogEntry(const String& msg) {
-  //Serial.println(msg);
+  // Serial.println(msg);
   const int MAX_LOGS = 18;
   const int MAX_LOG_ID = 20;
 
   if (!spiffsInitialized) return;
 
-  unsigned long hours = ((epochTime % 86400L) / 3600);
-  unsigned long minutes = ((epochTime % 3600) / 60);
-  unsigned long seconds = (epochTime % 60);
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo)) {
+    char timeStr[20];
+    sprintf(timeStr, "%02d/%02d/%d %02d:%02d:%02d",
+            timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900,
+            timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
 
-  int currentDay = day();
-  int currentMonth = month();
-  int currentYear = year();
+    StaticJsonDocument<2048> doc;
+    doc.clear();
 
-  char timeStr[20];
-  sprintf(timeStr, "%02d/%02d/%d %02lu:%02lu:%02lu",
-          currentDay, currentMonth, currentYear,
-          hours, minutes, seconds);
+    File file = LittleFS.open("/logs.json", "r");
+    bool fileExists = file;
+    if (fileExists) {
+      DeserializationError error = deserializeJson(doc, file);
+      file.close();
 
-  StaticJsonDocument<2048> doc;
-  doc.clear();
-
-  File file = SPIFFS.open("/logs.json", "r");
-  bool fileExists = file;
-  if (fileExists) {
-    DeserializationError error = deserializeJson(doc, file);
-    file.close();
-
-    if (error) {
-      doc.clear();
+      if (error) {
+        doc.clear();
+        doc.createNestedArray("logs");
+      }
+    } else {
       doc.createNestedArray("logs");
     }
-  } else {
-    doc.createNestedArray("logs");
-  }
 
-  JsonArray logs = doc["logs"].as<JsonArray>();
+    JsonArray logs = doc["logs"].as<JsonArray>();
 
-  if (logs.size() >= MAX_LOGS) {
-    logs.remove(0);
-  }
+    if (logs.size() >= MAX_LOGS) {
+      logs.remove(0);
+    }
 
-  if (logIdCounter >= MAX_LOG_ID) {
-    logIdCounter = 0;
-  }
+    if (logIdCounter >= MAX_LOG_ID) {
+      logIdCounter = 0;
+    }
 
-  JsonObject newLog = logs.createNestedObject();
-  newLog["id"] = logIdCounter++;
-  newLog["timestamp"] = timeStr;
-  newLog["message"] = msg;
+    JsonObject newLog = logs.createNestedObject();
+    newLog["id"] = logIdCounter++;
+    newLog["timestamp"] = timeStr;
+    newLog["message"] = msg;
 
-  File outFile = SPIFFS.open("/logs.json", "w");
-  if (outFile) {
-    serializeJson(doc, outFile);
-    outFile.close();
+    File outFile = LittleFS.open("/logs.json", "w");
+    if (outFile) {
+      serializeJson(doc, outFile);
+      outFile.close();
+    }
   }
 }
 
@@ -805,7 +806,7 @@ void setup() {
 
   sensors.begin();
 
-  if (!SPIFFS.begin(true)) {
+  if (!LittleFS.begin(true)) {
     storeLogEntry("Failed to mount FS");
   } else {
     spiffsInitialized = true;
@@ -830,27 +831,23 @@ void setup() {
     storeLogEntry("Connected to WiFi");
     storeLogEntry("IP Address: " + WiFi.localIP().toString());
     clearError();
-  }
 
-  timeClient.begin();
-  timeClient.setTimeOffset(19800);
-
-  if (timeClient.update()) {
-    epochTime = timeClient.getEpochTime();
-    setTime(epochTime);
-
-    currentDay = day();
-    currentMonth = month();
-    currentyear = year();
-
-    lastNTPSync = millis();
-    validTimeSync = true;
-    validDateSync = true;
-    storeLogEntry("Time and Date sync successful");
-    clearError();
-  } else {
-    storeLogEntry("Time sync failed.");
-    indicateError();
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+      storeLogEntry("Time and Date sync successful");
+      validTimeSync = true;
+      validDateSync = true;
+      lastNTPSync = millis();
+      clearError();
+      
+      setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+              timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+    } else {
+      storeLogEntry("Time sync failed.");
+      indicateError();
+    }
   }
 
   server.on("/", HTTP_GET, handleRoot);
@@ -1121,12 +1118,11 @@ const char mainPage[] PROGMEM = R"html(
         }
         @media (max-width: 600px) {
             .schedule-table {
-                display: block; /* Ensure the table behaves as a block element on mobile */
-                width: 100%;    /* Ensure the table takes full width */
-                overflow-x: auto; /* Allow horizontal scrolling within the table */
+                display: block;
+                width: 100%;
+                overflow-x: auto;
             }
 
-            /* Optional: Apply box-sizing to include padding and border in width calculations */
             .schedule-table th, .schedule-table td {
                 box-sizing: border-box;
             }
@@ -1812,7 +1808,11 @@ void emailLoop(void* parameter) {
         delay(1500);
         sendEmailWithLogs("Device is powered on");
         startupemail = true;
-        last90MinCheck = (hour() * 3600 + minute() * 60 + second());
+        
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo)) {
+          last90MinCheck = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
+        }
       }
 
       if (pointemail) {
@@ -1835,44 +1835,58 @@ void mainLoop(void* parameter) {
     overrideLEDState();
 
     if (!validTimeSync) {
-      if (timeClient.update()) {
-        epochTime = timeClient.getEpochTime();
-        setTime(epochTime);
-        lastNTPSync = millis();
-        validTimeSync = true;
-        validDateSync = true;
-        storeLogEntry("Time sync successful (retry)");
-        clearError();
-      } else {
-        storeLogEntry("Time sync failed (retry).");
-        indicateError();
+      unsigned long currentMillis = millis();
+      if (currentMillis - lastNtpRetry >= NTP_RETRY_INTERVAL) {
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo)) {
+          validTimeSync = true;
+          validDateSync = true;
+          lastNTPSync = currentMillis;
+          storeLogEntry("Time sync successful (retry)");
+          clearError();
+          
+          setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+                  timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+        } else {
+          storeLogEntry("Time sync failed (retry).");
+          indicateError();
+        }
+        lastNtpRetry = currentMillis;
       }
     }
 
-    unsigned long currentMillis = millis();
-    if (currentMillis - lastTimeUpdate >= 1000) {
-      epochTime++;
-      lastTimeUpdate = currentMillis;
-
+    static unsigned long lastSecondCheck = 0;
+    if (millis() - lastSecondCheck >= 1000) {
+      lastSecondCheck = millis();
+      
       if (validTimeSync) {
         checkSchedules();
 
-        unsigned long currentSeconds = hour() * 3600 + minute() * 60 + second();
-        if (currentSeconds - last90MinCheck >= CHECK_90MIN_INTERVAL || (last90MinCheck > currentSeconds && currentSeconds >= 0)) {
-          String timeStr = String(hour()) + ":" + (minute() < 10 ? "0" : "") + String(minute());
-          storeLogEntry("Device is powered on at " + timeStr);
-          last90MinCheck = currentSeconds;
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo)) {
+          unsigned long currentSeconds = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
+          
+          // 90 minute check
+          if (currentSeconds - last90MinCheck >= CHECK_90MIN_INTERVAL || 
+              (last90MinCheck > currentSeconds && currentSeconds >= 0)) {
+            String timeStr = String(timeinfo.tm_hour) + ":" + 
+                            (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min);
+            storeLogEntry("Device is powered on at " + timeStr);
+            last90MinCheck = currentSeconds;
 
-          if (startupemail && !pointemail) {
-            pointemail = true;
+            if (startupemail && !pointemail) {
+              pointemail = true;
+            }
           }
-        }
 
-        int newDay = day();
-        if (newDay != currentDay) {
-          storeLogEntry("Day changed to: " + String(newDay));
-          currentDay = newDay;
-          last90MinCheck = 0;
+          static int prevDay = -1;
+          if (prevDay == -1) {
+            prevDay = timeinfo.tm_mday;
+          } else if (timeinfo.tm_mday != prevDay) {
+            storeLogEntry("Day changed to: " + String(timeinfo.tm_mday));
+            prevDay = timeinfo.tm_mday;
+            last90MinCheck = 0;
+          }
         }
       }
     }
@@ -1888,15 +1902,32 @@ void mainLoop(void* parameter) {
       }
     }
 
+    if (millis() - lastNTPSync > 43200000) {
+      configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+      struct tm timeinfo;
+      if (getLocalTime(&timeinfo)) {
+        lastNTPSync = millis();
+        storeLogEntry("Regular time sync successful");
+        
+        setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+                timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+      }
+    }
+
     delay(1);
   }
 }
 
 void checkSchedules() {
-  unsigned long hours = ((epochTime % 86400L) / 3600);
-  unsigned long minutes = ((epochTime % 3600) / 60);
-  unsigned long seconds = (epochTime % 60);
-  int weekdayIndex = weekday() - 1;
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    return;
+  }
+  
+  int hours = timeinfo.tm_hour;
+  int minutes = timeinfo.tm_min;
+  int seconds = timeinfo.tm_sec;
+  int weekdayIndex = (timeinfo.tm_wday + 6) % 7;
 
   for (const Schedule& schedule : schedules) {
     if (!schedule.enabled || !schedule.daysOfWeek[weekdayIndex]) continue;
@@ -1920,10 +1951,15 @@ void checkSchedules() {
 }
 
 void checkScheduleslaunch() {
-  unsigned long hours = ((epochTime % 86400L) / 3600);
-  unsigned long minutes = ((epochTime % 3600) / 60);
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    return;
+  }
+  
+  int hours = timeinfo.tm_hour;
+  int minutes = timeinfo.tm_min;
   unsigned long currentTime = hours * 60 + minutes;
-  int weekdayIndex = weekday() - 1;
+  int weekdayIndex = (timeinfo.tm_wday + 6) % 7;
 
   bool relay1ShouldBeOn = false;
   bool relay2ShouldBeOn = false;
@@ -2274,20 +2310,23 @@ void toggleLightSequence() {
 }
 
 void handleTime() {
-  unsigned long currentEpoch = epochTime;
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    server.send(500, "text/plain", "Error getting time");
+    return;
+  }
 
-  setTime(currentEpoch);
-
-  int currentYearVal = year();
-  int currentMonthVal = month();
-  int currentDayVal = day();
-
-  int currentWeekday = weekday();
   const char* daysOfWeek[7] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
-  String currentDayName = daysOfWeek[currentWeekday - 1];
+  String currentDayName = daysOfWeek[timeinfo.tm_wday];
 
-  String formattedTime = String(hour()) + ":" + (minute() < 10 ? "0" : "") + String(minute()) + ":" + (second() < 10 ? "0" : "") + String(second());
-  String formattedDate = String(currentDayVal) + "/" + String(currentMonthVal) + "/" + String(currentYearVal);
+  String formattedTime = String(timeinfo.tm_hour) + ":" + 
+                        (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min) + ":" + 
+                        (timeinfo.tm_sec < 10 ? "0" : "") + String(timeinfo.tm_sec);
+                        
+  String formattedDate = String(timeinfo.tm_mday) + "/" + 
+                         String(timeinfo.tm_mon + 1) + "/" + 
+                         String(timeinfo.tm_year + 1900);
+                         
   String response = formattedTime + " " + currentDayName + " " + formattedDate;
   server.send(200, "text/plain", response);
 }
@@ -2410,7 +2449,7 @@ void sendEmailWithLogs(const String& trigger) {
     return;
   }
 
-  if (!SPIFFS.exists("/logs.json")) {
+  if (!LittleFS.exists("/logs.json")) { // Changed SPIFFS to LittleFS
     storeLogEntry("Failed to send email: logs.json does not exist");
     return;
   }
@@ -2455,7 +2494,7 @@ void sendEmailWithLogs(const String& trigger) {
   message.text.charSet = "us-ascii";
   message.text.transfer_encoding = Content_Transfer_Encoding::enc_7bit;
 
-  File logsFile = SPIFFS.open("/logs.json", "r");
+  File logsFile = LittleFS.open("/logs.json", "r"); // Changed SPIFFS to LittleFS
   if (!logsFile) {
     storeLogEntry("Failed to open logs file for email");
     return;
