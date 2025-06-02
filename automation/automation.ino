@@ -1,7 +1,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
-#include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <vector>
 #include <ArduinoJson.h>
@@ -9,7 +8,7 @@
 #include <string>
 #include <Ticker.h>
 #include <TimeLib.h>
-#include <LittleFS.h> // Changed from SPIFFS to LittleFS
+#include <LittleFS.h>
 #include <ESP_Mail_Client.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -45,13 +44,14 @@ bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
 bool relay4State = false;
+bool timeSyncErrorLogged = false;
+bool tempErrorLogged = false;
 
 const char* ssid = "Free Public Wi-Fi";
 const char* password = "2A0R0M4AAN";
 std::vector<LogEntry> logBuffer;
 bool spiffsInitialized = false;
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org");
 Ticker watchdogTicker;
 unsigned long lastLoopTime = 0;
 const unsigned long watchdogTimeout = 10000;
@@ -841,11 +841,15 @@ void setup() {
       validDateSync = true;
       lastNTPSync = millis();
       clearError();
+      timeSyncErrorLogged = false;
       
       setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
               timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
     } else {
-      storeLogEntry("Time sync failed.");
+      if (!timeSyncErrorLogged) {
+        storeLogEntry("Time sync failed.");
+        timeSyncErrorLogged = true;
+      }
       indicateError();
     }
   }
@@ -1843,12 +1847,16 @@ void mainLoop(void* parameter) {
           validDateSync = true;
           lastNTPSync = currentMillis;
           storeLogEntry("Time sync successful (retry)");
+          timeSyncErrorLogged = false;
           clearError();
           
           setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
                   timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
         } else {
-          storeLogEntry("Time sync failed (retry).");
+          if (!timeSyncErrorLogged) {
+            storeLogEntry("Time sync failed (retry).");
+            timeSyncErrorLogged = true;
+          }
           indicateError();
         }
         lastNtpRetry = currentMillis;
@@ -1908,9 +1916,15 @@ void mainLoop(void* parameter) {
       if (getLocalTime(&timeinfo)) {
         lastNTPSync = millis();
         storeLogEntry("Regular time sync successful");
+        timeSyncErrorLogged = false;
         
         setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
                 timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+      } else {
+        if (!timeSyncErrorLogged) {
+          storeLogEntry("Regular time sync failed.");
+          timeSyncErrorLogged = true;
+        }
       }
     }
 
@@ -2449,7 +2463,7 @@ void sendEmailWithLogs(const String& trigger) {
     return;
   }
 
-  if (!LittleFS.exists("/logs.json")) { // Changed SPIFFS to LittleFS
+  if (!LittleFS.exists("/logs.json")) { 
     storeLogEntry("Failed to send email: logs.json does not exist");
     return;
   }
@@ -2477,9 +2491,17 @@ void sendEmailWithLogs(const String& trigger) {
   message.subject = String(emailSubject) + " - " + trigger;
   message.addRecipient("User", emailRecipient);
 
+  struct tm timeinfo;
+  String formattedTime = "Unknown";
+  if (getLocalTime(&timeinfo)) {
+    char timeStr[20];
+    sprintf(timeStr, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+    formattedTime = String(timeStr);
+  }
+
   String textMsg = "Aquarium Control System Report\n";
   textMsg += "Event: " + trigger + "\n";
-  textMsg += "Timestamp: " + timeClient.getFormattedTime() + "\n\n";
+  textMsg += "Timestamp: " + formattedTime + "\n\n";
   textMsg += "System Status:\n";
   textMsg += "Temperature: " + String(lastValidTemperature, 1) + " °C\n";
   textMsg += "Relay 1 (WaveMaker): " + String(relay1State ? "ON" : "OFF") + "\n";
@@ -2494,7 +2516,7 @@ void sendEmailWithLogs(const String& trigger) {
   message.text.charSet = "us-ascii";
   message.text.transfer_encoding = Content_Transfer_Encoding::enc_7bit;
 
-  File logsFile = LittleFS.open("/logs.json", "r"); // Changed SPIFFS to LittleFS
+  File logsFile = LittleFS.open("/logs.json", "r");
   if (!logsFile) {
     storeLogEntry("Failed to open logs file for email");
     return;
@@ -2546,11 +2568,15 @@ void handleTemperature() {
             if (hasTempError) {
                 clearError();
                 hasTempError = false;
+                tempErrorLogged = false;
             }
         } else {
             consecutiveTempFailures++;
             if (consecutiveTempFailures >= MAX_TEMP_FAILURES) {
-                storeLogEntry("Error: Temperature sensor failed " + String(consecutiveTempFailures) + " times");
+                if (!tempErrorLogged) {
+                    storeLogEntry("Error: Temperature sensor failed " + String(consecutiveTempFailures) + " times");
+                    tempErrorLogged = true;
+                }
                 indicateError();
                 hasTempError = true;
             }
