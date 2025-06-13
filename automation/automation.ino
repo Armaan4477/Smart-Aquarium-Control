@@ -141,7 +141,7 @@ const char* authPassword = "12345678";
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 DeviceAddress tempDeviceAddress;
-DeviceAddress sensorAddress = {0x28, 0x59, 0x71, 0x80, 0xE3, 0xE1, 0x3C, 0x50};
+DeviceAddress sensorAddress = { 0x28, 0x59, 0x71, 0x80, 0xE3, 0xE1, 0x3C, 0x50 };
 unsigned long lastTemp = 0;
 float currentTemp = 0;
 float lastValidTemperature = 0.0;
@@ -700,9 +700,9 @@ const size_t favicon_png_len = sizeof(favicon_png);
 
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT 465
-const char* emailSenderAccount = "your-email@gmail.com";
-const char* emailSenderPassword = "your-app-specific-password";
-const char* emailRecipient = "recipient@email.com";
+const char* emailSenderAccount = "nakhudaarmaan66@gmail.com";
+const char* emailSenderPassword = "hfnu yeqk rjvs payp";
+const char* emailRecipient = "nakhudaarmaan6@gmail.com";
 const char* emailSubject = "Aquarium Control Logs";
 
 SMTPSession smtp;
@@ -716,8 +716,8 @@ int consecutiveTempFailures = 0;
 bool hasTempError = false;
 
 const char* ntpServer = "pool.ntp.org";
-const long gmtOffset_sec = 19800; // 5 hours 30 minutes offset for IST
-const int daylightOffset_sec = 0; // 0 for no daylight saving time
+const long gmtOffset_sec = 19800;  // 5 hours 30 minutes offset for IST
+const int daylightOffset_sec = 0;  // 0 for no daylight saving time
 unsigned long lastNtpRetry = 0;
 const unsigned long NTP_RETRY_INTERVAL = 30000;
 
@@ -764,7 +764,6 @@ void storeLogEntry(const String& msg) {
             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
     timeStr = String(buffer);
   } else {
-    // Use placeholder timestamp when time sync hasn't been completed
     timeStr = "00/00/0000 00:00:00";
   }
 
@@ -827,7 +826,7 @@ TaskHandle_t controlTask;
 
 void attemptTimeSync() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  
+
   struct tm timeinfo;
   if (getLocalTime(&timeinfo)) {
     storeLogEntry("Time and Date sync successful");
@@ -836,7 +835,7 @@ void attemptTimeSync() {
     lastNTPSync = millis();
     clearError();
     timeSyncErrorLogged = false;
-    
+
     setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
             timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
   } else {
@@ -879,7 +878,7 @@ void setup() {
   }
 
   wifiConnectHandler = WiFi.onEvent(onWifiConnected, ARDUINO_EVENT_WIFI_STA_CONNECTED);
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   unsigned long wifiStartTime = millis();
@@ -1002,10 +1001,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         IPAddress ip = webSocket.remoteIP(num);
         storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString() + " url: " + String((char*)payload));
 
-        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
-                        ",\"relay2\":" + String(relay2State || overrideRelay2) + 
-                        ",\"relay3\":" + String(relay3State || overrideRelay1) + 
-                        ",\"temperature\":" + String(lastValidTemperature, 1) + "}";
+        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + "}";
         webSocket.sendTXT(num, message);
       }
       break;
@@ -2237,7 +2233,7 @@ void loop() {
 void emailLoop(void* parameter) {
   for (;;) {
     handleTemperature();
-    
+
     if (WiFi.status() != WL_CONNECTED) {
       unsigned long currentMillis = millis();
       if (currentMillis - lastWifiConnectAttempt > WIFI_RECONNECT_INTERVAL) {
@@ -2249,12 +2245,12 @@ void emailLoop(void* parameter) {
       if (!validTimeSync) {
         attemptTimeSync();
       }
-      
+
       if (!startupemail) {
         delay(1500);
         sendEmailWithLogs("Device is powered on");
         startupemail = true;
-        
+
         struct tm timeinfo;
         if (getLocalTime(&timeinfo)) {
           last90MinCheck = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
@@ -2290,19 +2286,17 @@ void mainLoop(void* parameter) {
     static unsigned long lastSecondCheck = 0;
     if (millis() - lastSecondCheck >= 1000) {
       lastSecondCheck = millis();
-      
+
       if (validTimeSync) {
         checkSchedules();
 
         struct tm timeinfo;
         if (getLocalTime(&timeinfo)) {
           unsigned long currentSeconds = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
-          
+
           // 90 minute check
-          if (currentSeconds - last90MinCheck >= CHECK_90MIN_INTERVAL || 
-              (last90MinCheck > currentSeconds && currentSeconds >= 0)) {
-            String timeStr = String(timeinfo.tm_hour) + ":" + 
-                            (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min);
+          if (currentSeconds - last90MinCheck >= CHECK_90MIN_INTERVAL || (last90MinCheck > currentSeconds && currentSeconds >= 0)) {
+            String timeStr = String(timeinfo.tm_hour) + ":" + (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min);
             storeLogEntry("Device is powered on at " + timeStr);
             last90MinCheck = currentSeconds;
 
@@ -2341,7 +2335,7 @@ void mainLoop(void* parameter) {
         lastNTPSync = millis();
         storeLogEntry("Regular time sync successful");
         timeSyncErrorLogged = false;
-        
+
         setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
                 timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
       } else {
@@ -2361,7 +2355,7 @@ void checkSchedules() {
   if (!getLocalTime(&timeinfo)) {
     return;
   }
-  
+
   int hours = timeinfo.tm_hour;
   int minutes = timeinfo.tm_min;
   int seconds = timeinfo.tm_sec;
@@ -2407,7 +2401,7 @@ void checkScheduleslaunch() {
   if (!getLocalTime(&timeinfo)) {
     return;
   }
-  
+
   int hours = timeinfo.tm_hour;
   int minutes = timeinfo.tm_min;
   unsigned long currentTime = hours * 60 + minutes;
@@ -2449,7 +2443,7 @@ void checkScheduleslaunch() {
       deactivateRelay(1, false);
       storeLogEntry("Relay 1 deactivated by startup schedule check");
     }
-    
+
     if (relay3ShouldBeOn) {
       activateRelay(3, false);
       storeLogEntry("Relay 3 activated by startup schedule check");
@@ -2522,10 +2516,7 @@ void deactivateRelay(int relayNum, bool manual) {
 }
 
 void broadcastRelayStates() {
-  String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
-                  ",\"relay2\":" + String(relay2State || overrideRelay2) + 
-                  ",\"relay3\":" + String(relay3State || overrideRelay1) + 
-                  ",\"temperature\":" + String(lastValidTemperature, 1) + "}";
+  String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + "}";
   webSocket.broadcastTXT(message);
 }
 
@@ -2777,15 +2768,12 @@ void handleTime() {
   const char* daysOfWeek[7] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
   String currentDayName = daysOfWeek[timeinfo.tm_wday];
 
-  String formattedTime = String(timeinfo.tm_hour) + ":" + 
-                        (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min) + ":" + 
-                        (timeinfo.tm_sec < 10 ? "0" : "") + String(timeinfo.tm_sec);
-                        
-  String formattedDate = String(timeinfo.tm_mday) + "/" + 
-                         String(timeinfo.tm_mon + 1) + "/" + 
- 
+  String formattedTime = String(timeinfo.tm_hour) + ":" + (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min) + ":" + (timeinfo.tm_sec < 10 ? "0" : "") + String(timeinfo.tm_sec);
+
+  String formattedDate = String(timeinfo.tm_mday) + "/" + String(timeinfo.tm_mon + 1) + "/" +
+
                          String(timeinfo.tm_year + 1900);
-                         
+
   String response = formattedTime + " " + currentDayName + " " + formattedDate;
   server.send(200, "text/plain", response);
 }
@@ -2908,7 +2896,7 @@ void sendEmailWithLogs(const String& trigger) {
     return;
   }
 
-  if (!LittleFS.exists("/logs.json")) { 
+  if (!LittleFS.exists("/logs.json")) {
     storeLogEntry("Failed to send email: logs.json does not exist");
     return;
   }
@@ -3001,49 +2989,49 @@ void sendEmailWithLogs(const String& trigger) {
 }
 
 void handleTemperature() {
-    if (millis() - lastTemp >= 5000) {
-        sensors.requestTemperatures();
-        float tempC = sensors.getTempC(sensorAddress);
-        
-        if(tempC != DEVICE_DISCONNECTED_C) {
-            currentTemp = tempC;
-            lastValidTemperature = tempC;
-            broadcastRelayStates();
-            consecutiveTempFailures = 0;
-            if (hasTempError) {
-                clearError();
-                hasTempError = false;
-                tempErrorLogged = false;
-            }
-        } else {
-            consecutiveTempFailures++;
-            if (consecutiveTempFailures >= MAX_TEMP_FAILURES) {
-                if (!tempErrorLogged) {
-                    storeLogEntry("Error: Temperature sensor failed " + String(consecutiveTempFailures) + " times");
-                    tempErrorLogged = true;
-                }
-                indicateError();
-                hasTempError = true;
-            }
+  if (millis() - lastTemp >= 5000) {
+    sensors.requestTemperatures();
+    float tempC = sensors.getTempC(sensorAddress);
+
+    if (tempC != DEVICE_DISCONNECTED_C) {
+      currentTemp = tempC;
+      lastValidTemperature = tempC;
+      broadcastRelayStates();
+      consecutiveTempFailures = 0;
+      if (hasTempError) {
+        clearError();
+        hasTempError = false;
+        tempErrorLogged = false;
+      }
+    } else {
+      consecutiveTempFailures++;
+      if (consecutiveTempFailures >= MAX_TEMP_FAILURES) {
+        if (!tempErrorLogged) {
+          storeLogEntry("Error: Temperature sensor failed " + String(consecutiveTempFailures) + " times");
+          tempErrorLogged = true;
         }
-        
-        lastTemp = millis();
+        indicateError();
+        hasTempError = true;
+      }
     }
+
+    lastTemp = millis();
+  }
 }
 
 void templaunch() {
   sensors.requestTemperatures();
-        float tempC = sensors.getTempC(sensorAddress);
-        
-        if(tempC != DEVICE_DISCONNECTED_C) {
-            currentTemp = tempC;
-            lastValidTemperature = tempC;
-            broadcastRelayStates();
-            consecutiveTempFailures = 0;
-            if (hasTempError) {
-                clearError();
-                hasTempError = false;
-                tempErrorLogged = false;
-            }
-        }
+  float tempC = sensors.getTempC(sensorAddress);
+
+  if (tempC != DEVICE_DISCONNECTED_C) {
+    currentTemp = tempC;
+    lastValidTemperature = tempC;
+    broadcastRelayStates();
+    consecutiveTempFailures = 0;
+    if (hasTempError) {
+      clearError();
+      hasTempError = false;
+      tempErrorLogged = false;
+    }
+  }
 }
