@@ -755,50 +755,55 @@ void storeLogEntry(const String& msg) {
 
   if (!spiffsInitialized) return;
 
+  String timeStr;
   struct tm timeinfo;
-  if (getLocalTime(&timeinfo)) {
-    char timeStr[20];
-    sprintf(timeStr, "%02d/%02d/%d %02d:%02d:%02d",
+  if (validTimeSync && getLocalTime(&timeinfo)) {
+    char buffer[20];
+    sprintf(buffer, "%02d/%02d/%d %02d:%02d:%02d",
             timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900,
             timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+    timeStr = String(buffer);
+  } else {
+    // Use placeholder timestamp when time sync hasn't been completed
+    timeStr = "00/00/0000 00:00:00";
+  }
 
-    StaticJsonDocument<2048> doc;
-    doc.clear();
+  StaticJsonDocument<2048> doc;
+  doc.clear();
 
-    File file = LittleFS.open("/logs.json", "r");
-    bool fileExists = file;
-    if (fileExists) {
-      DeserializationError error = deserializeJson(doc, file);
-      file.close();
+  File file = LittleFS.open("/logs.json", "r");
+  bool fileExists = file;
+  if (fileExists) {
+    DeserializationError error = deserializeJson(doc, file);
+    file.close();
 
-      if (error) {
-        doc.clear();
-        doc.createNestedArray("logs");
-      }
-    } else {
+    if (error) {
+      doc.clear();
       doc.createNestedArray("logs");
     }
+  } else {
+    doc.createNestedArray("logs");
+  }
 
-    JsonArray logs = doc["logs"].as<JsonArray>();
+  JsonArray logs = doc["logs"].as<JsonArray>();
 
-    if (logs.size() >= MAX_LOGS) {
-      logs.remove(0);
-    }
+  if (logs.size() >= MAX_LOGS) {
+    logs.remove(0);
+  }
 
-    if (logIdCounter >= MAX_LOG_ID) {
-      logIdCounter = 0;
-    }
+  if (logIdCounter >= MAX_LOG_ID) {
+    logIdCounter = 0;
+  }
 
-    JsonObject newLog = logs.createNestedObject();
-    newLog["id"] = logIdCounter++;
-    newLog["timestamp"] = timeStr;
-    newLog["message"] = msg;
+  JsonObject newLog = logs.createNestedObject();
+  newLog["id"] = logIdCounter++;
+  newLog["timestamp"] = timeStr;
+  newLog["message"] = msg;
 
-    File outFile = LittleFS.open("/logs.json", "w");
-    if (outFile) {
-      serializeJson(doc, outFile);
-      outFile.close();
-    }
+  File outFile = LittleFS.open("/logs.json", "w");
+  if (outFile) {
+    serializeJson(doc, outFile);
+    outFile.close();
   }
 }
 
