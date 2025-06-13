@@ -30,6 +30,7 @@ void handleClearError();
 void handleGetErrorStatus();
 void handleOneClickLight();
 void handleTemperature();
+void templaunch();
 void emailLoop(void*);
 void mainLoop(void*);
 void sendEmailWithLogs(const String&);
@@ -144,6 +145,8 @@ DeviceAddress sensorAddress = {0x28, 0x59, 0x71, 0x80, 0xE3, 0xE1, 0x3C, 0x50};
 unsigned long lastTemp = 0;
 float currentTemp = 0;
 float lastValidTemperature = 0.0;
+
+WiFiEventId_t wifiConnectHandler;
 
 const unsigned char favicon_png[] PROGMEM = {
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
@@ -817,6 +820,34 @@ bool validDateSync = false;
 TaskHandle_t networkTask;
 TaskHandle_t controlTask;
 
+void attemptTimeSync() {
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo)) {
+    storeLogEntry("Time and Date sync successful");
+    validTimeSync = true;
+    validDateSync = true;
+    lastNTPSync = millis();
+    clearError();
+    timeSyncErrorLogged = false;
+    
+    setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+            timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+  } else {
+    if (!timeSyncErrorLogged) {
+      storeLogEntry("Time sync failed.");
+      timeSyncErrorLogged = true;
+    }
+    indicateError();
+  }
+}
+
+void onWifiConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+  storeLogEntry("Connected to WiFi. IP: " + WiFi.localIP().toString());
+  attemptTimeSync();
+}
+
 void setup() {
   pinMode(relay1, OUTPUT);
   pinMode(relay2, OUTPUT);
@@ -842,6 +873,8 @@ void setup() {
     spiffsInitialized = true;
   }
 
+  wifiConnectHandler = WiFi.onEvent(onWifiConnected, ARDUINO_EVENT_WIFI_STA_CONNECTED);
+  
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   unsigned long wifiStartTime = millis();
@@ -861,27 +894,6 @@ void setup() {
     storeLogEntry("Connected to WiFi");
     storeLogEntry("IP Address: " + WiFi.localIP().toString());
     clearError();
-
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-    
-    struct tm timeinfo;
-    if (getLocalTime(&timeinfo)) {
-      storeLogEntry("Time and Date sync successful");
-      validTimeSync = true;
-      validDateSync = true;
-      lastNTPSync = millis();
-      clearError();
-      timeSyncErrorLogged = false;
-      
-      setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-              timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
-    } else {
-      if (!timeSyncErrorLogged) {
-        storeLogEntry("Time sync failed.");
-        timeSyncErrorLogged = true;
-      }
-      indicateError();
-    }
   }
 
   server.on("/", HTTP_GET, handleRoot);
@@ -907,7 +919,7 @@ void setup() {
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
-  handleTemperature();
+  templaunch();
 
   resetWatchdog();
   watchdogTicker.attach(1, checkWatchdog);
@@ -2206,6 +2218,9 @@ const char logsPage[] PROGMEM = R"html(
 </html>
 )html";
 
+unsigned long lastWifiConnectAttempt = 0;
+const unsigned long WIFI_RECONNECT_INTERVAL = 30000;
+
 void handleLogsPage() {
   server.send_P(200, "text/html", logsPage);
 }
@@ -2217,7 +2232,19 @@ void loop() {
 void emailLoop(void* parameter) {
   for (;;) {
     handleTemperature();
-    if (WiFi.status() == WL_CONNECTED) {
+    
+    if (WiFi.status() != WL_CONNECTED) {
+      unsigned long currentMillis = millis();
+      if (currentMillis - lastWifiConnectAttempt > WIFI_RECONNECT_INTERVAL) {
+        storeLogEntry("Attempting to reconnect to WiFi...");
+        WiFi.reconnect();
+        lastWifiConnectAttempt = currentMillis;
+      }
+    } else {
+      if (!validTimeSync) {
+        attemptTimeSync();
+      }
+      
       if (!startupemail) {
         delay(1500);
         sendEmailWithLogs("Device is powered on");
@@ -2243,32 +2270,14 @@ void mainLoop(void* parameter) {
     server.handleClient();
     webSocket.loop();
     resetWatchdog();
-
     checkoverride1();
     checkoverride2();
     overrideLEDState();
 
-    if (!validTimeSync) {
+    if (!validTimeSync && WiFi.status() == WL_CONNECTED) {
       unsigned long currentMillis = millis();
       if (currentMillis - lastNtpRetry >= NTP_RETRY_INTERVAL) {
-        struct tm timeinfo;
-        if (getLocalTime(&timeinfo)) {
-          validTimeSync = true;
-          validDateSync = true;
-          lastNTPSync = currentMillis;
-          storeLogEntry("Time sync successful (retry)");
-          timeSyncErrorLogged = false;
-          clearError();
-          
-          setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-                  timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
-        } else {
-          if (!timeSyncErrorLogged) {
-            storeLogEntry("Time sync failed (retry).");
-            timeSyncErrorLogged = true;
-          }
-          indicateError();
-        }
+        attemptTimeSync();
         lastNtpRetry = currentMillis;
       }
     }
@@ -2351,24 +2360,38 @@ void checkSchedules() {
   int hours = timeinfo.tm_hour;
   int minutes = timeinfo.tm_min;
   int seconds = timeinfo.tm_sec;
-  int weekdayIndex = (timeinfo.tm_wday + 6) % 7;
+  int weekdayIndex = timeinfo.tm_wday;
 
   for (const Schedule& schedule : schedules) {
     if (!schedule.enabled || !schedule.daysOfWeek[weekdayIndex]) continue;
 
     if (hours == schedule.onHour && minutes == schedule.onMinute && seconds == 0) {
-      bool currentState = (schedule.relayNumber == 1) ? relay1State : relay2State;
-      bool override = (schedule.relayNumber == 1) ? overrideRelay1 : overrideRelay2;
-
-      if (!currentState && !override) {
-        activateRelay(schedule.relayNumber, false);
+      if (schedule.relayNumber == 1) {
+        if (!relay1State && !overrideRelay1) {
+          activateRelay(1, false);
+        }
+      } else if (schedule.relayNumber == 2) {
+        if (!relay2State && !overrideRelay2) {
+          activateRelay(2, false);
+        }
+      } else if (schedule.relayNumber == 3) {
+        if (!relay3State && !overrideRelay1) {
+          activateRelay(3, false);
+        }
       }
     } else if (hours == schedule.offHour && minutes == schedule.offMinute && seconds == 0) {
-      bool currentState = (schedule.relayNumber == 1) ? relay1State : relay2State;
-      bool override = (schedule.relayNumber == 1) ? overrideRelay1 : overrideRelay2;
-
-      if (currentState && !override) {
-        deactivateRelay(schedule.relayNumber, false);
+      if (schedule.relayNumber == 1) {
+        if (relay1State && !overrideRelay1) {
+          deactivateRelay(1, false);
+        }
+      } else if (schedule.relayNumber == 2) {
+        if (relay2State && !overrideRelay2) {
+          deactivateRelay(2, false);
+        }
+      } else if (schedule.relayNumber == 3) {
+        if (relay3State && !overrideRelay1) {
+          deactivateRelay(3, false);
+        }
       }
     }
   }
@@ -2383,7 +2406,7 @@ void checkScheduleslaunch() {
   int hours = timeinfo.tm_hour;
   int minutes = timeinfo.tm_min;
   unsigned long currentTime = hours * 60 + minutes;
-  int weekdayIndex = (timeinfo.tm_wday + 6) % 7;
+  int weekdayIndex = timeinfo.tm_wday;
 
   bool relay1ShouldBeOn = false;
   bool relay2ShouldBeOn = false;
@@ -2560,6 +2583,12 @@ void handleAddSchedule() {
       for (int i = 0; i < 7; i++) {
         newSchedule.daysOfWeek[i] = doc["days"][i] | false;
       }
+
+      String dayConfig = "Schedule days: ";
+      for (int i = 0; i < 7; i++) {
+        dayConfig += String(newSchedule.daysOfWeek[i] ? "1" : "0");
+      }
+      storeLogEntry(dayConfig + " (Sun,Mon,Tue,Wed,Thu,Fri,Sat)");
 
       bool conflict = false;
       for (const Schedule& existing : schedules) {
@@ -2995,4 +3024,21 @@ void handleTemperature() {
         
         lastTemp = millis();
     }
+}
+
+void templaunch() {
+  sensors.requestTemperatures();
+        float tempC = sensors.getTempC(sensorAddress);
+        
+        if(tempC != DEVICE_DISCONNECTED_C) {
+            currentTemp = tempC;
+            lastValidTemperature = tempC;
+            broadcastRelayStates();
+            consecutiveTempFailures = 0;
+            if (hasTempError) {
+                clearError();
+                hasTempError = false;
+                tempErrorLogged = false;
+            }
+        }
 }
