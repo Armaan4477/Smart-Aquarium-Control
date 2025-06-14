@@ -43,6 +43,8 @@ void activateRelay(int, bool);
 void deactivateRelay(int, bool);
 void toggleLightSequence();
 void broadcastRelayStates();
+void handleGetTempControl();
+void handleSetTempControl();
 
 struct Schedule {
   int id;
@@ -61,9 +63,16 @@ struct LogEntry {
   String message;
 };
 
+struct TempControl {
+  float minTemp;
+  float maxTemp;
+  bool enabled;
+};
+
 const int relay1 = 16;
 const int relay2 = 17;
 const int relay3 = 18;
+const int relay4 = 19;
 const int switch1Pin = 23;
 const int switch2Pin = 22;
 const int errorLEDPin = 21;
@@ -73,7 +82,7 @@ bool overrideRelay2 = false;
 bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
-bool relay4State = false;
+bool relay4State = true;
 bool timeSyncErrorLogged = false;
 bool tempErrorLogged = false;
 bool triggerederror = false;
@@ -136,6 +145,10 @@ const unsigned long BLINK_INTERVAL = 1000;
 bool blinkState = false;
 const char* authUsername = "admin";
 const char* authPassword = "12345678";
+const int TEMP_CONTROL_ADDR = SCHEDULE_START_ADDR + (MAX_SCHEDULES * SCHEDULE_SIZE) + 1;
+const float FAILSAFE_MIN_TEMP = 24.0;
+const float FAILSAFE_MAX_TEMP = 28.0;
+TempControl tempControl = {25.0, 27.0, false};
 
 #define ONE_WIRE_BUS 26
 OneWire oneWire(ONE_WIRE_BUS);
@@ -856,6 +869,7 @@ void setup() {
   pinMode(relay1, OUTPUT);
   pinMode(relay2, OUTPUT);
   pinMode(relay3, OUTPUT);
+  pinMode(relay4, OUTPUT);
   pinMode(switch1Pin, INPUT_PULLUP);
   pinMode(switch2Pin, INPUT_PULLUP);
   pinMode(errorLEDPin, OUTPUT);
@@ -864,6 +878,7 @@ void setup() {
   digitalWrite(relay1, HIGH);
   digitalWrite(relay2, HIGH);
   digitalWrite(relay3, HIGH);
+  digitalWrite(relay4, LOW);
   digitalWrite(errorLEDPin, LOW);
 
   // Serial.begin(115200);
@@ -916,9 +931,13 @@ void setup() {
   server.on("/error/clear", HTTP_POST, handleClearError);
   server.on("/error/status", HTTP_GET, handleGetErrorStatus);
   server.on("/relay/oneclick", HTTP_POST, handleOneClickLight);
+  server.on("/tempcontrol", HTTP_GET, handleGetTempControl);
+  server.on("/tempcontrol/set", HTTP_POST, handleSetTempControl);
   server.begin();
   EEPROM.begin(EEPROM_SIZE);
   loadSchedulesFromEEPROM();
+  
+  EEPROM.get(TEMP_CONTROL_ADDR, tempControl);
 
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
@@ -1001,7 +1020,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         IPAddress ip = webSocket.remoteIP(num);
         storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString() + " url: " + String((char*)payload));
 
-        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + "}";
+        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
+                        ",\"relay2\":" + String(relay2State || overrideRelay2) + 
+                        ",\"relay3\":" + String(relay3State || overrideRelay1) + 
+                        ",\"temperature\":" + String(lastValidTemperature, 1) + 
+                        ",\"tempControl\":{\"minTemp\":" + String(tempControl.minTemp) + 
+                        ",\"maxTemp\":" + String(tempControl.maxTemp) + 
+                        ",\"enabled\":" + String(tempControl.enabled ? "true" : "false") + "}}";
         webSocket.sendTXT(num, message);
       }
       break;
@@ -1599,6 +1624,29 @@ const char mainPage[] PROGMEM = R"html(
             <button class="button" onclick="oneClickLight()" id="btnOneClick">Change Light Color</button>
             <button class="button" onclick="showLogs()">Show Logs</button>
         </div>
+
+        <div class="temp-control-form">
+            <h3>Heater Control</h3>
+            <div class="temp-control-switch">
+                <label class="switch">
+                    <input type="checkbox" id="tempControlEnabled">
+                    <span class="slider"></span>
+                </label>
+                <span>Temperature Control Active</span>
+            </div>
+            <div class="temp-control-grid">
+                <div>
+                    <label for="minTemp">Minimum Temperature (°C):</label>
+                    <input type="number" id="minTemp" step="0.5" min="18" max="30" placeholder="Min Temp">
+                </div>
+                <div>
+                    <label for="maxTemp">Maximum Temperature (°C):</label>
+                    <input type="number" id="maxTemp" step="0.5" min="18" max="32" placeholder="Max Temp">
+                </div>
+            </div>
+            <button id="saveTempControlBtn" onclick="saveTempControl()" class="button">Save Temperature Settings</button>
+        </div>
+
         <div class="schedule-form">
             <h3>Add Schedule</h3>
             <label for="relaySelect">Select Relay:</label>
@@ -1704,6 +1752,11 @@ const char mainPage[] PROGMEM = R"html(
                 if (data.temperature !== undefined) {
                     document.getElementById('temperature').textContent = 
                         `Temperature: ${data.temperature} °C`;
+                }
+                if (data.tempControl !== undefined) {
+                    document.getElementById('minTemp').value = data.tempControl.minTemp;
+                    document.getElementById('maxTemp').value = data.tempControl.maxTemp;
+                    document.getElementById('tempControlEnabled').checked = data.tempControl.enabled;
                 }
             } catch (e) {
                 console.error('WebSocket error:', e);
@@ -1941,12 +1994,59 @@ const char mainPage[] PROGMEM = R"html(
             .catch(error => alert(error.message));
         }
 
+        function loadTempControl() {
+            fetch('/tempcontrol')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('minTemp').value = data.minTemp;
+                    document.getElementById('maxTemp').value = data.maxTemp;
+                    document.getElementById('tempControlEnabled').checked = data.enabled;
+                })
+                .catch(error => {
+                    console.error('Error loading temperature control settings:', error);
+                });
+        }
+
+        function saveTempControl() {
+            const minTemp = parseFloat(document.getElementById('minTemp').value);
+            const maxTemp = parseFloat(document.getElementById('maxTemp').value);
+            const enabled = document.getElementById('tempControlEnabled').checked;
+
+            if (isNaN(minTemp) || isNaN(maxTemp)) {
+                alert('Please enter valid temperature values');
+                return;
+            }
+
+            if (minTemp >= maxTemp) {
+                alert('Minimum temperature must be less than maximum temperature');
+                return;
+            }
+
+            fetch('/tempcontrol/set', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ minTemp, maxTemp, enabled })
+            })
+            .then(response => response.ok ? response.json() : response.json().then(data => { throw new Error(data.error); }))
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('Temperature control settings saved successfully');
+                } else {
+                    throw new Error('Failed to save settings');
+                }
+            })
+            .catch(error => {
+                alert('Failed to save temperature control settings: ' + error.message);
+            });
+        }
+
         setInterval(updateTime, 1000);
         setInterval(checkErrorStatus, 2000);
         updateTime();
         loadSchedules();
         getInitialStates();
         checkErrorStatus();
+        loadTempControl();
     </script>
 </body>
 </html>
@@ -2516,7 +2616,14 @@ void deactivateRelay(int relayNum, bool manual) {
 }
 
 void broadcastRelayStates() {
-  String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + "}";
+  String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
+                  ",\"relay2\":" + String(relay2State || overrideRelay2) + 
+                  ",\"relay3\":" + String(relay3State || overrideRelay1) + 
+                  ",\"relay4\":" + String(relay4State) + 
+                  ",\"temperature\":" + String(lastValidTemperature, 1) + 
+                  ",\"tempControl\":{\"minTemp\":" + String(tempControl.minTemp) + 
+                  ",\"maxTemp\":" + String(tempControl.maxTemp) + 
+                  ",\"enabled\":" + String(tempControl.enabled ? "true" : "false") + "}}";
   webSocket.broadcastTXT(message);
 }
 
@@ -2782,7 +2889,8 @@ void handleRelayStatus() {
   String json = "{";
   json += "\"1\":" + String(relay1State || overrideRelay1) + ",";
   json += "\"2\":" + String(relay2State || overrideRelay2) + ",";
-  json += "\"3\":" + String(relay3State || overrideRelay1) + "}";
+  json += "\"3\":" + String(relay3State || overrideRelay1) + ",";
+  json += "\"4\":" + String(relay4State) + "}";
   server.send(200, "application/json", json);
 }
 
@@ -3003,6 +3111,8 @@ void handleTemperature() {
         hasTempError = false;
         tempErrorLogged = false;
       }
+      
+      updateHeaterRelay(tempC);
     } else {
       consecutiveTempFailures++;
       if (consecutiveTempFailures >= MAX_TEMP_FAILURES) {
@@ -3012,10 +3122,51 @@ void handleTemperature() {
         }
         indicateError();
         hasTempError = true;
+        
+        updateHeaterRelay(FAILSAFE_MIN_TEMP);
       }
     }
 
     lastTemp = millis();
+  }
+}
+
+void updateHeaterRelay(float currentTemperature) {
+  if (!tempControl.enabled) {
+    // If temperature control is disabled, keep heater on
+    if (!relay4State) {
+      digitalWrite(relay4, LOW); // Turn heater ON
+      relay4State = true;
+      storeLogEntry("Heater turned ON (temp control disabled)");
+      broadcastRelayStates();
+    }
+    return;
+  }
+
+  float minTemp = tempControl.minTemp;
+  float maxTemp = tempControl.maxTemp;
+  
+  // Use failsafe values if temperature readings are invalid
+  if (currentTemperature == DEVICE_DISCONNECTED_C) {
+    minTemp = FAILSAFE_MIN_TEMP;
+    maxTemp = FAILSAFE_MAX_TEMP;
+    storeLogEntry("Using failsafe temperature values for heater control");
+  }
+  
+  // Implement hysteresis to prevent rapid switching
+  if (currentTemperature >= maxTemp && relay4State) {
+    // Turn off heater if temperature exceeds maximum
+    digitalWrite(relay4, HIGH); // Turn heater OFF
+    relay4State = false;
+    storeLogEntry("Heater turned OFF: Temperature " + String(currentTemperature, 1) + "°C exceeds maximum " + String(maxTemp, 1) + "°C");
+    broadcastRelayStates();
+  } 
+  else if (currentTemperature <= minTemp && !relay4State) {
+    // Turn on heater if temperature falls below minimum
+    digitalWrite(relay4, LOW); // Turn heater ON
+    relay4State = true;
+    storeLogEntry("Heater turned ON: Temperature " + String(currentTemperature, 1) + "°C below minimum " + String(minTemp, 1) + "°C");
+    broadcastRelayStates();
   }
 }
 
@@ -3026,6 +3177,9 @@ void templaunch() {
   if (tempC != DEVICE_DISCONNECTED_C) {
     currentTemp = tempC;
     lastValidTemperature = tempC;
+    
+    updateHeaterRelay(tempC);
+    
     broadcastRelayStates();
     consecutiveTempFailures = 0;
     if (hasTempError) {
@@ -3033,5 +3187,54 @@ void templaunch() {
       hasTempError = false;
       tempErrorLogged = false;
     }
+  } else {
+    updateHeaterRelay(FAILSAFE_MIN_TEMP);
   }
+}
+
+void handleGetTempControl() {
+  StaticJsonDocument<200> doc;
+  doc["minTemp"] = tempControl.minTemp;
+  doc["maxTemp"] = tempControl.maxTemp;
+  doc["enabled"] = tempControl.enabled;
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleSetTempControl() {
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    StaticJsonDocument<200> doc;
+    DeserializationError error = deserializeJson(doc, body);
+
+    if (!error) {
+      float minTemp = doc["minTemp"];
+      float maxTemp = doc["maxTemp"];
+      bool enabled = doc["enabled"];
+
+      if (minTemp >= maxTemp) {
+        server.send(400, "application/json", "{\"error\":\"Minimum temperature must be less than maximum\"}");
+        return;
+      }
+
+      tempControl.minTemp = minTemp;
+      tempControl.maxTemp = maxTemp;
+      tempControl.enabled = enabled;
+      
+      // Save to EEPROM
+      EEPROM.put(TEMP_CONTROL_ADDR, tempControl);
+      EEPROM.commit();
+      
+      server.send(200, "application/json", "{\"status\":\"success\"}");
+      storeLogEntry("Temperature control settings updated: " + 
+                   String(enabled ? "enabled" : "disabled") + 
+                   ", min: " + String(minTemp) + 
+                   "°C, max: " + String(maxTemp) + "°C");
+      broadcastRelayStates();
+      return;
+    }
+  }
+  server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
