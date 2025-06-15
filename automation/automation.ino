@@ -90,6 +90,7 @@ bool relay4State = true;
 bool timeSyncErrorLogged = false;
 bool tempErrorLogged = false;
 bool triggerederror = false;
+bool wifiConnectionErrorLogged = false;
 
 const char* ssid = "Free Public Wi-Fi";
 const char* password = "2A0R0M4AAN";
@@ -845,7 +846,9 @@ void attemptTimeSync() {
 
   struct tm timeinfo;
   if (getLocalTime(&timeinfo)) {
-    storeLogEntry("Time and Date sync successful");
+    if (!validTimeSync || timeSyncErrorLogged) {
+      storeLogEntry("Time and Date sync successful");
+    }
     validTimeSync = true;
     validDateSync = true;
     lastNTPSync = millis();
@@ -864,7 +867,10 @@ void attemptTimeSync() {
 }
 
 void onWifiConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
-  storeLogEntry("Connected to WiFi. IP: " + WiFi.localIP().toString());
+  if (!wifiConnectionErrorLogged) {
+    storeLogEntry("Connected to WiFi. IP: " + WiFi.localIP().toString());
+    wifiConnectionErrorLogged = false; // Reset the error flag on successful connection
+  }
   attemptTimeSync();
 }
 
@@ -2595,11 +2601,19 @@ void emailLoop(void* parameter) {
     if (WiFi.status() != WL_CONNECTED) {
       unsigned long currentMillis = millis();
       if (currentMillis - lastWifiConnectAttempt > WIFI_RECONNECT_INTERVAL) {
-        storeLogEntry("Attempting to reconnect to WiFi...");
+        if (!wifiConnectionErrorLogged) {
+          storeLogEntry("Attempting to reconnect to WiFi...");
+          wifiConnectionErrorLogged = true;
+        }
         WiFi.reconnect();
         lastWifiConnectAttempt = currentMillis;
       }
     } else {
+      if (wifiConnectionErrorLogged) {
+        storeLogEntry("WiFi connection restored");
+        wifiConnectionErrorLogged = false;
+      }
+      
       if (!validTimeSync) {
         attemptTimeSync();
       }
@@ -2620,7 +2634,7 @@ void emailLoop(void* parameter) {
         pointemail = false;
       }
     }
-    delay(2600);
+    delay(600);
   }
 }
 
@@ -2692,8 +2706,10 @@ void mainLoop(void* parameter) {
       struct tm timeinfo;
       if (getLocalTime(&timeinfo)) {
         lastNTPSync = millis();
-        storeLogEntry("Regular time sync successful");
-        timeSyncErrorLogged = false;
+        if (timeSyncErrorLogged) {
+          storeLogEntry("Regular time sync successful");
+          timeSyncErrorLogged = false;
+        }
 
         setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
                 timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
