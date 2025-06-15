@@ -1798,6 +1798,43 @@ const char mainPage[] PROGMEM = R"html(
         .temp-control .temp-value-box.current-temp {
             border-left: 4px solid var(--success-color);
         }
+
+        .temp-control .heater-status {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f7fa;
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .temp-control .status-indicator {
+            display: flex;
+            align-items: center;
+        }
+
+        .temp-control .status-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background-color: #ccc;
+        }
+
+        .temp-control .status-dot.on {
+            background-color: var(--success-color);
+            box-shadow: 0 0 5px var(--success-color);
+        }
+
+        .temp-control .status-dot.off {
+            background-color: var(--error-color);
+            box-shadow: 0 0 5px var(--error-color);
+        }
+
+        .temp-control .status-text {
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -1820,6 +1857,13 @@ const char mainPage[] PROGMEM = R"html(
         </div>
         <div class="temp-control">
             <h3>Heater Control</h3>
+
+            <div class="heater-status">
+                <div class="status-indicator">
+                    <span class="status-dot" id="heater-status-dot"></span>
+                    <span class="status-text">Heater Status: <span id="heater-status">Unknown</span></span>
+                </div>
+            </div>
             
             <div class="temp-values-display">
                 <div class="temp-value-box min-temp">
@@ -1977,8 +2021,7 @@ const char mainPage[] PROGMEM = R"html(
                     updateButtonStyle(3);
                 }
                 if (data.relay4 !== undefined) {
-                    relayStates[4] = data.relay4;
-                    // You could add a display for the heater state if desired
+                    updateHeaterStatus(data.relay4);
                 }
                 if (data.temperature !== undefined) {
                     document.getElementById('temperature').textContent = 
@@ -2200,7 +2243,13 @@ const char mainPage[] PROGMEM = R"html(
         function getInitialStates() {
             fetch('/relay/status')
                 .then(response => response.json())
-                .then(data => { relayStates = data; for(let relay in relayStates) updateButtonStyle(relay); })
+                .then(data => { 
+                    relayStates = data; 
+                    for(let relay in relayStates) updateButtonStyle(relay);
+                    if (data["4"] !== undefined) {
+                        updateHeaterStatus(data["4"]);
+                    }
+                })
                 .catch(() => checkErrorStatus());
         }
 
@@ -2296,6 +2345,17 @@ const char mainPage[] PROGMEM = R"html(
                 alert('Failed to save settings: ' + error.message);
             });
         }
+
+        function updateHeaterStatus(isOn) {
+            const statusDot = document.getElementById('heater-status-dot');
+            const statusText = document.getElementById('heater-status');
+            
+            if (statusDot && statusText) {
+                statusDot.className = 'status-dot ' + (isOn ? 'on' : 'off');
+                statusText.textContent = isOn ? 'ON' : 'OFF';
+            }
+        }
+                
         document.getElementById('min-temp-slider').addEventListener('input', updateTemperatureSliders);
         document.getElementById('max-temp-slider').addEventListener('input', updateTemperatureSliders);
         
@@ -3169,7 +3229,8 @@ void handleRelayStatus() {
   String json = "{";
   json += "\"1\":" + String(relay1State || overrideRelay1) + ",";
   json += "\"2\":" + String(relay2State || overrideRelay2) + ",";
-  json += "\"3\":" + String(relay3State || overrideRelay1) + "}";
+  json += "\"3\":" + String(relay3State || overrideRelay1) + ",";
+  json += "\"4\":" + String(relay4State) + "}";
   server.send(200, "application/json", json);
 }
 
