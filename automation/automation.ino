@@ -833,9 +833,6 @@ void checkWatchdog() {
   }
 }
 
-unsigned int currentDay = 1;
-unsigned int currentMonth = 1;
-unsigned int currentyear = 2023;
 bool validDateSync = false;
 
 TaskHandle_t networkTask;
@@ -879,15 +876,13 @@ void setup() {
   pinMode(relay2, OUTPUT);
   pinMode(relay3, OUTPUT);
   pinMode(relay4, OUTPUT);
+  digitalWrite(relay1, HIGH);
+  digitalWrite(relay2, HIGH);
+  digitalWrite(relay3, HIGH);
   pinMode(switch1Pin, INPUT_PULLUP);
   pinMode(switch2Pin, INPUT_PULLUP);
   pinMode(errorLEDPin, OUTPUT);
   pinMode(ONE_WIRE_BUS, INPUT_PULLUP);
-
-  digitalWrite(relay1, HIGH);
-  digitalWrite(relay2, HIGH);
-  digitalWrite(relay3, HIGH);
-  digitalWrite(relay4, LOW);
   digitalWrite(errorLEDPin, LOW);
 
   // Serial.begin(115200);
@@ -947,10 +942,11 @@ void setup() {
   loadSchedulesFromEEPROM();
   loadTemperatureSettings();
 
+  templaunch();
+  checkTemperatureControl();
+
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
-
-  templaunch();
 
   resetWatchdog();
   watchdogTicker.attach(1, checkWatchdog);
@@ -1850,8 +1846,8 @@ const char mainPage[] PROGMEM = R"html(
         <div id="temperature">Temperature: -- °C</div>
         <div class="buttons">
             <button class="button" onclick="toggleRelay(1)" id="btn1">WaveMaker</button>
-            <button class="button" onclick="toggleRelay(2)" id="btn2">Light</button>
             <button class="button" onclick="toggleRelay(3)" id="btn3">Air Pump</button>
+            <button class="button" onclick="toggleRelay(2)" id="btn2">Light</button>
             <button class="button" onclick="oneClickLight()" id="btnOneClick">Change Light Color</button>
             <button class="button" onclick="showLogs()">Show Logs</button>
         </div>
@@ -1905,7 +1901,7 @@ const char mainPage[] PROGMEM = R"html(
                     <input type="checkbox" id="temp-control-toggle">
                     <span class="slider"></span>
                 </label>
-                <div class="toggle-label">Temperature Control <span id="temp-control-status">Disabled</span></div>
+                <div class="toggle-label">Temperature Control</div>
             </div>
             
             <div class="temp-buttons">
@@ -2551,7 +2547,6 @@ const char logsPage[] PROGMEM = R"html(
             }
         }
 
-        /* Loading animation */
         .loading {
             display: none;
             text-align: center;
@@ -2580,7 +2575,7 @@ const char logsPage[] PROGMEM = R"html(
     </header>
     <div class="container">
         <div class="header-actions">
-            <a href="/" class="button">Back to Dashboard</a>
+            <button onclick="goBack()" class="button">Back to Dashboard</button>
             <button onclick="refreshLogs()" class="button refresh-button">Refresh Logs</button>
         </div>
         <div id="loading" class="loading">
@@ -2630,9 +2625,11 @@ const char logsPage[] PROGMEM = R"html(
             loadLogs();
         }
 
-        // Load logs when page loads
+        function goBack() {
+            window.history.back();
+        }
+
         loadLogs();
-        // Refresh logs every 10 seconds
         setInterval(loadLogs, 10000);
     </script>
 </body>
