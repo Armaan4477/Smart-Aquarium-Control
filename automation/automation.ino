@@ -1826,10 +1826,6 @@ const char mainPage[] PROGMEM = R"html(
                     <div>Min Temperature</div>
                     <span id="min-temp-display">--</span> °C
                 </div>
-                <div class="temp-value-box current-temp">
-                    <div>Current Temperature</div>
-                    <span id="current-temp-display">--</span> °C
-                </div>
                 <div class="temp-value-box max-temp">
                     <div>Max Temperature</div>
                     <span id="max-temp-display">--</span> °C
@@ -3477,7 +3473,7 @@ void loadTemperatureSettings() {
   if (temperatureData.empty()) {
     TemperatureData data;
     data.minTemp = 24;
-    data.maxTemp = 28;
+    data.maxTemp = 29;
     data.enabled = false;
     temperatureData.push_back(data);
   }
@@ -3505,7 +3501,27 @@ void saveTemperatureSettings() {
 }
 
 void checkTemperatureControl() {
-  if (temperatureData.empty() || !temperatureData[0].enabled) {
+  if (temperatureData.empty()) {
+    return;
+  }
+
+    if (!temperatureData[0].enabled) {
+    if (!relay4State) {
+      digitalWrite(relay4, LOW);
+      relay4State = true;
+      storeLogEntry("Heater turned ON - Heater Control Disabled");
+      broadcastRelayStates();
+    }
+    return;
+  }
+
+  if (hasTempError) {
+    if (!relay4State) {
+      digitalWrite(relay4, LOW);
+      relay4State = true;
+      storeLogEntry("Heater turned ON - Temperature sensor failure failsafe activated");
+      broadcastRelayStates();
+    }
     return;
   }
   
