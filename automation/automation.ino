@@ -1001,7 +1001,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         IPAddress ip = webSocket.remoteIP(num);
         storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString() + " url: " + String((char*)payload));
 
-        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + "}";
+        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
+                         ",\"relay2\":" + String(relay2State || overrideRelay2) + 
+                         ",\"relay3\":" + String(relay3State || overrideRelay1) + 
+                         ",\"temperature\":" + String(lastValidTemperature, 1) + 
+                         ",\"relay1Name\":\"WaveMaker\"" + 
+                         ",\"relay2Name\":\"Light\"" + 
+                         ",\"relay3Name\":\"Air Pump\"}";
         webSocket.sendTXT(num, message);
       }
       break;
@@ -1689,6 +1695,11 @@ const char mainPage[] PROGMEM = R"html(
         socket.onmessage = (event) => {
             try {
                 let data = JSON.parse(event.data);
+                
+                if (data.relay1Name) window.relay1Name = data.relay1Name;
+                if (data.relay2Name) window.relay2Name = data.relay2Name;
+                if (data.relay3Name) window.relay3Name = data.relay3Name;
+                
                 if (data.relay1 !== undefined) {
                     relayStates[1] = data.relay1;
                     updateButtonStyle(1);
@@ -1896,9 +1907,14 @@ const char mainPage[] PROGMEM = R"html(
             if (btn) {
                 btn.className = 'button ' + (relayStates[relay] ? 'on' : 'off');
                 let relayLabel = "Unknown";
-                if (relay === 1) relayLabel = "WaveMaker";
+                
+                if (relay === 1 && window.relay1Name) relayLabel = window.relay1Name;
+                else if (relay === 2 && window.relay2Name) relayLabel = window.relay2Name;
+                else if (relay === 3 && window.relay3Name) relayLabel = window.relay3Name;
+                else if (relay === 1) relayLabel = "WaveMaker";
                 else if (relay === 2) relayLabel = "Light";
                 else if (relay === 3) relayLabel = "Air Pump";
+                
                 btn.textContent = `${relayLabel} (${relayStates[relay] ? 'ON' : 'OFF'})`;
             }
         }
@@ -2516,7 +2532,13 @@ void deactivateRelay(int relayNum, bool manual) {
 }
 
 void broadcastRelayStates() {
-  String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + "}";
+  String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
+                   ",\"relay2\":" + String(relay2State || overrideRelay2) + 
+                   ",\"relay3\":" + String(relay3State || overrideRelay1) + 
+                   ",\"temperature\":" + String(lastValidTemperature, 1) + 
+                   ",\"relay1Name\":\"WaveMaker\"" + 
+                   ",\"relay2Name\":\"Light\"" + 
+                   ",\"relay3Name\":\"Air Pump\"}";
   webSocket.broadcastTXT(message);
 }
 
