@@ -45,7 +45,6 @@ void toggleLightSequence();
 void broadcastRelayStates();
 void handleGetTempControl();
 void handleSetTempControl();
-void updateHeaterRelay(float currentTemperature);
 
 struct Schedule {
   int id;
