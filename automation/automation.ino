@@ -86,7 +86,7 @@ bool overrideRelay2 = false;
 bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
-bool relay4State = true;
+bool relay4State = false;
 bool timeSyncErrorLogged = false;
 bool tempErrorLogged = false;
 bool triggerederror = false;
@@ -866,7 +866,7 @@ void attemptTimeSync() {
 void onWifiConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
   if (!wifiConnectionErrorLogged) {
     storeLogEntry("Connected to WiFi. IP: " + WiFi.localIP().toString());
-    wifiConnectionErrorLogged = false; // Reset the error flag on successful connection
+    wifiConnectionErrorLogged = false;  // Reset the error flag on successful connection
   }
   attemptTimeSync();
 }
@@ -879,6 +879,7 @@ void setup() {
   digitalWrite(relay1, HIGH);
   digitalWrite(relay2, HIGH);
   digitalWrite(relay3, HIGH);
+  digitalWrite(relay4, HIGH);
   pinMode(switch1Pin, INPUT_PULLUP);
   pinMode(switch2Pin, INPUT_PULLUP);
   pinMode(errorLEDPin, OUTPUT);
@@ -943,7 +944,6 @@ void setup() {
   loadTemperatureSettings();
 
   templaunch();
-  checkTemperatureControl();
 
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
@@ -1014,6 +1014,35 @@ void loadSchedulesFromEEPROM() {
   }
 }
 
+void loadTemperatureSettings() {
+  if (temperatureData.empty()) {
+    TemperatureData data;
+    data.minTemp = 24;
+    data.maxTemp = 29;
+    data.enabled = false;
+    temperatureData.push_back(data);
+  }
+
+  TemperatureData storedData;
+  EEPROM.get(TEMP_SETTINGS_START_ADDR, storedData);
+
+  if (storedData.minTemp >= 20 && storedData.minTemp <= 30 && storedData.maxTemp >= 20 && storedData.maxTemp <= 30 && storedData.minTemp < storedData.maxTemp) {
+    temperatureData[0] = storedData;
+    storeLogEntry("Temperature settings loaded from EEPROM");
+  } else {
+    storeLogEntry("Using default temperature settings");
+    saveTemperatureSettings();
+  }
+}
+
+void saveTemperatureSettings() {
+  if (!temperatureData.empty()) {
+    EEPROM.put(TEMP_SETTINGS_START_ADDR, temperatureData[0]);
+    EEPROM.commit();
+    storeLogEntry("Temperature settings saved to EEPROM");
+  }
+}
+
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_DISCONNECTED:
@@ -1024,13 +1053,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         IPAddress ip = webSocket.remoteIP(num);
         storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString() + " url: " + String((char*)payload));
 
-        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
-                         ",\"relay2\":" + String(relay2State || overrideRelay2) + 
-                         ",\"relay3\":" + String(relay3State || overrideRelay1) + 
-                         ",\"temperature\":" + String(lastValidTemperature, 1) + 
-                         ",\"relay1Name\":\"WaveMaker\"" + 
-                         ",\"relay2Name\":\"Light\"" + 
-                         ",\"relay3Name\":\"Air Pump\"}";
+        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"relay1Name\":\"WaveMaker\"" + ",\"relay2Name\":\"Light\"" + ",\"relay3Name\":\"Air Pump\"}";
         webSocket.sendTXT(num, message);
       }
       break;
@@ -2666,7 +2689,7 @@ void emailLoop(void* parameter) {
         storeLogEntry("WiFi connection restored");
         wifiConnectionErrorLogged = false;
       }
-      
+
       if (!validTimeSync) {
         attemptTimeSync();
       }
@@ -2944,23 +2967,17 @@ void deactivateRelay(int relayNum, bool manual) {
 }
 
 void broadcastRelayStates() {
-  String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
-                   ",\"relay2\":" + String(relay2State || overrideRelay2) + 
-                   ",\"relay3\":" + String(relay3State || overrideRelay1) + 
-                   ",\"relay4\":" + String(relay4State) + 
-                   ",\"temperature\":" + String(lastValidTemperature, 1);
-  
+  String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"relay4\":" + String(relay4State) + ",\"temperature\":" + String(lastValidTemperature, 1);
+
   if (!temperatureData.empty()) {
-    message += ",\"tempControlEnabled\":" + String(temperatureData[0].enabled ? "true" : "false") +
-               ",\"minTemp\":" + String(temperatureData[0].minTemp) +
-               ",\"maxTemp\":" + String(temperatureData[0].maxTemp);
+    message += ",\"tempControlEnabled\":" + String(temperatureData[0].enabled ? "true" : "false") + ",\"minTemp\":" + String(temperatureData[0].minTemp) + ",\"maxTemp\":" + String(temperatureData[0].maxTemp);
   }
-  
+
   message += ",\"relay1Name\":\"WaveMaker\"";
   message += ",\"relay2Name\":\"Light\"";
   message += ",\"relay3Name\":\"Air Pump\"";
   message += ",\"relay4Name\":\"Heater\"}";
-  
+
   webSocket.broadcastTXT(message);
 }
 
@@ -3507,16 +3524,15 @@ void handleSaveTemperatureSettings() {
           TemperatureData data;
           temperatureData.push_back(data);
         }
-        
+
         temperatureData[0].minTemp = minTemp;
         temperatureData[0].maxTemp = maxTemp;
         temperatureData[0].enabled = enabled;
-        
+
         saveTemperatureSettings();
-        
+
         server.send(200, "application/json", "{\"status\":\"success\"}");
-        storeLogEntry("Temperature control settings updated: Min=" + String(minTemp) + 
-                      "°C, Max=" + String(maxTemp) + "°C, Enabled=" + String(enabled ? "Yes" : "No"));
+        storeLogEntry("Temperature control settings updated: Min=" + String(minTemp) + "°C, Max=" + String(maxTemp) + "°C, Enabled=" + String(enabled ? "Yes" : "No"));
         return;
       } else {
         server.send(400, "application/json", "{\"error\":\"Minimum temperature must be less than maximum temperature\"}");
@@ -3527,43 +3543,12 @@ void handleSaveTemperatureSettings() {
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
 
-void loadTemperatureSettings() {
-  if (temperatureData.empty()) {
-    TemperatureData data;
-    data.minTemp = 24;
-    data.maxTemp = 29;
-    data.enabled = false;
-    temperatureData.push_back(data);
-  }
-  
-  TemperatureData storedData;
-  EEPROM.get(TEMP_SETTINGS_START_ADDR, storedData);
-  
-  if (storedData.minTemp >= 20 && storedData.minTemp <= 30 && 
-      storedData.maxTemp >= 20 && storedData.maxTemp <= 30 && 
-      storedData.minTemp < storedData.maxTemp) {
-    temperatureData[0] = storedData;
-    storeLogEntry("Temperature settings loaded from EEPROM");
-  } else {
-    storeLogEntry("Using default temperature settings");
-    saveTemperatureSettings();
-  }
-}
-
-void saveTemperatureSettings() {
-  if (!temperatureData.empty()) {
-    EEPROM.put(TEMP_SETTINGS_START_ADDR, temperatureData[0]);
-    EEPROM.commit();
-    storeLogEntry("Temperature settings saved to EEPROM");
-  }
-}
-
 void checkTemperatureControl() {
   if (temperatureData.empty()) {
     return;
   }
 
-    if (!temperatureData[0].enabled) {
+  if (!temperatureData[0].enabled) {
     if (!relay4State) {
       digitalWrite(relay4, LOW);
       relay4State = true;
@@ -3582,22 +3567,19 @@ void checkTemperatureControl() {
     }
     return;
   }
-  
+
   if (lastValidTemperature > temperatureData[0].maxTemp) {
     if (relay4State) {
       digitalWrite(relay4, HIGH);
       relay4State = false;
-      storeLogEntry("Heater turned OFF - Temperature " + String(lastValidTemperature, 1) + 
-                   "°C above maximum " + String(temperatureData[0].maxTemp) + "°C");
+      storeLogEntry("Heater turned OFF - Temperature " + String(lastValidTemperature, 1) + "°C above maximum " + String(temperatureData[0].maxTemp) + "°C");
       broadcastRelayStates();
     }
-  }
-  else if (lastValidTemperature < temperatureData[0].minTemp) {
+  } else if (lastValidTemperature < temperatureData[0].minTemp) {
     if (!relay4State) {
       digitalWrite(relay4, LOW);
       relay4State = true;
-      storeLogEntry("Heater turned ON - Temperature " + String(lastValidTemperature, 1) + 
-                   "°C below minimum " + String(temperatureData[0].minTemp) + "°C");
+      storeLogEntry("Heater turned ON - Temperature " + String(lastValidTemperature, 1) + "°C below minimum " + String(temperatureData[0].minTemp) + "°C");
       broadcastRelayStates();
     }
   }
