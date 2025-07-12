@@ -1210,11 +1210,40 @@ const char mainPage[] PROGMEM = R"html(
             transition: var(--transition);
         }
 
-        .buttons {
+        .control-section {
+            background-color: var(--card-color);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 25px;
+            transition: var(--transition);
+        }
+
+        .control-section:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
+
+        .control-section h3 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
+            text-align: center;
+        }
+
+        .relay-buttons {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 15px;
-            margin-bottom: 30px;
+            margin-bottom: 10px;
+        }
+
+        .navigation-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 10px;
         }
 
         .button {
@@ -1248,43 +1277,21 @@ const char mainPage[] PROGMEM = R"html(
             background-color: var(--error-color);
         }
 
-        .card {
-            background-color: var(--card-color);
-            padding: 25px;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-            margin-bottom: 25px;
-            transition: var(--transition);
+        .nav-button {
+            background-color: var(--accent-color);
         }
 
-        .card:hover {
-            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        .nav-button:hover {
+            background-color: #0288D1;
         }
 
-        .card h3 {
-            color: var(--primary-color);
-            margin-bottom: 15px;
-            font-size: 1.5rem;
-            border-bottom: 2px solid var(--primary-light);
-            padding-bottom: 10px;
+        .special-button {
+            background-color: var(--warning-color);
+            color: #333;
         }
 
-        .error {
-            color: var(--error-color);
-            display: none;
-            margin-top: -15px;
-            margin-bottom: 12px;
-            font-size: 0.9rem;
-            transition: var(--transition);
-        }
-
-        .error2 {
-            color: var(--error-color);
-            display: none;
-            margin-top: 2px;
-            margin-bottom: 12px;
-            font-size: 0.9rem;
-            transition: var(--transition);
+        .special-button:hover {
+            background-color: #FFB300;
         }
 
         #errorSection {
@@ -1323,6 +1330,37 @@ const char mainPage[] PROGMEM = R"html(
             transform: scale(1.05);
         }
 
+        @media (max-width: 768px) {
+            .relay-buttons {
+                grid-template-columns: 1fr;
+            }
+            
+            .navigation-buttons {
+                grid-template-columns: 1fr;
+            }
+            
+            #time {
+                font-size: 2rem;
+            }
+            
+            #day, #date {
+                font-size: 1.2rem;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+            
+            .control-section {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+            
+            .control-section h3 {
+                font-size: 1.3rem;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -1336,16 +1374,27 @@ const char mainPage[] PROGMEM = R"html(
             <div id="date">Loading date...</div>
         </div>
         <div id="temperature">Temperature: -- °C</div>
-        <div class="buttons">
-            <button class="button" onclick="toggleRelay(1)" id="btn1">WaveMaker</button>
-            <button class="button" onclick="toggleRelay(3)" id="btn3">Air Pump</button>
-            <button class="button" onclick="toggleRelay(2)" id="btn2">Light</button>
-            <button class="button" onclick="oneClickLight()" id="btnOneClick">Change Light Color</button>
-            <button class="button" onclick="showLogs()">Show Logs</button>
-            <button class="button" onclick="showHeaterControl()">Heater Control</button>
-            <button class="button" onclick="showTempSchedules()">Temporary Schedules</button>
-            <button class="button" onclick="showSchedules()">Schedules</button>
+        
+        <div class="control-section">
+            <h3>Relay Controls</h3>
+            <div class="relay-buttons">
+                <button class="button" onclick="toggleRelay(1)" id="btn1">WaveMaker</button>
+                <button class="button" onclick="toggleRelay(3)" id="btn3">Air Pump</button>
+                <button class="button" onclick="toggleRelay(2)" id="btn2">Light</button>
+                <button class="button special-button" onclick="oneClickLight()" id="btnOneClick">Change Light Color</button>
+            </div>
         </div>
+
+        <div class="control-section">
+            <h3>System Navigation</h3>
+            <div class="navigation-buttons">
+                <button class="button nav-button" onclick="showSchedules()">Main Schedules</button>
+                <button class="button nav-button" onclick="showTempSchedules()">Temporary Schedules</button>
+                <button class="button nav-button" onclick="showHeaterControl()">Heater Control</button>
+                <button class="button nav-button" onclick="showLogs()">System Logs</button>
+            </div>
+        </div>
+
         <div id="errorSection">
             <p>Error detected!</p>
             <button id="clearErrorBtn" onclick="clearError()">Clear Error</button>
