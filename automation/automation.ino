@@ -53,6 +53,7 @@ void handleGetTemporarySchedules();
 void handleAddTemporarySchedule();
 void handleDeleteTemporarySchedule();
 void checkTemporarySchedules();
+void handleHeaterCtrlPage();
 
 struct Schedule {
   int id;
@@ -938,6 +939,7 @@ void setup() {
   server.on("/favicon.png", HTTP_GET, handleFavicon);
   server.on("/logs", HTTP_GET, handleLogsPage);
   server.on("/logs/data", HTTP_GET, handleGetLogs);
+  server.on("/heatercontrol", HTTP_GET, handleHeaterCtrlPage);
   server.on("/relay/1", HTTP_ANY, handleRelay1);
   server.on("/relay/2", HTTP_ANY, handleRelay2);
   server.on("/relay/3", HTTP_ANY, handleRelay3);
@@ -1648,229 +1650,6 @@ const char mainPage[] PROGMEM = R"html(
                 min-width: 80px;
             }
         }
-        .temp-control {
-            background-color: var(--card-color);
-            padding: 25px;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-            margin-bottom: 25px;
-            transition: var(--transition);
-        }
-        
-        .temp-control:hover {
-            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
-        }
-        
-        .temp-control h3 {
-            color: var(--primary-color);
-            margin-bottom: 15px;
-            font-size: 1.5rem;
-            border-bottom: 2px solid var(--primary-light);
-            padding-bottom: 10px;
-        }
-        
-        .temp-control .slider-container {
-            margin: 25px 0;
-        }
-        
-        .temp-control .slider-container label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-        }
-        
-        .temp-control .range-values {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
-            color: var(--text-light);
-        }
-        
-        .temp-control .current-value {
-            text-align: center;
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: var(--primary-color);
-            margin: 10px 0;
-        }
-        
-        .temp-control input[type="range"] {
-            width: 100%;
-            height: 8px;
-            border-radius: 5px;
-            background: #ddd;
-            outline: none;
-            -webkit-appearance: none;
-        }
-        
-        .temp-control input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: var(--primary-color);
-            cursor: pointer;
-            transition: var(--transition);
-        }
-        
-        .temp-control input[type="range"]::-webkit-slider-thumb:hover {
-            background: var(--primary-dark);
-            transform: scale(1.1);
-        }
-        
-        .temp-control .toggle-container {
-            display: flex;
-            align-items: center;
-            margin: 20px 0;
-        }
-        
-        .temp-control .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 60px;
-            height: 34px;
-            margin-right: 15px;
-        }
-        
-        .temp-control .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        
-        .temp-control .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 34px;
-        }
-        
-        .temp-control .slider:before {
-            position: absolute;
-            content: "";
-            height: 26px;
-            width: 26px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        
-        .temp-control input:checked + .slider {
-            background-color: var(--success-color);
-        }
-        
-        .temp-control input:focus + .slider {
-            box-shadow: 0 0 1px var(--success-color);
-        }
-        
-        .temp-control input:checked + .slider:before {
-            transform: translateX(26px);
-        }
-        
-        .temp-control .toggle-label {
-            font-size: 1rem;
-            font-weight: 500;
-        }
-        
-        .temp-control .temp-buttons {
-            display: flex;
-            justify-content: flex-end;
-        }
-        
-        .temp-control .save-button {
-            padding: 10px 20px;
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            transition: var(--transition);
-            font-weight: 500;
-        }
-        
-        .temp-control .save-button:hover {
-            background-color: var(--primary-dark);
-            transform: translateY(-2px);
-        }
-        
-        .temp-control .temp-values-display {
-            display: flex;
-            justify-content: space-between;
-            margin: 20px 0;
-            font-size: 1.1rem;
-        }
-        
-        .temp-control .temp-value-box {
-            text-align: center;
-            padding: 15px;
-            background-color: #f5f7fa;
-            border-radius: var(--border-radius);
-            flex: 1;
-            margin: 0 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-        
-        .temp-control .temp-value-box span {
-            font-weight: bold;
-            color: var(--primary-color);
-        }
-        
-        .temp-control .temp-value-box.min-temp {
-            border-left: 4px solid var(--warning-color);
-        }
-        
-        .temp-control .temp-value-box.max-temp {
-            border-left: 4px solid var(--error-color);
-        }
-        
-        .temp-control .temp-value-box.current-temp {
-            border-left: 4px solid var(--success-color);
-        }
-
-        .temp-control .heater-status {
-            margin: 20px 0;
-            padding: 15px;
-            background-color: #f5f7fa;
-            border-radius: var(--border-radius);
-            border-left: 4px solid var(--primary-color);
-        }
-
-        .temp-control .status-indicator {
-            display: flex;
-            align-items: center;
-        }
-
-        .temp-control .status-dot {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 10px;
-            background-color: #ccc;
-        }
-
-        .temp-control .status-dot.on {
-            background-color: var(--success-color);
-            box-shadow: 0 0 5px var(--success-color);
-        }
-
-        .temp-control .status-dot.off {
-            background-color: var(--error-color);
-            box-shadow: 0 0 5px var(--error-color);
-        }
-
-        .temp-control .status-text {
-            font-size: 1.1rem;
-            font-weight: 500;
-        }
     </style>
 </head>
 <body>
@@ -1890,67 +1669,11 @@ const char mainPage[] PROGMEM = R"html(
             <button class="button" onclick="toggleRelay(2)" id="btn2">Light</button>
             <button class="button" onclick="oneClickLight()" id="btnOneClick">Change Light Color</button>
             <button class="button" onclick="showLogs()">Show Logs</button>
+            <button class="button" onclick="showHeaterControl()">Heater Control</button>
         </div>
         <div id="errorSection">
             <p>Error detected!</p>
             <button id="clearErrorBtn" onclick="clearError()">Clear Error</button>
-        </div>
-        <div class="temp-control">
-            <h3>Heater Control</h3>
-
-            <div class="heater-status">
-                <div class="status-indicator">
-                    <span class="status-dot" id="heater-status-dot"></span>
-                    <span class="status-text">Heater Status: <span id="heater-status">Unknown</span></span>
-                </div>
-            </div>
-            
-            <div class="temp-values-display">
-                <div class="temp-value-box min-temp">
-                    <div>Min Temperature</div>
-                    <span id="min-temp-display">--</span> °C
-                </div>
-                <div class="temp-value-box max-temp">
-                    <div>Max Temperature</div>
-                    <span id="max-temp-display">--</span> °C
-                </div>
-            </div>
-            
-            <div class="slider-container">
-                <label for="min-temp-slider">Minimum Temperature (°C):</label>
-                <input type="range" id="min-temp-slider" min="20" max="30" step="1" value="24">
-                <div class="current-value">
-                    <span id="min-temp-value">24</span> °C
-                </div>
-                <div class="range-values">
-                    <span>20°C</span>
-                    <span>30°C</span>
-                </div>
-            </div>
-            
-            <div class="slider-container">
-                <label for="max-temp-slider">Maximum Temperature (°C):</label>
-                <input type="range" id="max-temp-slider" min="20" max="30" step="1" value="28">
-                <div class="current-value">
-                    <span id="max-temp-value">28</span> °C
-                </div>
-                <div class="range-values">
-                    <span>20°C</span>
-                    <span>30°C</span>
-                </div>
-            </div>
-            
-            <div class="toggle-container">
-                <label class="toggle-switch">
-                    <input type="checkbox" id="temp-control-toggle">
-                    <span class="slider"></span>
-                </label>
-                <div class="toggle-label">Temperature Control</div>
-            </div>
-            
-            <div class="temp-buttons">
-                <button class="save-button" onclick="saveTemperatureSettings()">Save Settings</button>
-            </div>
         </div>
         <div class="schedule-form">
             <h3>Add Schedule</h3>
@@ -2343,6 +2066,9 @@ const char mainPage[] PROGMEM = R"html(
         function showLogs() {
             window.location.href = '/logs';
         }
+        function showHeaterControl() {
+            window.location.href = '/heatercontrol';
+        }
 
         function oneClickLight() {
             fetch('/relay/oneclick', { method: 'POST' })
@@ -2352,82 +2078,6 @@ const char mainPage[] PROGMEM = R"html(
             }))
             .catch(error => alert(error.message));
         }
-        
-        function updateTemperatureSliders() {
-            document.getElementById('min-temp-value').textContent = document.getElementById('min-temp-slider').value;
-            document.getElementById('max-temp-value').textContent = document.getElementById('max-temp-slider').value;
-        }
-
-        function loadTemperatureSettings() {
-            fetch('/temperature/settings')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('min-temp-slider').value = data.minTemp;
-                    document.getElementById('max-temp-slider').value = data.maxTemp;
-                    document.getElementById('temp-control-toggle').checked = data.enabled;
-                    
-                    // Update display values
-                    document.getElementById('min-temp-value').textContent = data.minTemp;
-                    document.getElementById('max-temp-value').textContent = data.maxTemp;
-                    document.getElementById('min-temp-display').textContent = data.minTemp;
-                    document.getElementById('max-temp-display').textContent = data.maxTemp;
-                    document.getElementById('current-temp-display').textContent = data.currentTemp;
-                    document.getElementById('temp-control-status').textContent = data.enabled ? 'Enabled' : 'Disabled';
-                })
-                .catch(error => {
-                    console.error('Error loading temperature settings:', error);
-                });
-        }
-
-        function saveTemperatureSettings() {
-            const minTemp = parseInt(document.getElementById('min-temp-slider').value);
-            const maxTemp = parseInt(document.getElementById('max-temp-slider').value);
-            const enabled = document.getElementById('temp-control-toggle').checked;
-            
-            if (minTemp >= maxTemp) {
-                alert('Minimum temperature must be less than maximum temperature!');
-                return;
-            }
-            
-            const settings = {
-                minTemp: minTemp,
-                maxTemp: maxTemp,
-                enabled: enabled
-            };
-            
-            fetch('/temperature/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(settings)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(data => { throw new Error(data.error); });
-                }
-                return response.json();
-            })
-            .then(data => {
-                alert('Temperature settings saved successfully!');
-                loadTemperatureSettings(); // Reload to confirm settings
-            })
-            .catch(error => {
-                alert('Failed to save settings: ' + error.message);
-            });
-        }
-
-        function updateHeaterStatus(isOn) {
-            const statusDot = document.getElementById('heater-status-dot');
-            const statusText = document.getElementById('heater-status');
-            
-            if (statusDot && statusText) {
-                statusDot.className = 'status-dot ' + (isOn ? 'on' : 'off');
-                statusText.textContent = isOn ? 'ON' : 'OFF';
-            }
-        }
-                
-        document.getElementById('min-temp-slider').addEventListener('input', updateTemperatureSliders);
-        document.getElementById('max-temp-slider').addEventListener('input', updateTemperatureSliders);
-
 
         function addTemporarySchedule() {
             document.getElementById('tempRelayError').style.display = 'none';
@@ -2820,11 +2470,617 @@ const char logsPage[] PROGMEM = R"html(
 </html>
 )html";
 
+const char heaterctrl[] PROGMEM = R"html(
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" type="image/png" href="/favicon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heater Control</title>
+    <style>
+        :root {
+            --primary-color: #1976D2;
+            --primary-dark: #0D47A1;
+            --primary-light: #BBDEFB;
+            --accent-color: #03A9F4;
+            --success-color: #4CAF50;
+            --warning-color: #FFC107;
+            --error-color: #F44336;
+            --text-color: #333;
+            --text-light: #757575;
+            --background-color: #f5f7fa;
+            --card-color: #ffffff;
+            --border-radius: 8px;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2rem;
+            letter-spacing: 0.5px;
+        }
+
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            margin: 5px 0 20px 0;
+            transition: var(--transition);
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+
+        .button:active {
+            transform: translateY(1px);
+        }
+
+        .refresh-button {
+            float: right;
+            background-color: var(--success-color);
+        }
+
+        .refresh-button:hover {
+            background-color: #388E3C;
+        }
+
+        .header-actions {
+            margin-bottom: 20px;
+            overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .logs-table {
+                font-size: 14px;
+            }
+            
+            .logs-table th, .logs-table td {
+                padding: 10px;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+            
+            .header-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .button {
+                width: 100%;
+                margin: 5px 0;
+                text-align: center;
+            }
+            
+            .refresh-button {
+                float: none;
+            }
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .temp-control {
+            background-color: var(--card-color);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 25px;
+            transition: var(--transition);
+        }
+        
+        .temp-control:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
+        
+        .temp-control h3 {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
+        }
+        
+        .temp-control .slider-container {
+            margin: 25px 0;
+        }
+        
+        .temp-control .slider-container label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        .temp-control .range-values {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            color: var(--text-light);
+        }
+        
+        .temp-control .current-value {
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin: 10px 0;
+        }
+        
+        .temp-control input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .temp-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .temp-control input[type="range"]::-webkit-slider-thumb:hover {
+            background: var(--primary-dark);
+            transform: scale(1.1);
+        }
+        
+        .temp-control .toggle-container {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+        }
+        
+        .temp-control .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+            margin-right: 15px;
+        }
+        
+        .temp-control .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .temp-control .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .temp-control .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        .temp-control input:checked + .slider {
+            background-color: var(--success-color);
+        }
+        
+        .temp-control input:focus + .slider {
+            box-shadow: 0 0 1px var(--success-color);
+        }
+        
+        .temp-control input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .temp-control .toggle-label {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        
+        .temp-control .temp-buttons {
+            display: flex;
+            justify-content: flex-end;
+        }
+        
+        .temp-control .save-button {
+            padding: 10px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: var(--transition);
+            font-weight: 500;
+        }
+        
+        .temp-control .save-button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+        
+        .temp-control .temp-values-display {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            font-size: 1.1rem;
+        }
+        
+        .temp-control .temp-value-box {
+            text-align: center;
+            padding: 15px;
+            background-color: #f5f7fa;
+            border-radius: var(--border-radius);
+            flex: 1;
+            margin: 0 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .temp-control .temp-value-box span {
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .temp-control .temp-value-box.min-temp {
+            border-left: 4px solid var(--warning-color);
+        }
+        
+        .temp-control .temp-value-box.max-temp {
+            border-left: 4px solid var(--error-color);
+        }
+        
+        .temp-control .temp-value-box.current-temp {
+            border-left: 4px solid var(--success-color);
+        }
+
+        .temp-control .heater-status {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f7fa;
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .temp-control .status-indicator {
+            display: flex;
+            align-items: center;
+        }
+
+        .temp-control .status-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background-color: #ccc;
+        }
+
+        .temp-control .status-dot.on {
+            background-color: var(--success-color);
+            box-shadow: 0 0 5px var(--success-color);
+        }
+
+        .temp-control .status-dot.off {
+            background-color: var(--error-color);
+            box-shadow: 0 0 5px var(--error-color);
+        }
+
+        .temp-control .status-text {
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        #temperature {
+            font-size: 2rem;
+            margin: 20px 0;
+            text-align: center;
+            padding: 20px;
+            background-color: var(--card-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            color: var(--primary-color);
+            transition: var(--transition);
+        }
+
+        .error {
+            color: var(--error-color);
+            display: none;
+            margin-top: -15px;
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+            transition: var(--transition);
+        }
+
+        .error2 {
+            color: var(--error-color);
+            display: none;
+            margin-top: 2px;
+            margin-bottom: 12px;
+            font-size: 0.9rem;
+            transition: var(--transition);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Heater Control</h1>
+    </header>
+    <div class="container">
+        <div class="header-actions">
+            <button onclick="goBack()" class="button">Back to Dashboard</button>
+        </div>
+        <div id="temperature">Temperature: -- °C</div>
+        <div class="temp-control">
+            <h3>Heater Control</h3>
+
+            <div class="heater-status">
+                <div class="status-indicator">
+                    <span class="status-dot" id="heater-status-dot"></span>
+                    <span class="status-text">Heater Status: <span id="heater-status">Unknown</span></span>
+                </div>
+            </div>
+            
+            <div class="temp-values-display">
+                <div class="temp-value-box min-temp">
+                    <div>Min Temperature</div>
+                    <span id="min-temp-display">--</span> °C
+                </div>
+                <div class="temp-value-box max-temp">
+                    <div>Max Temperature</div>
+                    <span id="max-temp-display">--</span> °C
+                </div>
+            </div>
+            
+            <div class="slider-container">
+                <label for="min-temp-slider">Minimum Temperature (°C):</label>
+                <input type="range" id="min-temp-slider" min="20" max="30" step="1" value="24">
+                <div class="current-value">
+                    <span id="min-temp-value">24</span> °C
+                </div>
+                <div class="range-values">
+                    <span>20°C</span>
+                    <span>30°C</span>
+                </div>
+            </div>
+            
+            <div class="slider-container">
+                <label for="max-temp-slider">Maximum Temperature (°C):</label>
+                <input type="range" id="max-temp-slider" min="20" max="30" step="1" value="28">
+                <div class="current-value">
+                    <span id="max-temp-value">28</span> °C
+                </div>
+                <div class="range-values">
+                    <span>20°C</span>
+                    <span>30°C</span>
+                </div>
+            </div>
+            
+            <div class="toggle-container">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="temp-control-toggle">
+                    <span class="slider"></span>
+                </label>
+                <div class="toggle-label">Temperature Control</div>
+            </div>
+            
+            <div class="temp-buttons">
+                <button class="save-button" onclick="saveTemperatureSettings()">Save Settings</button>
+            </div>
+        </div>
+        
+    </div>
+    <script>
+
+       socket.onopen = () => console.log('WebSocket connected');
+        socket.onmessage = (event) => {
+            try {
+                let data = JSON.parse(event.data);
+                
+                if (data.relay4Name) window.relay4Name = data.relay4Name;
+                
+                if (data.relay4 !== undefined) {
+                    updateHeaterStatus(data.relay4);
+                }
+                if (data.temperature !== undefined) {
+                    document.getElementById('temperature').textContent = 
+                        `Temperature: ${data.temperature} °C`;
+                    document.getElementById('current-temp-display').textContent = data.temperature;
+                }
+                if (data.minTemp !== undefined) {
+                    document.getElementById('min-temp-display').textContent = data.minTemp;
+                }
+                if (data.maxTemp !== undefined) {
+                    document.getElementById('max-temp-display').textContent = data.maxTemp;
+                }
+                if (data.tempControlEnabled !== undefined) {
+                    document.getElementById('temp-control-status').textContent = 
+                        data.tempControlEnabled ? 'Enabled' : 'Disabled';
+                }
+            } catch (e) {
+                console.error('WebSocket error:', e);
+            }
+        };
+
+        function goBack() {
+            window.history.back();
+        }
+
+        function updateTemperatureSliders() {
+            document.getElementById('min-temp-value').textContent = document.getElementById('min-temp-slider').value;
+            document.getElementById('max-temp-value').textContent = document.getElementById('max-temp-slider').value;
+        }
+
+        function loadTemperatureSettings() {
+            fetch('/temperature/settings')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('min-temp-slider').value = data.minTemp;
+                    document.getElementById('max-temp-slider').value = data.maxTemp;
+                    document.getElementById('temp-control-toggle').checked = data.enabled;
+                    
+                    // Update display values
+                    document.getElementById('min-temp-value').textContent = data.minTemp;
+                    document.getElementById('max-temp-value').textContent = data.maxTemp;
+                    document.getElementById('min-temp-display').textContent = data.minTemp;
+                    document.getElementById('max-temp-display').textContent = data.maxTemp;
+                    document.getElementById('current-temp-display').textContent = data.currentTemp;
+                    document.getElementById('temp-control-status').textContent = data.enabled ? 'Enabled' : 'Disabled';
+                })
+                .catch(error => {
+                    console.error('Error loading temperature settings:', error);
+                });
+        }
+
+        function saveTemperatureSettings() {
+            const minTemp = parseInt(document.getElementById('min-temp-slider').value);
+            const maxTemp = parseInt(document.getElementById('max-temp-slider').value);
+            const enabled = document.getElementById('temp-control-toggle').checked;
+            
+            if (minTemp >= maxTemp) {
+                alert('Minimum temperature must be less than maximum temperature!');
+                return;
+            }
+            
+            const settings = {
+                minTemp: minTemp,
+                maxTemp: maxTemp,
+                enabled: enabled
+            };
+            
+            fetch('/temperature/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => { throw new Error(data.error); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert('Temperature settings saved successfully!');
+                loadTemperatureSettings(); // Reload to confirm settings
+            })
+            .catch(error => {
+                alert('Failed to save settings: ' + error.message);
+            });
+        }
+
+        function updateHeaterStatus(isOn) {
+            const statusDot = document.getElementById('heater-status-dot');
+            const statusText = document.getElementById('heater-status');
+            
+            if (statusDot && statusText) {
+                statusDot.className = 'status-dot ' + (isOn ? 'on' : 'off');
+                statusText.textContent = isOn ? 'ON' : 'OFF';
+            }
+        }
+                
+        document.getElementById('min-temp-slider').addEventListener('input', updateTemperatureSliders);
+        document.getElementById('max-temp-slider').addEventListener('input', updateTemperatureSliders);
+
+        loadLogs();
+        setInterval(loadLogs, 10000);
+    </script>
+</body>
+</html>
+)html";
+
 unsigned long lastWifiConnectAttempt = 0;
 const unsigned long WIFI_RECONNECT_INTERVAL = 30000;
 
 void handleLogsPage() {
   server.send_P(200, "text/html", logsPage);
+}
+
+void handleHeaterCtrlPage() {
+  server.send_P(200, "text/html", heaterctrl);
 }
 
 void loop() {
