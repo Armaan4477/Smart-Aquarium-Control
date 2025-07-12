@@ -2562,15 +2562,6 @@ const char heaterctrl[] PROGMEM = R"html(
             transform: translateY(1px);
         }
 
-        .refresh-button {
-            float: right;
-            background-color: var(--success-color);
-        }
-
-        .refresh-button:hover {
-            background-color: #388E3C;
-        }
-
         .header-actions {
             margin-bottom: 20px;
             overflow: hidden;
@@ -2579,56 +2570,6 @@ const char heaterctrl[] PROGMEM = R"html(
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
-        }
-
-        @media (max-width: 768px) {
-            .logs-table {
-                font-size: 14px;
-            }
-            
-            .logs-table th, .logs-table td {
-                padding: 10px;
-            }
-            
-            .container {
-                padding: 10px;
-            }
-            
-            .header-actions {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .button {
-                width: 100%;
-                margin: 5px 0;
-                text-align: center;
-            }
-            
-            .refresh-button {
-                float: none;
-            }
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-
-        .loading-spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid var(--primary-color);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
         }
 
         .temp-control {
@@ -2789,6 +2730,7 @@ const char heaterctrl[] PROGMEM = R"html(
             justify-content: space-between;
             margin: 20px 0;
             font-size: 1.1rem;
+            gap: 10px;
         }
         
         .temp-control .temp-value-box {
@@ -2797,13 +2739,14 @@ const char heaterctrl[] PROGMEM = R"html(
             background-color: #f5f7fa;
             border-radius: var(--border-radius);
             flex: 1;
-            margin: 0 5px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            min-width: 0;
         }
         
         .temp-control .temp-value-box span {
             font-weight: bold;
             color: var(--primary-color);
+            font-size: 1.2rem;
         }
         
         .temp-control .temp-value-box.min-temp {
@@ -2867,22 +2810,63 @@ const char heaterctrl[] PROGMEM = R"html(
             transition: var(--transition);
         }
 
-        .error {
-            color: var(--error-color);
-            display: none;
-            margin-top: -15px;
-            margin-bottom: 12px;
-            font-size: 0.9rem;
-            transition: var(--transition);
-        }
-
-        .error2 {
-            color: var(--error-color);
-            display: none;
-            margin-top: 2px;
-            margin-bottom: 12px;
-            font-size: 0.9rem;
-            transition: var(--transition);
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .button {
+                width: 100%;
+                margin: 5px 0;
+                text-align: center;
+            }
+            
+            .temp-control {
+                padding: 15px;
+            }
+            
+            .temp-control .temp-values-display {
+                flex-direction: column;
+                gap: 10px;
+                margin: 15px 0;
+            }
+            
+            .temp-control .temp-value-box {
+                padding: 12px;
+                font-size: 1rem;
+            }
+            
+            .temp-control .temp-value-box span {
+                font-size: 1.1rem;
+            }
+            
+            .temp-control h3 {
+                font-size: 1.3rem;
+            }
+            
+            .temp-control .toggle-container {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            
+            .temp-control .toggle-switch {
+                margin-right: 0;
+            }
+            
+            .temp-control .save-button {
+                width: 100%;
+                padding: 12px;
+            }
+            
+            #temperature {
+                font-size: 1.5rem;
+                padding: 15px;
+            }
         }
     </style>
 </head>
@@ -2894,7 +2878,6 @@ const char heaterctrl[] PROGMEM = R"html(
         <div class="header-actions">
             <button onclick="goBack()" class="button">Back to Dashboard</button>
         </div>
-        <div id="temperature">Temperature: -- °C</div>
         <div class="temp-control">
             <h3>Heater Control</h3>
 
@@ -2904,8 +2887,11 @@ const char heaterctrl[] PROGMEM = R"html(
                     <span class="status-text">Heater Status: <span id="heater-status">Unknown</span></span>
                 </div>
             </div>
-            
             <div class="temp-values-display">
+                <div class="temp-value-box current-temp">
+                    <div>Current Temperature</div>
+                    <span id="current-temp-display">--</span> °C
+                </div>
                 <div class="temp-value-box min-temp">
                     <div>Min Temperature</div>
                     <span id="min-temp-display">--</span> °C
@@ -2945,23 +2931,26 @@ const char heaterctrl[] PROGMEM = R"html(
                     <input type="checkbox" id="temp-control-toggle">
                     <span class="slider"></span>
                 </label>
-                <div class="toggle-label">Temperature Control</div>
+                <div class="toggle-label">Temperature Control: <span id="temp-control-status">Unknown</span></div>
             </div>
             
             <div class="temp-buttons">
                 <button class="save-button" onclick="saveTemperatureSettings()">Save Settings</button>
             </div>
         </div>
-        
     </div>
     <script>
+        let socket = new WebSocket('ws://' + window.location.hostname + ':81/');
 
-       socket.onopen = () => console.log('WebSocket connected');
+        socket.onopen = () => {
+            console.log('WebSocket connected');
+            // Request initial data
+            loadTemperatureSettings();
+        };
+        
         socket.onmessage = (event) => {
             try {
                 let data = JSON.parse(event.data);
-                
-                if (data.relay4Name) window.relay4Name = data.relay4Name;
                 
                 if (data.relay4 !== undefined) {
                     updateHeaterStatus(data.relay4);
@@ -2985,6 +2974,9 @@ const char heaterctrl[] PROGMEM = R"html(
                 console.error('WebSocket error:', e);
             }
         };
+
+        socket.onclose = () => console.log('WebSocket disconnected');
+        socket.onerror = () => console.log('WebSocket error');
 
         function goBack() {
             window.history.back();
@@ -3061,12 +3053,28 @@ const char heaterctrl[] PROGMEM = R"html(
                 statusText.textContent = isOn ? 'ON' : 'OFF';
             }
         }
+
+        function getInitialHeaterStatus() {
+            fetch('/relay/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data["4"] !== undefined) {
+                        updateHeaterStatus(data["4"]);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error getting initial heater status:', error);
+                });
+        }
                 
         document.getElementById('min-temp-slider').addEventListener('input', updateTemperatureSliders);
         document.getElementById('max-temp-slider').addEventListener('input', updateTemperatureSliders);
 
-        loadLogs();
-        setInterval(loadLogs, 10000);
+        loadTemperatureSettings();
+        getInitialHeaterStatus();
+        
+        setInterval(loadTemperatureSettings, 10000);
+        setInterval(getInitialHeaterStatus, 5000);
     </script>
 </body>
 </html>
@@ -4023,7 +4031,7 @@ void handleAddTemporarySchedule() {
       newSchedule.id = tempScheduleIdCounter++;
       newSchedule.relayNumber = doc["relay"].as<int>();
       newSchedule.enabled = true;
-      
+
       if (doc.containsKey("onTime") && !doc["onTime"].isNull()) {
         String onTime = doc["onTime"].as<String>();
         if (onTime.length() >= 5) {
@@ -4036,7 +4044,7 @@ void handleAddTemporarySchedule() {
       } else {
         newSchedule.hasOnTime = false;
       }
-      
+
       if (doc.containsKey("offTime") && !doc["offTime"].isNull()) {
         String offTime = doc["offTime"].as<String>();
         if (offTime.length() >= 5) {
@@ -4058,7 +4066,7 @@ void handleAddTemporarySchedule() {
 
       temporarySchedules.push_back(newSchedule);
       server.send(200, "application/json", "{\"status\":\"success\",\"id\":" + String(newSchedule.id) + "}");
-      
+
       String logMsg = "Temporary schedule added for relay " + String(newSchedule.relayNumber);
       if (newSchedule.hasOnTime) {
         logMsg += " ON at " + String(newSchedule.onHour) + ":" + (newSchedule.onMinute < 10 ? "0" : "") + String(newSchedule.onMinute);
@@ -4108,7 +4116,7 @@ void checkTemporarySchedules() {
   for (auto it = temporarySchedules.begin(); it != temporarySchedules.end();) {
     const TemporarySchedule& schedule = *it;
     bool shouldRemove = false;
-    
+
     if (!schedule.enabled) {
       ++it;
       continue;
@@ -4131,12 +4139,12 @@ void checkTemporarySchedules() {
           storeLogEntry("Temporary schedule activated relay 3");
         }
       }
-      
+
       if (!schedule.hasOffTime) {
         shouldRemove = true;
       }
     }
-    
+
     if (schedule.hasOffTime && hours == schedule.offHour && minutes == schedule.offMinute && seconds == 0) {
       if (schedule.relayNumber == 1) {
         if (relay1State && !overrideRelay1) {
@@ -4154,21 +4162,21 @@ void checkTemporarySchedules() {
           storeLogEntry("Temporary schedule deactivated relay 3");
         }
       }
-      
+
       if (!schedule.hasOnTime) {
         shouldRemove = true;
       }
     }
-    
+
     if (schedule.hasOnTime && schedule.hasOffTime) {
       bool onTimePassed = (hours > schedule.onHour) || (hours == schedule.onHour && minutes > schedule.onMinute);
       bool offTimePassed = (hours > schedule.offHour) || (hours == schedule.offHour && minutes > schedule.offMinute);
-      
+
       if (onTimePassed && offTimePassed) {
         shouldRemove = true;
       }
     }
-    
+
     if (shouldRemove) {
       storeLogEntry("Temporary schedule ID " + String(schedule.id) + " completed and removed");
       it = temporarySchedules.erase(it);
