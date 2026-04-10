@@ -93,12 +93,12 @@ struct CalibrationData {
   float externalOffset;
 };
 
-const int relay1 = 16;
-const int relay2 = 17;
-const int relay3 = 18;
+const int relay1 = 18;
+const int relay2 = 19;
+const int relay3 = 21;
 const int switch1Pin = 23;
 const int switch2Pin = 22;
-const int errorLEDPin = 21;
+const int errorLEDPin = 2;
 
 bool overrideRelay1 = false;
 bool overrideRelay2 = false;
