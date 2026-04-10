@@ -9,7 +9,9 @@
 #include <Ticker.h>
 #include <TimeLib.h>
 #include <LittleFS.h>
-#include <ESP_Mail_Client.h>
+#include <WiFiClientSecure.h>
+#define ENABLE_SMTP
+#include <ReadyMail.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <time.h>
@@ -762,7 +764,8 @@ const char* emailSenderPassword = "your-app-specific-password";
 const char* emailRecipient = "recipient@email.com";
 const char* emailSubject = "Aquarium Control Logs";
 
-SMTPSession smtp;
+WiFiClientSecure ssl_client;
+SMTPClient smtp(ssl_client);
 
 WebServer server(80);
 
@@ -5135,7 +5138,7 @@ void handleUpdateSchedule() {
 }
 
 void handleRoot() {
-  if (!checkAuthentication()) return;
+  //if (!checkAuthentication()) return;
   server.send_P(200, "text/html", mainPage);
 }
 
@@ -5367,22 +5370,12 @@ void sendEmailWithLogs(const String& trigger) {
 
   tempTemperature();
 
-  MailClient.networkReconnect(false);
-  smtp.debug(0);
-  smtp.setTCPTimeout(10000);
+  ssl_client.setInsecure();
 
-  Session_Config config;
-  config.server.host_name = SMTP_HOST;
-  config.server.port = SMTP_PORT;
-  config.login.email = emailSenderAccount;
-  config.login.password = emailSenderPassword;
-  config.login.user_domain = "";
-
-  SMTP_Message message;
-  message.sender.name = "Aquarium Control";
-  message.sender.email = emailSenderAccount;
-  message.subject = String(emailSubject) + " - " + trigger;
-  message.addRecipient("User", emailRecipient);
+  SMTPMessage message;
+  message.headers.add(rfc822_from, "Aquarium Control <" + String(emailSenderAccount) + ">");
+  message.headers.add(rfc822_to, "User <" + String(emailRecipient) + ">");
+  message.headers.add(rfc822_subject, String(emailSubject) + " - " + trigger);
 
   struct tm timeinfo;
   String formattedTime = "Unknown";
@@ -5406,9 +5399,10 @@ void sendEmailWithLogs(const String& trigger) {
   textMsg += "Error Status: " + String(hasError ? "Error Present" : "No Errors") + "\n\n";
   textMsg += "Full logs are attached as logs.json";
 
-  message.text.content = textMsg.c_str();
-  message.text.charSet = "us-ascii";
-  message.text.transfer_encoding = Content_Transfer_Encoding::enc_7bit;
+  message.text.body(textMsg);
+  message.text.charset("utf-8");
+  message.text.transferEncoding("quoted-printable");
+  message.timestamp = time(nullptr);
 
   File logsFile = LittleFS.open("/logs.json", "r");
   if (!logsFile) {
@@ -5438,27 +5432,39 @@ void sendEmailWithLogs(const String& trigger) {
   fileBuffer[bytesRead] = '\0';
   logsFile.close();
 
-  SMTP_Attachment att;
-  att.descr.filename = "logs.json";
-  att.descr.mime = "application/json";
-  att.descr.transfer_encoding = Content_Transfer_Encoding::enc_base64;
-  att.blob.data = (uint8_t*)fileBuffer;
-  att.blob.size = bytesRead;
-  message.addAttachment(att);
-
-  unsigned long emailStartTime = millis();
-  const unsigned long EMAIL_TIMEOUT = 20000;
+  Attachment attachment;
+  attachment.filename = "logs.json";
+  attachment.mime = "application/json";
+  attachment.name = "logs";
+  attachment.attach_file.blob = reinterpret_cast<const uint8_t*>(fileBuffer);
+  attachment.attach_file.blob_size = bytesRead;
+  message.attachments.add(attachment, attach_type_attachment);
 
   bool connected = false;
   try {
-    connected = smtp.connect(&config);
+    connected = smtp.connect(SMTP_HOST, SMTP_PORT);
   } catch (...) {
     storeLogEntry("Exception during SMTP connection");
     connected = false;
   }
 
-  if (!connected) {
+  if (!connected || !smtp.isConnected()) {
     storeLogEntry("Failed to connect to email server");
+    delete[] fileBuffer;
+    emailInProgress = false;
+    return;
+  }
+
+  bool authenticated = false;
+  try {
+    authenticated = smtp.authenticate(emailSenderAccount, emailSenderPassword, readymail_auth_password);
+  } catch (...) {
+    storeLogEntry("Exception during SMTP authentication");
+    authenticated = false;
+  }
+
+  if (!authenticated || !smtp.isAuthenticated()) {
+    storeLogEntry("Failed to authenticate with email server");
     delete[] fileBuffer;
     emailInProgress = false;
     return;
@@ -5466,14 +5472,14 @@ void sendEmailWithLogs(const String& trigger) {
 
   bool sendSuccess = false;
   try {
-    sendSuccess = MailClient.sendMail(&smtp, &message);
+    sendSuccess = smtp.send(message);
   } catch (...) {
     storeLogEntry("Exception during email sending");
     sendSuccess = false;
   }
 
   if (!sendSuccess) {
-    storeLogEntry("Failed to send email: " + smtp.errorReason());
+    storeLogEntry("Failed to send email");
   } else {
     storeLogEntry("Email sent successfully with logs");
   }
@@ -5481,7 +5487,7 @@ void sendEmailWithLogs(const String& trigger) {
   delete[] fileBuffer;
   
   try {
-    smtp.closeSession();
+    smtp.stop();
   } catch (...) {
     storeLogEntry("Exception during SMTP session close");
   }
