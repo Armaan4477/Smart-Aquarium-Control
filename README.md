@@ -1,45 +1,51 @@
 # Automated ESP Aquarium Controller
 
-This project is an ESP32-based aquarium control system that automates and monitors various aquarium equipment including lights, wave makers, air pumps, and temperature control.
+This project is an ESP32-based aquarium control system that automates and monitors key aquarium equipment from a local web interface.
 
 ## Features
 
-- **Web Interface**: Control your aquarium from any device on your network
-- **Equipment Control**: Manage multiple relays for different equipment:
-  - Wave Maker (Relay 1)
-  - Light with color cycling (Relay 2)
-  - Air Pump (Relay 3)
-  - Heater with temperature control (Relay 4)
-- **Scheduling**: Set detailed schedules with day-of-week support
-- **Temporary Scheduling**: Create one-time schedules that automatically expire after execution
-- **Temperature Monitoring**: Real-time temperature display with configurable thresholds
-- **Automatic Heater Control**: Maintain water temperature within set parameters
-- **Manual Override**: Physical switches for direct control
-- **Logging System**: Store and display system events
-- **Email Notifications**: Receive system status emails and alerts
-- **Error Detection**: Visual indication of system errors
-- **NTP Time Synchronization**: Accurate timekeeping for schedules
+- **Web Dashboard + WebSocket Live Updates**: Monitor relay states and sensor data in near real-time
+- **3 Relay Outputs**:
+  - Relay 1: Wave Maker
+  - Relay 2: Light (supports startup color-cycle toggle sequence)
+  - Relay 3: Air Pump
+- **Regular Schedules**: Day-of-week recurring ON/OFF schedules with conflict detection
+- **Temporary Schedules**: One-time schedules that are auto-removed after execution (up to 2 per relay)
+- **Dual Temperature Monitoring**:
+  - Internal DS18B20 sensor
+  - External DS18B20 sensor
+- **Sensor Calibration**: Adjustable internal and external temperature offsets saved to EEPROM
+- **Physical Manual Overrides**:
+  - Switch 1: Overrides Relay 1 and Relay 3
+  - Switch 2: Overrides Relay 2
+- **Event Logging**: Logs are persisted in LittleFS and viewable from the logs page
+- **Email Notifications**:
+  - Startup notification
+  - Periodic status-check emails
+  - Sensor error alerts
+- **Error Indication**: Dedicated LED indicates active error state
+- **NTP Time Synchronization**: NTP-based clock with retry logic
 
 ## Hardware Requirements
 
 - ESP32 development board
-- 4-channel relay module
-- DS18B20 temperature sensor
+- 3-channel relay module (or a 4-channel module with 3 channels used)
+- 2x DS18B20 temperature sensors (internal + external)
 - 2 switches for manual override
-- Status LED
+- 1 status/error LED
 - Power supply
-- Aquarium equipment to control (Wavemaker, Lights, Air Pump, Heater)
+- Aquarium equipment to control (Wave Maker, Lights, Air Pump)
 
 ## Wiring
 
-- Relay 1 (Wave Maker): GPIO16
-- Relay 2 (Light): GPIO17
-- Relay 3 (Air Pump): GPIO18
-- Relay 4 (Heater): GPIO19
+- Relay 1 (Wave Maker): GPIO18
+- Relay 2 (Light): GPIO19
+- Relay 3 (Air Pump): GPIO21
 - Switch 1 (Override 1): GPIO23
 - Switch 2 (Override 2): GPIO22
-- Error LED: GPIO21
-- Temperature Sensor: GPIO26
+- Error LED: GPIO2
+- Internal Temperature Sensor (DS18B20): GPIO26
+- External Temperature Sensor (DS18B20): GPIO27
 
 ## Installation
 
@@ -49,12 +55,16 @@ This project is an ESP32-based aquarium control system that automates and monito
    - WiFi
    - WebServer
    - WebSocketsServer
+   - WiFiUDP
    - ArduinoJson
+   - EEPROM
    - LittleFS
-   - ESP_Mail_Client
+   - ReadyMail
+   - WiFiClientSecure
    - OneWire
    - DallasTemperature
    - TimeLib
+   - Ticker
 4. Configure your WiFi credentials and email settings in the code
 5. Upload the code to your ESP32
 6. Access the web interface via the ESP32's IP address
@@ -69,7 +79,17 @@ const char* password = "Your_WiFi_Password";
 const char* emailSenderAccount = "your_email@gmail.com";
 const char* emailSenderPassword = "your_app_password";
 const char* emailRecipient = "recipient_email@example.com";
+const char* authUsername = "admin";
+const char* authPassword = "your_password";
 ```
+
+Also review these deployment settings in the sketch:
+- Allowed IP list (`allowedIPs`)
+- Sensor calibration defaults (`sensorCalibration`)
+- NTP and timezone offsets
+- Relay and switch pin mapping
+
+Note: Basic authentication helpers exist in the code (`checkAuthentication`, `authUsername`, `authPassword`), but root-page auth is currently commented out in `handleRoot`.
 
 ## Usage
 
@@ -77,10 +97,12 @@ const char* emailRecipient = "recipient_email@example.com";
 
 Access the web interface by navigating to the ESP32's IP address in a web browser. From here you can:
 - Control equipment manually
-- View and set temperature thresholds
+- View internal and external temperatures
+- Calibrate both sensors
 - Create and manage schedules
 - Set up temporary one-time schedules
 - View system logs
+- View raw sensor readings
 - Clear error states
 
 ### Scheduling Options
@@ -89,17 +111,28 @@ Access the web interface by navigating to the ESP32's IP address in a web browse
 - Create schedules that run on specified days of the week
 - Set start and end times for each schedule
 - Enable/disable schedules as needed
+- Conflicting schedules for the same relay/day window are rejected
+- Saved to EEPROM so they persist across restart
 
 #### Temporary Schedules
 - Create one-time schedules that automatically expire after execution
 - Set either start time, end time, or both
 - Each relay can have up to 2 temporary schedules at a time
-- Perfect for temporary overrides without modifying regular schedules
+- Stored in RAM (not persisted after reboot)
 
 ### Manual Overrides
 
-- Activate Switch 1 to override and enable Wave Maker and Air Pump (Relay 1 and 3)
-- Activate Switch 2 to override and enable Light (Relay 2)
+- Toggle Switch 1 to override and force-enable Wave Maker + Air Pump (Relay 1 and 3)
+- Toggle Switch 2 to override and force-enable Light (Relay 2)
+- Release the switch to remove override and return control to schedule/manual logic
+
+### Monitoring and Alerts
+
+- Startup schedule reconciliation runs once after time sync
+- Internal temperature updates every 20 seconds
+- External temperature updates every 60 seconds
+- Status checks run every second for schedule execution
+- Status-check emails are sent periodically after startup
 
 ## License
 
