@@ -96,6 +96,7 @@ struct CalibrationData {
 const int relay1 = 18;
 const int relay2 = 19;
 const int relay3 = 21;
+const int relay4 = 25;
 const int switch1Pin = 23;
 const int switch2Pin = 22;
 const int errorLEDPin = 2;
@@ -105,6 +106,7 @@ bool overrideRelay2 = false;
 bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
+bool relay4State = false;
 bool timeSyncErrorLogged = false;
 bool tempErrorLogged = false;
 bool triggerederror = false;
@@ -901,9 +903,11 @@ void setup() {
   pinMode(relay1, OUTPUT);
   pinMode(relay2, OUTPUT);
   pinMode(relay3, OUTPUT);
+  pinMode(relay4, OUTPUT);
   digitalWrite(relay1, HIGH);
   digitalWrite(relay2, HIGH);
   digitalWrite(relay3, HIGH);
+  digitalWrite(relay4, HIGH);
   pinMode(switch1Pin, INPUT_PULLUP);
   pinMode(switch2Pin, INPUT_PULLUP);
   pinMode(errorLEDPin, OUTPUT);
@@ -4298,7 +4302,9 @@ void activateRelay(int relayNum, bool manual) {
       break;
     case 2:
       toggleLightSequence();
-      storeLogEntry("Relay 2 activated with toggle sequence.");
+      digitalWrite(relay4, LOW);
+      relay4State = true;
+      storeLogEntry("Relay 2 and 4 activated.");
       break;
     case 3:
       digitalWrite(relay3, LOW);
@@ -4324,7 +4330,9 @@ void deactivateRelay(int relayNum, bool manual) {
     case 2:
       digitalWrite(relay2, HIGH);
       relay2State = false;
-      storeLogEntry("Relay 2 deactivated.");
+      digitalWrite(relay4, HIGH);
+      relay4State = false;
+      storeLogEntry("Relay 2 and 4 deactivated.");
       break;
     case 3:
       digitalWrite(relay3, HIGH);
@@ -4560,10 +4568,14 @@ void handleRelay2() {
 
     if (!relay2State) {
       toggleLightSequence();
+      digitalWrite(relay4, LOW);
+      relay4State = true;
     } else {
       digitalWrite(relay2, HIGH);
       relay2State = false;
-      storeLogEntry("Relay 2 deactivated.");
+      digitalWrite(relay4, HIGH);
+      relay4State = false;
+      storeLogEntry("Relay 2 and 4 deactivated.");
     }
 
     server.send(200, "application/json", "{\"state\":" + String(relay2State) + "}");
@@ -4595,7 +4607,7 @@ void toggleLightSequence() {
   }
   digitalWrite(relay2, LOW);
   relay2State = true;
-  storeLogEntry("Light relay toggled sequence completed");
+  //storeLogEntry("Light relay toggled sequence completed");
   broadcastRelayStates();
 }
 
