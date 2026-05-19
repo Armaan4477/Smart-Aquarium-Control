@@ -4298,18 +4298,18 @@ void activateRelay(int relayNum, bool manual) {
     case 1:
       digitalWrite(relay1, LOW);
       relay1State = true;
-      storeLogEntry("Relay 1 activated.");
+      storeLogEntry("Wavemaker activated.");
       break;
     case 2:
       toggleLightSequence();
       digitalWrite(relay4, LOW);
       relay4State = true;
-      storeLogEntry("Relay 2 and 4 activated.");
+      storeLogEntry("Lights activated.");
       break;
     case 3:
       digitalWrite(relay3, LOW);
       relay3State = true;
-      storeLogEntry("Relay 3 activated.");
+      storeLogEntry("Air Pump activated.");
       break;
   }
   broadcastRelayStates();
@@ -4325,19 +4325,19 @@ void deactivateRelay(int relayNum, bool manual) {
     case 1:
       digitalWrite(relay1, HIGH);
       relay1State = false;
-      storeLogEntry("Relay 1 deactivated.");
+      storeLogEntry("Wavemaker deactivated.");
       break;
     case 2:
       digitalWrite(relay2, HIGH);
       relay2State = false;
       digitalWrite(relay4, HIGH);
       relay4State = false;
-      storeLogEntry("Relay 2 and 4 deactivated.");
+      storeLogEntry("Lights deactivated.");
       break;
     case 3:
       digitalWrite(relay3, HIGH);
       relay3State = false;
-      storeLogEntry("Relay 3 deactivated.");
+      storeLogEntry("Air Pump deactivated.");
       break;
   }
   broadcastRelayStates();
@@ -4684,7 +4684,7 @@ void checkoverride1() {
     if (!relay3State) {
       activateRelay(3, true);
     }
-    storeLogEntry("Relay 1 and 3 override activated");
+    storeLogEntry("Wavemaker and Air Pump override activated");
     broadcastRelayStates();
   } else if (!currentReading && overrideRelay1) {
     overrideRelay1 = false;
@@ -4694,7 +4694,7 @@ void checkoverride1() {
     if (relay3State) {
       deactivateRelay(3, true);
     }
-    storeLogEntry("Relay 1 and 3 override deactivated");
+    storeLogEntry("Wavemaker and Air Pump override deactivated");
     broadcastRelayStates();
   }
 }
@@ -4714,14 +4714,14 @@ void checkoverride2() {
     if (!relay2State) {
       activateRelay(2, true);
     }
-    storeLogEntry("Relay 2 override activated");
+    storeLogEntry("Lights override activated");
     broadcastRelayStates();
   } else if (!currentReading && overrideRelay2) {
     overrideRelay2 = false;
     if (relay2State) {
       deactivateRelay(2, true);
     }
-    storeLogEntry("Relay 2 override deactivated");
+    storeLogEntry("Lights override deactivated");
     broadcastRelayStates();
   }
 }
@@ -5068,17 +5068,17 @@ void checkTemporarySchedules() {
       if (schedule.relayNumber == 1) {
         if (!relay1State && !overrideRelay1) {
           activateRelay(1, false);
-          storeLogEntry("Temporary schedule activated relay 1");
+          storeLogEntry("Temporary schedule activated Wavemaker");
         }
       } else if (schedule.relayNumber == 2) {
         if (!relay2State && !overrideRelay2) {
           activateRelay(2, false);
-          storeLogEntry("Temporary schedule activated relay 2");
+          storeLogEntry("Temporary schedule activated Lights");
         }
       } else if (schedule.relayNumber == 3) {
         if (!relay3State && !overrideRelay1) {
           activateRelay(3, false);
-          storeLogEntry("Temporary schedule activated relay 3");
+          storeLogEntry("Temporary schedule activated Air Pump");
         }
       }
 
@@ -5091,17 +5091,17 @@ void checkTemporarySchedules() {
       if (schedule.relayNumber == 1) {
         if (relay1State && !overrideRelay1) {
           deactivateRelay(1, false);
-          storeLogEntry("Temporary schedule deactivated relay 1");
+          storeLogEntry("Temporary schedule deactivated Wavemaker");
         }
       } else if (schedule.relayNumber == 2) {
         if (relay2State && !overrideRelay2) {
           deactivateRelay(2, false);
-          storeLogEntry("Temporary schedule deactivated relay 2");
+          storeLogEntry("Temporary schedule deactivated Lights");
         }
       } else if (schedule.relayNumber == 3) {
         if (relay3State && !overrideRelay1) {
           deactivateRelay(3, false);
-          storeLogEntry("Temporary schedule deactivated relay 3");
+          storeLogEntry("Temporary schedule deactivated Air Pump");
         }
       }
 
