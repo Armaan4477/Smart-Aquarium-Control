@@ -5,10 +5,11 @@ This project is an ESP32-based aquarium control system that automates and monito
 ## Features
 
 - **Web Dashboard + WebSocket Live Updates**: Monitor relay states and sensor data in near real-time
-- **3 Relay Outputs**:
+- **4 Relay Outputs**:
   - Relay 1: Wave Maker
-  - Relay 2: Light (supports startup color-cycle toggle sequence)
+  - Relay 2: Light (supports startup color-cycle toggle sequence, linked with Relay 4)
   - Relay 3: Air Pump
+  - Relay 4: Secondary Light Control (synchronized with Relay 2)
 - **Regular Schedules**: Day-of-week recurring ON/OFF schedules with conflict detection
 - **Temporary Schedules**: One-time schedules that are auto-removed after execution (up to 2 per relay)
 - **Dual Temperature Monitoring**:
@@ -29,7 +30,7 @@ This project is an ESP32-based aquarium control system that automates and monito
 ## Hardware Requirements
 
 - ESP32 development board
-- 3-channel relay module (or a 4-channel module with 3 channels used)
+- 4-channel relay module
 - 2x DS18B20 temperature sensors (internal + external)
 - 2 switches for manual override
 - 1 status/error LED
@@ -41,6 +42,7 @@ This project is an ESP32-based aquarium control system that automates and monito
 - Relay 1 (Wave Maker): GPIO18
 - Relay 2 (Light): GPIO19
 - Relay 3 (Air Pump): GPIO21
+- Relay 4 (Secondary Light Control): GPIO25
 - Switch 1 (Override 1): GPIO23
 - Switch 2 (Override 2): GPIO22
 - Error LED: GPIO2
