@@ -5064,7 +5064,7 @@ void checkTemporarySchedules() {
       continue;
     }
 
-    if (schedule.hasOnTime && hours == schedule.onHour && minutes == schedule.onMinute && seconds == 0) {
+    if (schedule.hasOnTime && hours == schedule.onHour && minutes == schedule.onMinute && seconds <= 1) {
       if (schedule.relayNumber == 1) {
         if (!relay1State && !overrideRelay1) {
           activateRelay(1, false);
@@ -5087,7 +5087,7 @@ void checkTemporarySchedules() {
       }
     }
 
-    if (schedule.hasOffTime && hours == schedule.offHour && minutes == schedule.offMinute && seconds == 0) {
+    if (schedule.hasOffTime && hours == schedule.offHour && minutes == schedule.offMinute && seconds <= 1) {
       if (schedule.relayNumber == 1) {
         if (relay1State && !overrideRelay1) {
           deactivateRelay(1, false);
@@ -5113,8 +5113,17 @@ void checkTemporarySchedules() {
     if (schedule.hasOnTime && schedule.hasOffTime) {
       bool onTimePassed = (hours > schedule.onHour) || (hours == schedule.onHour && minutes > schedule.onMinute);
       bool offTimePassed = (hours > schedule.offHour) || (hours == schedule.offHour && minutes > schedule.offMinute);
-
       if (onTimePassed && offTimePassed) {
+        shouldRemove = true;
+      }
+    } else if (schedule.hasOnTime && !schedule.hasOffTime) {
+      bool onTimePassed = (hours > schedule.onHour) || (hours == schedule.onHour && minutes > schedule.onMinute);
+      if (onTimePassed) {
+        shouldRemove = true;
+      }
+    } else if (!schedule.hasOnTime && schedule.hasOffTime) {
+      bool offTimePassed = (hours > schedule.offHour) || (hours == schedule.offHour && minutes > schedule.offMinute);
+      if (offTimePassed) {
         shouldRemove = true;
       }
     }
