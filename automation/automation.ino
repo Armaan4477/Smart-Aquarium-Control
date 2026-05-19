@@ -810,7 +810,7 @@ void storeLogEntry(const String& msg) {
     timeStr = "00/00/0000 00:00:00";
   }
 
-  StaticJsonDocument<2048> doc;
+  static StaticJsonDocument<2048> doc;
   doc.clear();
 
   File file = LittleFS.open("/logs.json", "r");
@@ -974,6 +974,9 @@ void setup() {
   loadSchedulesFromEEPROM();
   loadCalibrationSettings();
 
+  schedules.reserve(MAX_SCHEDULES);
+  temporarySchedules.reserve(6);
+
   tempTemperature();
 
   webSocket.begin();
@@ -985,7 +988,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     emailLoop,
     "emailTask",
-    8192,
+    16384,
     NULL,
     1,
     &networkTask,
@@ -994,7 +997,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     mainLoop,
     "mainTask",
-    8192,
+    12288,
     NULL,
     1,
     &controlTask,
@@ -1109,13 +1112,13 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
   switch (type) {
     case WStype_DISCONNECTED:
       if (length > 0) {
-        storeLogEntry("WebSocket " + String(num) + " Disconnected");
+        //storeLogEntry("WebSocket " + String(num) + " Disconnected");
       }
       break;
     case WStype_CONNECTED:
       {
         IPAddress ip = webSocket.remoteIP(num);
-        storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString());
+        //storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString());
 
         String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
                         ",\"relay2\":" + String(relay2State || overrideRelay2) + 
@@ -4053,6 +4056,7 @@ void emailLoop(void* parameter) {
   const unsigned long EMAIL_RETRY_INTERVAL = 30000;
   
   for (;;) {
+    resetWatchdog();
     handleTemperature();
     handleExternalTemperature();
 
@@ -4254,28 +4258,28 @@ void checkScheduleslaunch() {
   if (!overrideRelay1) {
     if (relay1ShouldBeOn) {
       activateRelay(1, false);
-      storeLogEntry("Relay 1 activated by startup schedule check");
+      //storeLogEntry("Relay 1 activated by startup schedule check");
     } else {
       deactivateRelay(1, false);
-      storeLogEntry("Relay 1 deactivated by startup schedule check");
+      //storeLogEntry("Relay 1 deactivated by startup schedule check");
     }
 
     if (relay3ShouldBeOn) {
       activateRelay(3, false);
-      storeLogEntry("Relay 3 activated by startup schedule check");
+     // storeLogEntry("Relay 3 activated by startup schedule check");
     } else {
       deactivateRelay(3, false);
-      storeLogEntry("Relay 3 deactivated by startup schedule check");
+     // storeLogEntry("Relay 3 deactivated by startup schedule check");
     }
   }
 
   if (!overrideRelay2) {
     if (relay2ShouldBeOn) {
       activateRelay(2, false);
-      storeLogEntry("Relay 2 activated by startup schedule check");
+     // storeLogEntry("Relay 2 activated by startup schedule check");
     } else {
       deactivateRelay(2, false);
-      storeLogEntry("Relay 2 deactivated by startup schedule check");
+     // storeLogEntry("Relay 2 deactivated by startup schedule check");
     }
   }
 }
@@ -4345,7 +4349,9 @@ void broadcastRelayStates() {
     externalRaw = lastValidExternalTemperature - sensorCalibration.externalOffset;
   }
 
-  String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
+  String message;
+  message.reserve(300);
+  message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
 
 
   message += ",\"relay1Name\":\"WaveMaker\"";
@@ -4763,7 +4769,9 @@ void sendEmailWithLogs(const String& trigger) {
     formattedTime = String(timeStr);
   }
 
-  String textMsg = "Aquarium Control System Report\n";
+  String textMsg;
+  textMsg.reserve(512);
+  textMsg = "Aquarium Control System Report\n";
   textMsg += "Event: " + trigger + "\n";
   textMsg += "Timestamp: " + formattedTime + "\n\n";
   textMsg += "System Status:\n";
@@ -4797,15 +4805,12 @@ void sendEmailWithLogs(const String& trigger) {
     return;
   }
 
-  char* fileBuffer = new char[fileSize + 1];
-  
-  if (!fileBuffer) {
-    storeLogEntry("Failed to allocate memory for logs");
-    logsFile.close();
-    emailInProgress = false;
-    return;
+  const size_t MAX_LOG_BUFFER = 4096;
+  if (fileSize >= MAX_LOG_BUFFER) {
+    storeLogEntry("Log file too large, capping at 4095 bytes for email");
+    fileSize = MAX_LOG_BUFFER - 1;
   }
-  
+  static char fileBuffer[MAX_LOG_BUFFER];
   size_t bytesRead = logsFile.readBytes(fileBuffer, fileSize);
   fileBuffer[bytesRead] = '\0';
   logsFile.close();
@@ -4828,7 +4833,6 @@ void sendEmailWithLogs(const String& trigger) {
 
   if (!connected || !smtp.isConnected()) {
     storeLogEntry("Failed to connect to email server");
-    delete[] fileBuffer;
     emailInProgress = false;
     return;
   }
@@ -4843,7 +4847,6 @@ void sendEmailWithLogs(const String& trigger) {
 
   if (!authenticated || !smtp.isAuthenticated()) {
     storeLogEntry("Failed to authenticate with email server");
-    delete[] fileBuffer;
     emailInProgress = false;
     return;
   }
@@ -4861,8 +4864,6 @@ void sendEmailWithLogs(const String& trigger) {
   } else {
     storeLogEntry("Email sent successfully with logs");
   }
-
-  delete[] fileBuffer;
   
   try {
     smtp.stop();
@@ -4906,7 +4907,9 @@ void handleTemperature() {
 
 
 void handleGetTemporarySchedules() {
-  String json = "[";
+  String json;
+  json.reserve(temporarySchedules.size() * 160 + 4);
+  json = "[";
   for (size_t i = 0; i < temporarySchedules.size(); i++) {
     if (i > 0) json += ",";
     const TemporarySchedule& s = temporarySchedules[i];
