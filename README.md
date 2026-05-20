@@ -91,8 +91,6 @@ Also review these deployment settings in the sketch:
 - NTP and timezone offsets
 - Relay and switch pin mapping
 
-Note: Basic authentication helpers exist in the code (`checkAuthentication`, `authUsername`, `authPassword`), but root-page auth is currently commented out in `handleRoot`.
-
 ## Usage
 
 ### Web Interface

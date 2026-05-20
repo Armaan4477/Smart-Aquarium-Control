@@ -143,12 +143,14 @@ const int SCHEDULE_START_ADDR = 0;
 const int TOGGLE_DELAY = 500;
 const int TOGGLE_COUNT = 3;
 const std::vector<String> allowedIPs = {
-  "192.168.29.3",  //A Mac
-  "192.168.29.4",  //A Ipad
-  "192.168.29.5",  //A Moto
-  "192.168.29.6",  //Acer
-  "192.168.29.9",  //F Moto
-  "192.168.29.10"  //N Vivo
+  "192.168.29.3", //Rpi
+  "192.168.29.4", //A Mac
+  "192.168.29.5", //A Ipad
+  "192.168.29.6", //A Phone
+  "192.168.29.8", //Acer
+  "192.168.29.9", //N Phone
+  "192.168.29.10", //F moto
+  "192.168.29.11" //S moto
 };
 unsigned long lastSwitch1Debounce = 0;
 unsigned long lastSwitch2Debounce = 0;
@@ -4531,7 +4533,7 @@ void handleUpdateSchedule() {
 }
 
 void handleRoot() {
-  //if (!checkAuthentication()) return;
+  if (!checkAuthentication()) return;
   server.send_P(200, "text/html", mainPage);
 }
 
