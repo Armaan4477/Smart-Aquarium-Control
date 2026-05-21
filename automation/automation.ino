@@ -5769,16 +5769,19 @@ void updateOLED() {
       display.print("E");
     }
   } else {
-    display.setTextSize(2);
     char intBuf[8];
     dtostrf(lastValidTemperature, 4, 1, intBuf);
-    int intW = strlen(intBuf) * 12;
-    int intX = max(0, (62 - intW) / 2);
-    display.setCursor(intX, 18);
+    display.setTextSize(2);
+    int intNumW = strlen(intBuf) * 12;
+    int intX = max(0, (62 - intNumW) / 2);
+    display.setCursor(intX, 20);
     display.print(intBuf);
-    display.setTextSize(1);
-    display.setCursor(intX + 2, 36);
-    display.print("deg C");
+    display.setTextSize(2);
+    int unitTotalW = 9 + 12;
+    int unitX = max(0, (62 - unitTotalW) / 2);
+    display.drawCircle(unitX + 3, 43 + 4, 3, SSD1306_WHITE);
+    display.setCursor(unitX + 9, 43);
+    display.print("C");
   }
   if (hasExternalTempError) {
     if (oledBlinkState) {
@@ -5787,16 +5790,19 @@ void updateOLED() {
       display.print("E");
     }
   } else {
-    display.setTextSize(2);
     char extBuf[8];
     dtostrf(lastValidExternalTemperature, 4, 1, extBuf);
-    int extW = strlen(extBuf) * 12;
-    int extX = 65 + max(0, (62 - extW) / 2);
-    display.setCursor(extX, 18);
+    display.setTextSize(2);
+    int extNumW = strlen(extBuf) * 12;
+    int extX = 65 + max(0, (62 - extNumW) / 2);
+    display.setCursor(extX, 20);
     display.print(extBuf);
-    display.setTextSize(1);
-    display.setCursor(extX + 2, 36);
-    display.print("deg C");
+    display.setTextSize(2);
+    int extUnitTotalW = 9 + 12;
+    int extUnitX = 65 + max(0, (62 - extUnitTotalW) / 2);
+    display.drawCircle(extUnitX + 3, 43 + 4, 3, SSD1306_WHITE);
+    display.setCursor(extUnitX + 9, 43);
+    display.print("C");
   }
 
   display.display();
