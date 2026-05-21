@@ -15,6 +15,18 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <time.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define OLED_SDA      21
+#define OLED_SCL      22
+#define SCREEN_WIDTH  128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+bool oledBlinkState = false;
+void updateOLED();
 
 void handleRoot();
 void handleFavicon();
@@ -58,6 +70,12 @@ void handleGetCalibrationSettings();
 void handleSaveCalibrationSettings();
 void tempTemperature();
 void handleGetRawTemperatureData();
+void handleDisplayCtrlPage();
+void handleGetDisplaySchedule();
+void handleSaveDisplaySchedule();
+void loadDisplaySchedule();
+void saveDisplaySchedule();
+void applyOledSchedule();
 
 struct Schedule {
   int id;
@@ -91,6 +109,16 @@ struct TemporarySchedule {
 struct CalibrationData {
   float internalOffset;
   float externalOffset;
+};
+
+struct DisplaySchedule {
+  uint8_t magic;
+  int     onHour;
+  int     onMinute;
+  int     offHour;
+  int     offMinute;
+  uint8_t overrideMode;
+  bool    enabled;
 };
 
 const int relay1 = 18;
@@ -191,6 +219,10 @@ bool externalTempErrorLogged = false;
 CalibrationData sensorCalibration = {0.0, 0.0};
 const int CALIBRATION_START_ADDR = SCHEDULE_START_ADDR + (MAX_SCHEDULES * SCHEDULE_SIZE) + 1;
 const int CALIBRATION_SIZE = sizeof(CalibrationData);
+
+const int DISPLAY_SCHEDULE_ADDR = CALIBRATION_START_ADDR + CALIBRATION_SIZE + 1;
+DisplaySchedule displaySchedule = {0xDA, 8, 0, 22, 0, 0, true};
+bool oledPhysicalState = false;
 
 WiFiEventId_t wifiConnectHandler;
 
@@ -975,15 +1007,28 @@ void setup() {
   server.on("/calibration/settings", HTTP_GET, handleGetCalibrationSettings);
   server.on("/calibration/save", HTTP_POST, handleSaveCalibrationSettings);
   server.on("/temperature/raw", HTTP_GET, handleGetRawTemperatureData);
+  server.on("/displayctrl", HTTP_GET, handleDisplayCtrlPage);
+  server.on("/display/schedule", HTTP_GET, handleGetDisplaySchedule);
+  server.on("/display/schedule/save", HTTP_POST, handleSaveDisplaySchedule);
   server.begin();
   EEPROM.begin(EEPROM_SIZE);
   loadSchedulesFromEEPROM();
   loadCalibrationSettings();
+  loadDisplaySchedule();
 
   schedules.reserve(MAX_SCHEDULES);
   temporarySchedules.reserve(6);
 
   tempTemperature();
+
+  Wire.begin(OLED_SDA, OLED_SCL);
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    storeLogEntry("OLED init failed");
+  } else {
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    updateOLED();
+  }
 
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
@@ -1112,6 +1157,145 @@ void handleSaveCalibrationSettings() {
     }
   }
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+}
+
+void loadDisplaySchedule() {
+  DisplaySchedule stored;
+  EEPROM.get(DISPLAY_SCHEDULE_ADDR, stored);
+  if (stored.magic == 0xDA &&
+      stored.onHour  >= 0 && stored.onHour  <= 23 &&
+      stored.onMinute>= 0 && stored.onMinute<= 59 &&
+      stored.offHour >= 0 && stored.offHour <= 23 &&
+      stored.offMinute>=0 && stored.offMinute<= 59 &&
+      stored.overrideMode <= 2) {
+    displaySchedule = stored;
+    storeLogEntry("Display schedule loaded from EEPROM");
+  } else {
+    saveDisplaySchedule();
+    storeLogEntry("Using default display schedule");
+  }
+}
+
+void saveDisplaySchedule() {
+  displaySchedule.magic = 0xDA;
+  EEPROM.put(DISPLAY_SCHEDULE_ADDR, displaySchedule);
+  EEPROM.commit();
+  storeLogEntry("Display schedule saved to EEPROM");
+}
+
+void applyOledSchedule() {
+  if (!validTimeSync) {
+    if (oledPhysicalState) {
+      oledPhysicalState = false;
+      updateOLED();
+    }
+    return;
+  }
+
+  bool newState = false;
+
+  switch (displaySchedule.overrideMode) {
+    case 1:
+      newState = true;
+      break;
+    case 2:
+      newState = false;
+      break;
+    default:
+      if (!displaySchedule.enabled) {
+        newState = true;
+      } else {
+        struct tm timeinfo;
+        if (!getLocalTime(&timeinfo)) { return; }
+        int nowMins = timeinfo.tm_hour * 60 + timeinfo.tm_min;
+        int onMins  = displaySchedule.onHour  * 60 + displaySchedule.onMinute;
+        int offMins = displaySchedule.offHour * 60 + displaySchedule.offMinute;
+        if (onMins <= offMins) {
+          newState = (nowMins >= onMins && nowMins < offMins);
+        } else {
+          newState = (nowMins >= onMins || nowMins < offMins);
+        }
+      }
+      break;
+  }
+
+  if (newState != oledPhysicalState) {
+    oledPhysicalState = newState;
+    updateOLED();
+  }
+}
+
+extern const char displayCtrlPage[] PROGMEM;
+
+void handleDisplayCtrlPage() {
+  if (!checkAuthentication()) return;
+  server.send_P(200, "text/html", displayCtrlPage);
+}
+
+void handleGetDisplaySchedule() {
+  if (!checkAuthentication()) return;
+  String json = "{";
+  json += "\"onHour\":"      + String(displaySchedule.onHour)       + ",";
+  json += "\"onMinute\":"    + String(displaySchedule.onMinute)     + ",";
+  json += "\"offHour\":"     + String(displaySchedule.offHour)      + ",";
+  json += "\"offMinute\":"   + String(displaySchedule.offMinute)    + ",";
+  json += "\"overrideMode\":" + String(displaySchedule.overrideMode) + ",";
+  json += "\"enabled\":"     + String(displaySchedule.enabled ? "true" : "false") + ",";
+  json += "\"displayOn\":"   + String(oledPhysicalState  ? "true" : "false");
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void handleSaveDisplaySchedule() {
+  if (!checkAuthentication()) return;
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"No body\"}");
+    return;
+  }
+  String body = server.arg("plain");
+  StaticJsonDocument<256> doc;
+  if (deserializeJson(doc, body)) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  if (doc.containsKey("overrideMode")) {
+    int om = doc["overrideMode"].as<int>();
+    if (om < 0 || om > 2) {
+      server.send(400, "application/json", "{\"error\":\"overrideMode must be 0, 1 or 2\"}");
+      return;
+    }
+    displaySchedule.overrideMode = (uint8_t)om;
+    if (om == 0) displaySchedule.enabled = true;
+    saveDisplaySchedule();
+    applyOledSchedule();
+    server.send(200, "application/json", "{\"status\":\"success\"}");
+    storeLogEntry("Display override mode set to " + String(om));
+    return;
+  }
+
+  int onH  = doc["onHour"]  | displaySchedule.onHour;
+  int onM  = doc["onMinute"]| displaySchedule.onMinute;
+  int offH = doc["offHour"] | displaySchedule.offHour;
+  int offM = doc["offMinute"]|displaySchedule.offMinute;
+  bool en  = doc.containsKey("enabled") ? doc["enabled"].as<bool>() : displaySchedule.enabled;
+
+  if (onH <0||onH >23||onM <0||onM >59||offH<0||offH>23||offM<0||offM>59) {
+    server.send(400, "application/json", "{\"error\":\"Time values out of range\"}");
+    return;
+  }
+
+  displaySchedule.onHour    = onH;
+  displaySchedule.onMinute  = onM;
+  displaySchedule.offHour   = offH;
+  displaySchedule.offMinute = offM;
+  displaySchedule.enabled   = en;
+  saveDisplaySchedule();
+  applyOledSchedule();
+  server.send(200, "application/json", "{\"status\":\"success\"}");
+  storeLogEntry("Display schedule updated: ON=" + String(onH) + ":" + String(onM) +
+                " OFF=" + String(offH) + ":" + String(offM) +
+                " enabled=" + String(en));
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
@@ -1344,9 +1528,13 @@ const char mainPage[] PROGMEM = R"html(
 
         .navigation-buttons {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: 1fr 1fr;
             gap: 15px;
             margin-bottom: 10px;
+        }
+
+        .navigation-buttons .nav-full {
+            grid-column: 1 / -1;
         }
 
         .button {
@@ -1442,6 +1630,10 @@ const char mainPage[] PROGMEM = R"html(
                 grid-template-columns: 1fr;
             }
 
+            .navigation-buttons .nav-full {
+                grid-column: 1;
+            }
+
             .temperature-grid {
                 grid-template-columns: 1fr;
                 gap: 15px;
@@ -1520,7 +1712,8 @@ const char mainPage[] PROGMEM = R"html(
                 <button class="button nav-button" onclick="showTempSchedules()">Temporary Schedules</button>
                 <button class="button nav-button" onclick="showSchedules()">Main Schedules</button>
                 <button class="button nav-button" onclick="showTempControl()">Temperature Control</button>
-                <button class="button nav-button" onclick="showLogs()">System Logs</button>
+                <button class="button nav-button" onclick="showDisplayCtrl()">Display Control</button>
+                <button class="button nav-button nav-full" onclick="showLogs()">System Logs</button>
             </div>
         </div>
     </div>
@@ -1724,6 +1917,9 @@ const char mainPage[] PROGMEM = R"html(
         function showSchedules() {
             window.location.href = '/mainSchedules';
         }
+        function showDisplayCtrl() {
+            window.location.href = '/displayctrl';
+        }
 
         function oneClickLight() {
             fetch('/relay/oneclick', { method: 'POST' })
@@ -1743,6 +1939,365 @@ const char mainPage[] PROGMEM = R"html(
         document.getElementById('btn1').textContent = `${relayNames[1]} (OFF)`;
         document.getElementById('btn2').textContent = `${relayNames[2]} (OFF)`;
         document.getElementById('btn3').textContent = `${relayNames[3]} (OFF)`;
+    </script>
+</body>
+</html>
+)html";
+
+const char displayCtrlPage[] PROGMEM = R"html(
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" type="image/png" href="/favicon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Display Control</title>
+    <style>
+        :root {
+            --primary-color: #1976D2;
+            --primary-dark: #0D47A1;
+            --primary-light: #BBDEFB;
+            --accent-color: #03A9F4;
+            --success-color: #4CAF50;
+            --warning-color: #FFC107;
+            --error-color: #F44336;
+            --text-color: #333;
+            --text-light: #757575;
+            --background-color: #f5f7fa;
+            --card-color: #ffffff;
+            --border-radius: 8px;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+            margin-bottom: 30px;
+        }
+        header h1 { margin: 0; font-size: 2rem; letter-spacing: 0.5px; }
+        header p { margin: 5px 0 0; opacity: 0.85; font-size: 0.95rem; }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            margin: 5px 0 20px 0;
+            transition: var(--transition);
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+        .button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .header-actions {
+            margin-bottom: 20px;
+            overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .card {
+            background: var(--card-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 25px;
+            margin-bottom: 25px;
+            transition: var(--transition);
+        }
+        .card:hover { box-shadow: 0 5px 15px rgba(0,0,0,0.15); }
+        .card h3 {
+            color: var(--primary-color);
+            font-size: 1.4rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        /* Status badge */
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            letter-spacing: 0.5px;
+            transition: var(--transition);
+        }
+        .status-badge.on  { background: #e8f5e9; color: var(--success-color); border: 1.5px solid var(--success-color); }
+        .status-badge.off { background: #fce4ec; color: var(--error-color);   border: 1.5px solid var(--error-color); }
+        .mode-label { color: var(--text-light); font-size: 0.9rem; }
+        /* Schedule form */
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 18px;
+            align-items: flex-end;
+        }
+        .form-group { display: flex; flex-direction: column; flex: 1; min-width: 120px; }
+        .form-group label {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input[type=time],
+        .form-group input[type=number] {
+            padding: 10px 12px;
+            border: 1.5px solid #ddd;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: var(--transition);
+            width: 100%;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(25,118,210,0.12);
+        }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .toggle-row label { font-size: 1rem; cursor: pointer; user-select: none; }
+        input[type=checkbox] {
+            width: 18px; height: 18px;
+            accent-color: var(--primary-color);
+            cursor: pointer;
+        }
+        /* Override buttons */
+        .override-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            margin-top: 4px;
+        }
+        .override-btn {
+            padding: 14px 8px;
+            border: 2px solid transparent;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            background: #f5f7fa;
+            color: var(--text-color);
+        }
+        .override-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .override-btn.active-schedule { background: var(--primary-light); border-color: var(--primary-color); color: var(--primary-dark); }
+        .override-btn.active-on       { background: #e8f5e9; border-color: var(--success-color); color: #2e7d32; }
+        .override-btn.active-off      { background: #fce4ec; border-color: var(--error-color);   color: #c62828; }
+        /* Save button */
+        .save-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: var(--shadow);
+            margin-top: 6px;
+        }
+        .save-btn:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .save-btn:active { transform: translateY(1px); }
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { background: var(--success-color); }
+        #toast.error   { background: var(--error-color); }
+        @media (max-width: 600px) {
+            .override-group { grid-template-columns: 1fr; }
+            .form-row { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Display Control</h1>
+        <p>Manage OLED display on/off schedule</p>
+    </header>
+    <div class="container">
+        <div class="header-actions">
+            <button onclick="goBack()" class="button">Back to Dashboard</button>
+        </div>
+
+        <!-- Status Card -->
+        <div class="card">
+            <h3>Current Status</h3>
+            <div class="status-row">
+                <span>Display:</span>
+                <span class="status-badge" id="displayBadge">...</span>
+            </div>
+            <div class="mode-label" id="modeLabel">Loading...</div>
+        </div>
+
+        <!-- Override Card -->
+        <div class="card">
+            <h3>Override</h3>
+            <p style="color:var(--text-light);font-size:0.9rem;margin-bottom:16px;">Instantly control the display, or let the schedule decide.</p>
+            <div class="override-group">
+                <button class="override-btn" id="btn-follow" onclick="setOverride(0)">Follow Schedule</button>
+                <button class="override-btn" id="btn-on"     onclick="setOverride(1)">Force ON</button>
+                <button class="override-btn" id="btn-off"    onclick="setOverride(2)">Force OFF</button>
+            </div>
+        </div>
+
+        <!-- Schedule Card -->
+        <div class="card">
+            <h3>Schedule</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="onTime">Turn ON at</label>
+                    <input type="time" id="onTime" value="08:00">
+                </div>
+                <div class="form-group">
+                    <label for="offTime">Turn OFF at</label>
+                    <input type="time" id="offTime" value="22:00">
+                </div>
+            </div>
+            <button class="save-btn" onclick="saveSchedule()">Save Schedule</button>
+        </div>
+
+    </div>
+    <div id="toast"></div>
+    <script>
+        let currentData = {};
+
+        const modeNames = ['Following schedule', 'Forced ON', 'Forced OFF'];
+
+        function pad(n) { return String(n).padStart(2, '0'); }
+
+        function showToast(msg, type) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'show ' + (type || '');
+            setTimeout(() => { t.className = ''; }, 3000);
+        }
+
+        function applyData(d) {
+            currentData = d;
+            // Status badge
+            const badge = document.getElementById('displayBadge');
+            badge.textContent = d.displayOn ? 'ON' : 'OFF';
+            badge.className = 'status-badge ' + (d.displayOn ? 'on' : 'off');
+            // Mode label
+            document.getElementById('modeLabel').textContent = modeNames[d.overrideMode] || '';
+            // Override buttons
+            document.getElementById('btn-follow').className = 'override-btn' + (d.overrideMode === 0 ? ' active-schedule' : '');
+            document.getElementById('btn-on').className     = 'override-btn' + (d.overrideMode === 1 ? ' active-on'       : '');
+            document.getElementById('btn-off').className    = 'override-btn' + (d.overrideMode === 2 ? ' active-off'      : '');
+            // Schedule fields
+            document.getElementById('onTime').value  = pad(d.onHour)  + ':' + pad(d.onMinute);
+            document.getElementById('offTime').value = pad(d.offHour) + ':' + pad(d.offMinute);
+        }
+
+        function loadData() {
+            fetch('/display/schedule')
+                .then(r => r.json())
+                .then(applyData)
+                .catch(() => showToast('Failed to load settings', 'error'));
+        }
+
+        function setOverride(mode) {
+            fetch('/display/schedule/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ overrideMode: mode })
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.status === 'success') {
+                    showToast('Override updated', 'success');
+                    setTimeout(loadData, 400);
+                } else { showToast('Error: ' + (d.error || 'unknown'), 'error'); }
+            })
+            .catch(() => showToast('Request failed', 'error'));
+        }
+
+        function saveSchedule() {
+            const onParts  = document.getElementById('onTime').value.split(':');
+            const offParts = document.getElementById('offTime').value.split(':');
+            fetch('/display/schedule/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    onHour:    parseInt(onParts[0]),
+                    onMinute:  parseInt(onParts[1]),
+                    offHour:   parseInt(offParts[0]),
+                    offMinute: parseInt(offParts[1]),
+                    enabled:   true
+                })
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.status === 'success') {
+                    showToast('Schedule saved', 'success');
+                    setTimeout(loadData, 400);
+                } else { showToast('Error: ' + (d.error || 'unknown'), 'error'); }
+            })
+            .catch(() => showToast('Request failed', 'error'));
+        }
+
+        // Refresh status every 5 s
+        loadData();
+        setInterval(loadData, 5000);
+
+        function goBack() {
+            window.history.back();
+        }
     </script>
 </body>
 </html>
@@ -4061,10 +4616,23 @@ void emailLoop(void* parameter) {
   unsigned long lastEmailAttempt = 0;
   const unsigned long EMAIL_RETRY_INTERVAL = 30000;
   
+  unsigned long lastOledBlink = 0;
+  unsigned long lastOledScheduleCheck = 0;
   for (;;) {
     resetWatchdog();
     handleTemperature();
     handleExternalTemperature();
+
+    if ((hasTempError || hasExternalTempError) && millis() - lastOledBlink >= 500) {
+      oledBlinkState = !oledBlinkState;
+      updateOLED();
+      lastOledBlink = millis();
+    }
+
+    if (millis() - lastOledScheduleCheck >= 10000) {
+      applyOledSchedule();
+      lastOledScheduleCheck = millis();
+    }
 
     if (WiFi.status() != WL_CONNECTED) {
       unsigned long currentMillis = millis();
@@ -4896,6 +5464,7 @@ void handleTemperature() {
     if (tempC != DEVICE_DISCONNECTED_C) {
       lastValidTemperature = tempC + sensorCalibration.internalOffset;
       broadcastRelayStates();
+      updateOLED();
       consecutiveTempFailures = 0;
       if (hasTempError) {
         clearError();
@@ -5147,6 +5716,7 @@ void handleExternalTemperature() {
     if (tempC != DEVICE_DISCONNECTED_C) {
       lastValidExternalTemperature = tempC + sensorCalibration.externalOffset;
       broadcastRelayStates();
+      updateOLED();
       consecutiveExternalTempFailures = 0;
       if (hasExternalTempError) {
         storeLogEntry("External temperature sensor restored");
@@ -5169,6 +5739,67 @@ void handleExternalTemperature() {
 
     lastExternalTemp = millis();
   }
+}
+
+void updateOLED() {
+  if (!oledPhysicalState) {
+    display.clearDisplay();
+    display.display();
+    return;
+  }
+  display.clearDisplay();
+
+  display.drawFastVLine(63, 0, SCREEN_HEIGHT, SSD1306_WHITE);
+
+  display.setTextSize(1);
+
+  display.setCursor(12, 0);
+  display.print("INTERNAL");
+
+  display.setCursor(74, 0);
+  display.print("EXTERNAL");
+
+  display.drawFastHLine(0,  10, 63, SSD1306_WHITE);
+  display.drawFastHLine(65, 10, 63, SSD1306_WHITE);
+
+  if (hasTempError) {
+    if (oledBlinkState) {
+      display.setTextSize(4);
+      display.setCursor(16, 20);
+      display.print("E");
+    }
+  } else {
+    display.setTextSize(2);
+    char intBuf[8];
+    dtostrf(lastValidTemperature, 4, 1, intBuf);
+    int intW = strlen(intBuf) * 12;
+    int intX = max(0, (62 - intW) / 2);
+    display.setCursor(intX, 18);
+    display.print(intBuf);
+    display.setTextSize(1);
+    display.setCursor(intX + 2, 36);
+    display.print("deg C");
+  }
+  if (hasExternalTempError) {
+    if (oledBlinkState) {
+      display.setTextSize(4);
+      display.setCursor(79, 20);
+      display.print("E");
+    }
+  } else {
+    display.setTextSize(2);
+    char extBuf[8];
+    dtostrf(lastValidExternalTemperature, 4, 1, extBuf);
+    int extW = strlen(extBuf) * 12;
+    int extX = 65 + max(0, (62 - extW) / 2);
+    display.setCursor(extX, 18);
+    display.print(extBuf);
+    display.setTextSize(1);
+    display.setCursor(extX + 2, 36);
+    display.print("deg C");
+  }
+
+  display.display();
 }
 
 void tempTemperature() {
