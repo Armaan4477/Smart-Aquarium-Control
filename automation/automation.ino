@@ -95,10 +95,10 @@ struct CalibrationData {
 
 const int relay1 = 18;
 const int relay2 = 19;
-const int relay3 = 21;
+const int relay3 = 23;
 const int relay4 = 25;
-const int switch1Pin = 23;
-const int switch2Pin = 22;
+const int switch1Pin = 33;
+const int switch2Pin = 32;
 const int errorLEDPin = 2;
 
 bool overrideRelay1 = false;
@@ -4577,7 +4577,7 @@ void handleRelay2() {
       relay2State = false;
       digitalWrite(relay4, HIGH);
       relay4State = false;
-      storeLogEntry("Relay 2 and 4 deactivated.");
+      storeLogEntry("Lights deactivated.");
     }
 
     server.send(200, "application/json", "{\"state\":" + String(relay2State) + "}");
