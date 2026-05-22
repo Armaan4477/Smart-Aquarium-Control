@@ -110,8 +110,9 @@ The intuitive web dashboard provides complete control over your aquarium. Naviga
 ### Physical Manual Overrides
 Physical switches allow you to instantly override automated schedules without accessing the web interface:
 - **Switch 1**: Force-enables the Wave Maker & Air Pump (Relays 1 & 3).
-- **Switch 2**: Force-enables the Main Light (Relay 2).
-Releasing the switch immediately returns control to the scheduling engine.
+- **Switch 2**: Force-enables the Main Light (Relay 2 & 4).
+
+**Note**: These switches function as temporary overrides. Releasing the switch immediately returns control to the scheduling engine.
 
 ### Monitoring and Alerts
 - **Startup Sequence**: Reconciles current time with schedules upon successful NTP sync.
