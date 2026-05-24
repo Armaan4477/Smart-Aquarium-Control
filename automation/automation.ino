@@ -161,6 +161,8 @@ bool hasLaunchedSchedules = false;
 bool startupemail = false;
 bool pointemail = false;
 unsigned long logIdCounter = 0;
+SemaphoreHandle_t littleFsMutex = NULL;
+volatile bool emailInProgress = false;
 std::vector<Schedule> schedules;
 std::vector<TemporarySchedule> temporarySchedules;
 int tempScheduleIdCounter = 0;
@@ -806,17 +808,28 @@ void handleGetLogs() {
     return;
   }
 
+  if (littleFsMutex != NULL) {
+    if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+      server.send(503, "application/json", "{\"error\":\"Filesystem busy, try again\"}");
+      return;
+    }
+  }
+
   StaticJsonDocument<2352> doc;
   doc.clear();
 
   File file = LittleFS.open("/logs.json", "r");
   if (!file) {
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
     server.send(404, "application/json", "{\"logs\":[]}");
     return;
   }
 
   DeserializationError error = deserializeJson(doc, file);
   file.close();
+
+  if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+
   if (error) {
     server.send(500, "application/json", "{\"error\":\"Failed to parse logs!\"}");
     return;
@@ -833,6 +846,12 @@ void storeLogEntry(const String& msg) {
   const int MAX_LOG_ID = 20;
 
   if (!spiffsInitialized) return;
+
+  if (littleFsMutex != NULL) {
+    if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
+      return;
+    }
+  }
 
   String timeStr;
   struct tm timeinfo;
@@ -883,6 +902,10 @@ void storeLogEntry(const String& msg) {
     serializeJson(doc, outFile);
     outFile.close();
   }
+
+  if (littleFsMutex != NULL) {
+    xSemaphoreGive(littleFsMutex);
+  }
 }
 
 void resetWatchdog() {
@@ -899,6 +922,8 @@ bool validDateSync = false;
 
 TaskHandle_t networkTask;
 TaskHandle_t controlTask;
+
+
 
 void attemptTimeSync() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
@@ -1036,10 +1061,12 @@ void setup() {
   resetWatchdog();
   watchdogTicker.attach(1, checkWatchdog);
 
+  littleFsMutex = xSemaphoreCreateMutex();
+
   xTaskCreatePinnedToCore(
     emailLoop,
     "emailTask",
-    16384,
+    32768,
     NULL,
     1,
     &networkTask,
@@ -5321,21 +5348,64 @@ void sendEmailWithLogs(const String& trigger) {
     return;
   }
 
-  if (!LittleFS.exists("/logs.json")) {
-    storeLogEntry("Failed to send email: logs.json does not exist");
+  if (emailInProgress) {
+    //storeLogEntry("Email already in progress, skipping");
     return;
   }
 
-  static bool emailInProgress = false;
-  if (emailInProgress) {
-    storeLogEntry("Email already in progress, skipping");
+  if (littleFsMutex != NULL) {
+    if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+      //storeLogEntry("Failed to send email: could not acquire FS mutex");
+      return;
+    }
+  }
+
+  if (!LittleFS.exists("/logs.json")) {
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+   // storeLogEntry("Failed to send email: logs.json does not exist");
     return;
   }
-  
+
+  if (emailInProgress) {
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+   // storeLogEntry("Email already in progress, skipping");
+    return;
+  }
   emailInProgress = true;
+
+  const size_t MAX_LOG_BUFFER = 4096;
+  static char fileBuffer[MAX_LOG_BUFFER];
+  size_t bytesRead = 0;
+
+  File logsFile = LittleFS.open("/logs.json", "r");
+  if (!logsFile) {
+    emailInProgress = false;
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+   // storeLogEntry("Failed to open logs file for email");
+    return;
+  }
+
+  size_t fileSize = logsFile.size();
+  if (fileSize == 0) {
+    logsFile.close();
+    emailInProgress = false;
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+    //storeLogEntry("Logs file is empty");
+    return;
+  }
+
+  if (fileSize >= MAX_LOG_BUFFER) {
+    fileSize = MAX_LOG_BUFFER - 1;
+  }
+  bytesRead = logsFile.readBytes(fileBuffer, fileSize);
+  fileBuffer[bytesRead] = '\0';
+  logsFile.close();
+
+  if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
 
   tempTemperature();
 
+  ssl_client.stop();
   ssl_client.setInsecure();
 
   SMTPMessage message;
@@ -5372,31 +5442,6 @@ void sendEmailWithLogs(const String& trigger) {
   message.text.transferEncoding("quoted-printable");
   message.timestamp = time(nullptr);
 
-  File logsFile = LittleFS.open("/logs.json", "r");
-  if (!logsFile) {
-    storeLogEntry("Failed to open logs file for email");
-    emailInProgress = false;
-    return;
-  }
-
-  size_t fileSize = logsFile.size();
-  if (fileSize == 0) {
-    storeLogEntry("Logs file is empty");
-    logsFile.close();
-    emailInProgress = false;
-    return;
-  }
-
-  const size_t MAX_LOG_BUFFER = 4096;
-  if (fileSize >= MAX_LOG_BUFFER) {
-    storeLogEntry("Log file too large, capping at 4095 bytes for email");
-    fileSize = MAX_LOG_BUFFER - 1;
-  }
-  static char fileBuffer[MAX_LOG_BUFFER];
-  size_t bytesRead = logsFile.readBytes(fileBuffer, fileSize);
-  fileBuffer[bytesRead] = '\0';
-  logsFile.close();
-
   Attachment attachment;
   attachment.filename = "logs.json";
   attachment.mime = "application/json";
@@ -5406,12 +5451,14 @@ void sendEmailWithLogs(const String& trigger) {
   message.attachments.add(attachment, attach_type_attachment);
 
   bool connected = false;
+  resetWatchdog();
   try {
     connected = smtp.connect(SMTP_HOST, SMTP_PORT);
   } catch (...) {
     storeLogEntry("Exception during SMTP connection");
     connected = false;
   }
+  resetWatchdog();
 
   if (!connected || !smtp.isConnected()) {
     storeLogEntry("Failed to connect to email server");
@@ -5420,12 +5467,14 @@ void sendEmailWithLogs(const String& trigger) {
   }
 
   bool authenticated = false;
+  resetWatchdog();
   try {
     authenticated = smtp.authenticate(emailSenderAccount, emailSenderPassword, readymail_auth_password);
   } catch (...) {
     storeLogEntry("Exception during SMTP authentication");
     authenticated = false;
   }
+  resetWatchdog();
 
   if (!authenticated || !smtp.isAuthenticated()) {
     storeLogEntry("Failed to authenticate with email server");
@@ -5434,25 +5483,29 @@ void sendEmailWithLogs(const String& trigger) {
   }
 
   bool sendSuccess = false;
+  resetWatchdog();
   try {
     sendSuccess = smtp.send(message);
   } catch (...) {
     storeLogEntry("Exception during email sending");
     sendSuccess = false;
   }
+  resetWatchdog();
 
   if (!sendSuccess) {
     storeLogEntry("Failed to send email");
   } else {
     storeLogEntry("Email sent successfully with logs");
   }
-  
+
+  resetWatchdog();
   try {
     smtp.stop();
   } catch (...) {
     storeLogEntry("Exception during SMTP session close");
   }
-  
+  resetWatchdog();
+
   emailInProgress = false;
 }
 
