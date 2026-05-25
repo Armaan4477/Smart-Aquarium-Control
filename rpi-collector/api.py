@@ -11,7 +11,14 @@ import collector
 import config
 
 log = logging.getLogger(__name__)
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", static_url_path="/static")
+
+# ── frontend ───────────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    return app.send_static_file("index.html")
+
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
