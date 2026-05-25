@@ -1,0 +1,19 @@
+services:
+  aquarium-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aquarium-collector
+    restart: always
+    ports:
+      - "5050:5050"       # Query API accessible on the LAN at <rpi-ip>:5050
+    volumes:
+      - ./data:/data      # SQLite DB persists across restarts / rebuilds
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Optional: limit resource usage on the Pi
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "128M"
