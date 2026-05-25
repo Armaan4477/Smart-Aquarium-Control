@@ -59,6 +59,18 @@ def proxy(subpath):
         log.error(f"Proxy error to {esp32_url}: {e}")
         return jsonify({"error": "ESP32 unreachable or timed out."}), 502
 
+@app.post("/api/force_refresh")
+def force_refresh():
+    """Manually force a fresh poll of status and logs from ESP32."""
+    try:
+        collector._poll_status()
+        collector._poll_logs()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        log.error(f"Force refresh failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ── helpers ────────────────────────────────────────────────────────────────
 
 def _row_to_dict(row) -> dict:
@@ -110,7 +122,10 @@ def get_temperature_latest():
         ).fetchone()
     if not row:
         return jsonify({"error": "No data yet"}), 404
-    return jsonify(_row_to_dict(row))
+    
+    result = _row_to_dict(row)
+    result["is_offline"] = collector.uptime_state.get("is_offline", False)
+    return jsonify(result)
 
 
 @app.get("/temperature/range")
@@ -192,7 +207,10 @@ def get_relays_latest():
         ).fetchone()
     if not row:
         return jsonify({"error": "No data yet"}), 404
-    return jsonify(_row_to_dict(row))
+    
+    result = _row_to_dict(row)
+    result["is_offline"] = collector.uptime_state.get("is_offline", False)
+    return jsonify(result)
 
 
 # ── logs ───────────────────────────────────────────────────────────────────

@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchData();
     
     // Event Listeners
-    els.refreshBtn.addEventListener('click', fetchData);
+    els.refreshBtn.addEventListener('click', forceFetchData);
     els.timeRange.addEventListener('change', fetchChartData);
     els.logSearch.addEventListener('input', renderLogs);
     
@@ -85,16 +85,42 @@ function formatDateTime(isoString) {
     });
 }
 
+// Force Fetch Data (Ping ESP32)
+async function forceFetchData() {
+    const originalText = els.refreshBtn.textContent;
+    els.refreshBtn.textContent = '...';
+    els.refreshBtn.disabled = true;
+    setConnectionStatus('loading');
+    try {
+        const res = await fetch('/api/force_refresh', { method: 'POST' });
+        if (!res.ok) throw new Error('Force refresh request failed');
+        await fetchData();
+    } catch (e) {
+        console.error("Force refresh failed:", e);
+        alert("Failed to force refresh. Check connection.");
+        setConnectionStatus('error');
+    } finally {
+        els.refreshBtn.textContent = originalText;
+        els.refreshBtn.disabled = false;
+    }
+}
+
 // Fetch All Data
 async function fetchData() {
     setConnectionStatus('loading');
     try {
-        await Promise.all([
+        const [isOffline] = await Promise.all([
             fetchLatestStatus(),
             fetchChartData(),
             fetchLogs()
         ]);
-        setConnectionStatus('online');
+        
+        if (isOffline) {
+            setConnectionStatus('error');
+        } else {
+            setConnectionStatus('online');
+        }
+        
         els.lastUpdated.textContent = new Date().toLocaleTimeString();
     } catch (error) {
         console.error("Fetch error:", error);
@@ -113,7 +139,11 @@ async function fetchLatestStatus() {
     els.valExtTemp.textContent = data.external_c !== null ? `${data.external_c.toFixed(1)}°C` : '--°C';
     
     // Uptime
-    els.valUptime.textContent = formatUptime(data.uptime_seconds, data.uptime_days);
+    if (data.is_offline) {
+        els.valUptime.textContent = "--";
+    } else {
+        els.valUptime.textContent = formatUptime(data.uptime_seconds, data.uptime_days);
+    }
     
     // Error Banner
     if (data.has_error) {
@@ -136,6 +166,8 @@ async function fetchLatestStatus() {
     updateRelayBadge(els.relay2, document.getElementById('override-2'), data.relay2, data.override2);
     // Assuming relay 3 uses override 1 logic per backend implementation
     updateRelayBadge(els.relay3, document.getElementById('override-3'), data.relay3, data.override1); 
+    
+    return data.is_offline;
 }
 
 function updateRelayBadge(relayEl, overrideEl, state, override) {

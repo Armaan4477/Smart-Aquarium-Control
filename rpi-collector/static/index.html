@@ -24,9 +24,12 @@
     <div class="container">
         <header class="glass-panel header">
             <h1>Smart Aquarium</h1>
-            <div class="status-indicator">
-                <span id="conn-status" class="dot loading"></span>
-                <span id="conn-text">Connecting...</span>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <button id="refresh-btn" class="glass-button" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;">Refresh</button>
+                <div class="status-indicator">
+                    <span id="conn-status" class="dot loading"></span>
+                    <span id="conn-text">Connecting...</span>
+                </div>
             </div>
         </header>
 
@@ -103,7 +106,6 @@
                             <option value="4320">Last 3 Days</option>
                             <option value="10080">Last 7 Days</option>
                         </select>
-                        <button id="refresh-btn" class="glass-button">Refresh</button>
                     </div>
                 </div>
                 <div class="chart-container">
