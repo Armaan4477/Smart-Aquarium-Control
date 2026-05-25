@@ -29,3 +29,12 @@ DB_PATH = "/data/aquarium.db"
 
 # ── Request timeout ────────────────────────────────────────────────────────
 REQUEST_TIMEOUT = 10   # seconds
+
+# ── Email configuration ────────────────────────────────────────────────────
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 465
+EMAIL_SENDER_ACCOUNT = "nakhudaarmaan66@gmail.com"
+EMAIL_SENDER_PASSWORD = "bkij ftwz ptjt fbtz"
+EMAIL_RECIPIENT = "nakhudaarmaan6@gmail.com"
+EMAIL_SUBJECT = "Aquarium Control Logs"
+

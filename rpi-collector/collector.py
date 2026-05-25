@@ -12,12 +12,21 @@ import requests
 
 import config
 import db
+import mailer
 
 log = logging.getLogger(__name__)
 
 # Shared state exposed to the API for /status health check
 last_status_poll: dict = {"time": None, "ok": None, "error": None}
 last_logs_poll:   dict = {"time": None, "ok": None, "error": None}
+
+# Email tracking state
+email_tracking_state = {
+    "last_has_error": False,
+    "last_temp_error": False,
+    "last_ext_temp_error": False,
+    "last_periodic_email": time.time()
+}
 
 _ESP32_STATUS_URL = f"http://{config.ESP32_IP}:{config.ESP32_PORT}/api/status"
 _ESP32_LOGS_URL   = f"http://{config.ESP32_IP}:{config.ESP32_PORT}/api/logs"
@@ -91,6 +100,31 @@ def _poll_status():
         last_status_poll = {"time": now, "ok": True, "error": None}
         log.debug("Status stored: %.2f°C int / %.2f°C ext",
                   data.get("internal_c", 0), data.get("external_c", 0))
+
+        # --- Email logic ---
+        current_time = time.time()
+        
+        # Check for error transitions
+        current_has_error = bool(data.get("has_error"))
+        current_temp_error = bool(data.get("temp_error"))
+        current_ext_temp_error = bool(data.get("ext_temp_error"))
+        
+        if current_has_error and not email_tracking_state["last_has_error"]:
+            mailer.send_email_report("General Error Detected", data)
+        if current_temp_error and not email_tracking_state["last_temp_error"]:
+            mailer.send_email_report("Temperature Sensor Error", data)
+        if current_ext_temp_error and not email_tracking_state["last_ext_temp_error"]:
+            mailer.send_email_report("External Temperature Sensor Error", data)
+            
+        email_tracking_state["last_has_error"] = current_has_error
+        email_tracking_state["last_temp_error"] = current_temp_error
+        email_tracking_state["last_ext_temp_error"] = current_ext_temp_error
+        
+        # Check for 90 minute periodic interval (5400 seconds)
+        if current_time - email_tracking_state["last_periodic_email"] >= 5400:
+            mailer.send_email_report("Status Check", data)
+            email_tracking_state["last_periodic_email"] = current_time
+
     except Exception as exc:
         log.error("DB write error (status): %s", exc)
         last_status_poll = {"time": now, "ok": False, "error": str(exc)}
