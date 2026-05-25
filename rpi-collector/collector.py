@@ -28,6 +28,13 @@ email_tracking_state = {
     "last_periodic_email": time.time()
 }
 
+# Uptime and ping tracking state
+uptime_state = {
+    "rpi_uptime_seconds": 0,
+    "failed_ping_count": 0,
+    "is_offline": False
+}
+
 _ESP32_STATUS_URL = f"http://{config.ESP32_IP}:{config.ESP32_PORT}/api/status"
 _ESP32_LOGS_URL   = f"http://{config.ESP32_IP}:{config.ESP32_PORT}/api/logs"
 _AUTH = (config.ESP32_USER, config.ESP32_PASS)
@@ -69,6 +76,9 @@ def _poll_status():
         return
 
     try:
+        uptime_sec = uptime_state["rpi_uptime_seconds"]
+        uptime_days = uptime_sec // 86400
+
         with db.get_conn() as conn:
             conn.execute(
                 """INSERT INTO status_readings
@@ -92,8 +102,8 @@ def _poll_status():
                     1 if data.get("has_error")      else 0,
                     1 if data.get("temp_error")     else 0,
                     1 if data.get("ext_temp_error") else 0,
-                    data.get("uptime_seconds"),
-                    data.get("uptime_days"),
+                    uptime_sec,
+                    uptime_days,
                     1 if data.get("time_synced")    else 0,
                 ),
             )
@@ -174,6 +184,30 @@ def _poll_logs():
         last_logs_poll = {"time": now, "ok": False, "error": str(exc)}
 
 
+def _health_ping():
+    """Ping ESP32 every 10s to update uptime and check online status."""
+    url = f"http://{config.ESP32_IP}:{config.ESP32_PORT}/api/ping"
+    try:
+        resp = requests.get(url, auth=_AUTH, timeout=3.0)
+        if resp.status_code == 200:
+            uptime_state["rpi_uptime_seconds"] += 10
+            uptime_state["failed_ping_count"] = 0
+            if uptime_state["is_offline"]:
+                uptime_state["is_offline"] = False
+                log.info("ESP32 is back online.")
+        else:
+            _handle_ping_failure()
+    except requests.exceptions.RequestException:
+        _handle_ping_failure()
+
+def _handle_ping_failure():
+    uptime_state["failed_ping_count"] += 1
+    if uptime_state["failed_ping_count"] >= 3 and not uptime_state["is_offline"]:
+        uptime_state["is_offline"] = True
+        log.warning("ESP32 is offline. Sending email.")
+        mailer.send_offline_email()
+
+
 # ── purge task ─────────────────────────────────────────────────────────────
 
 def _purge_loop():
@@ -201,6 +235,7 @@ def _run_every(interval: int, fn):
 def start():
     """Start all background collector threads (daemon so they die with the process)."""
     for target, interval in [
+        (_health_ping, 10),
         (_poll_status, config.POLL_STATUS_INTERVAL),
         (_poll_logs,   config.POLL_LOGS_INTERVAL),
         (_purge_loop,  None),          # _purge_loop handles its own sleep

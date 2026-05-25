@@ -22,7 +22,7 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 
 # Copy application source
-COPY config.py collector.py db.py api.py main.py ./
+COPY config.py collector.py db.py api.py main.py mailer.py ./
 COPY static/ ./static/
 
 # Put the venv's bin/ first so python / gunicorn resolve from it

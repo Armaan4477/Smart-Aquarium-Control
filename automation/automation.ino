@@ -1043,6 +1043,7 @@ void setup() {
   // Collector API server — routes served on Core 0 (emailLoop), port 82
   apiServer.on("/api/status", HTTP_GET, handleApiStatus);
   apiServer.on("/api/logs",   HTTP_GET, handleApiLogs);
+  apiServer.on("/api/ping",   HTTP_GET, handleApiPing);
   apiServer.begin();
   EEPROM.begin(EEPROM_SIZE);
   loadSchedulesFromEEPROM();
@@ -5888,11 +5889,11 @@ void tempTemperature() {
 }
 
 // Collector API handlers — served via apiServer (port 82) on Core 0 (emailLoop)
+void handleApiPing() {
+  apiServer.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
 void handleApiStatus() {
-  unsigned long uptimeSec = millis() / 1000;
-  unsigned long uptimeMin = uptimeSec / 60;
-  unsigned long uptimeHr  = uptimeMin / 60;
-  unsigned long days      = uptimeHr  / 24;
 
   String ts = "null";
   struct tm t;
@@ -5915,8 +5916,7 @@ void handleApiStatus() {
   json += "\"has_error\":"         + String(hasError             ? "true" : "false") + ",";
   json += "\"temp_error\":"        + String(hasTempError         ? "true" : "false") + ",";
   json += "\"ext_temp_error\":"    + String(hasExternalTempError ? "true" : "false") + ",";
-  json += "\"uptime_seconds\":"    + String(uptimeSec)  + ",";
-  json += "\"uptime_days\":"       + String(days)        + ",";
+
   json += "\"time_synced\":"       + String(validTimeSync ? "true" : "false") + ",";
   json += "\"timestamp\":"         + ts;
   json += "}";
