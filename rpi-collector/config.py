@@ -14,8 +14,10 @@ ESP32_USER = "armaan"
 ESP32_PASS = "Armaan1234"
 
 # ── Polling intervals ──────────────────────────────────────────────────────
-POLL_STATUS_INTERVAL = 60   # seconds  — temperature + relay/error/uptime
+POLL_STATUS_INTERVAL = 60   # seconds  — temperature + relay/uptime (db save)
 POLL_LOGS_INTERVAL   = 60   # seconds  — system logs
+POLL_ERROR_INTERVAL  = 30   # seconds  — error checking & email alerts
+PING_INTERVAL        = 10   # seconds  — health check ping
 
 # ── Data retention ─────────────────────────────────────────────────────────
 RETENTION_DAYS = 30          # purge records older than this

@@ -78,6 +78,7 @@ void saveDisplaySchedule();
 void applyOledSchedule();
 void handleApiStatus();
 void handleApiLogs();
+void handleApiPing();
 
 struct Schedule {
   int id;

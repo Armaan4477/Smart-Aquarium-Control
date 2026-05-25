@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: aquarium-collector
-    restart: always
+    restart: unless-stopped
     ports:
       - "5050:5050"       # Query API accessible on the LAN at <rpi-ip>:5050
     volumes:

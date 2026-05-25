@@ -111,33 +111,46 @@ def _poll_status():
         log.debug("Status stored: %.2f°C int / %.2f°C ext",
                   data.get("internal_c", 0), data.get("external_c", 0))
 
-        # --- Email logic ---
-        current_time = time.time()
-        
-        # Check for error transitions
-        current_has_error = bool(data.get("has_error"))
-        current_temp_error = bool(data.get("temp_error"))
-        current_ext_temp_error = bool(data.get("ext_temp_error"))
-        
-        if current_has_error and not email_tracking_state["last_has_error"]:
-            mailer.send_email_report("General Error Detected", data)
-        if current_temp_error and not email_tracking_state["last_temp_error"]:
-            mailer.send_email_report("Temperature Sensor Error", data)
-        if current_ext_temp_error and not email_tracking_state["last_ext_temp_error"]:
-            mailer.send_email_report("External Temperature Sensor Error", data)
-            
-        email_tracking_state["last_has_error"] = current_has_error
-        email_tracking_state["last_temp_error"] = current_temp_error
-        email_tracking_state["last_ext_temp_error"] = current_ext_temp_error
-        
-        # Check for 90 minute periodic interval (5400 seconds)
-        if current_time - email_tracking_state["last_periodic_email"] >= 5400:
-            mailer.send_email_report("Status Check", data)
-            email_tracking_state["last_periodic_email"] = current_time
-
     except Exception as exc:
         log.error("DB write error (status): %s", exc)
         last_status_poll = {"time": now, "ok": False, "error": str(exc)}
+
+
+def _poll_errors():
+    """Fetch /api/status to check for errors and trigger emails."""
+    data = _fetch(_ESP32_STATUS_URL)
+    if data is None:
+        return
+
+    # --- Email logic ---
+    current_time = time.time()
+    
+    # Check for error transitions
+    current_has_error = bool(data.get("has_error"))
+    current_temp_error = bool(data.get("temp_error"))
+    current_ext_temp_error = bool(data.get("ext_temp_error"))
+    
+    new_temp = current_temp_error and not email_tracking_state["last_temp_error"]
+    new_ext_temp = current_ext_temp_error and not email_tracking_state["last_ext_temp_error"]
+    new_general = current_has_error and not email_tracking_state["last_has_error"]
+
+    if new_temp:
+        mailer.send_email_report("Temperature Sensor Error", data)
+    if new_ext_temp:
+        mailer.send_email_report("External Temperature Sensor Error", data)
+        
+    # Only send general error if it's not accompanied by a specific error
+    if new_general and not (new_temp or new_ext_temp):
+        mailer.send_email_report("General Error Detected", data)
+        
+    email_tracking_state["last_has_error"] = current_has_error
+    email_tracking_state["last_temp_error"] = current_temp_error
+    email_tracking_state["last_ext_temp_error"] = current_ext_temp_error
+    
+    # Check for 90 minute periodic interval (5400 seconds)
+    if current_time - email_tracking_state["last_periodic_email"] >= 5400:
+        mailer.send_email_report("Status Check", data)
+        email_tracking_state["last_periodic_email"] = current_time
 
 
 def _poll_logs():
@@ -194,7 +207,8 @@ def _health_ping():
             uptime_state["failed_ping_count"] = 0
             if uptime_state["is_offline"]:
                 uptime_state["is_offline"] = False
-                log.info("ESP32 is back online.")
+                log.info("ESP32 is back online. Sending email.")
+                mailer.send_online_email()
         else:
             _handle_ping_failure()
     except requests.exceptions.RequestException:
@@ -235,8 +249,9 @@ def _run_every(interval: int, fn):
 def start():
     """Start all background collector threads (daemon so they die with the process)."""
     for target, interval in [
-        (_health_ping, 10),
+        (_health_ping, config.PING_INTERVAL),
         (_poll_status, config.POLL_STATUS_INTERVAL),
+        (_poll_errors, config.POLL_ERROR_INTERVAL),
         (_poll_logs,   config.POLL_LOGS_INTERVAL),
         (_purge_loop,  None),          # _purge_loop handles its own sleep
     ]:

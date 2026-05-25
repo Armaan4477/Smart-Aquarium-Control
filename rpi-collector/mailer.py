@@ -128,3 +128,35 @@ def send_offline_email() -> None:
         log.info("Offline email sent successfully.")
     except Exception as exc:
         log.error("Failed to send offline email: %s", exc)
+
+def send_online_email() -> None:
+    """
+    Sends an email when the ESP32 comes back online.
+    """
+    if not getattr(config, 'EMAIL_SENDER_ACCOUNT', None) or not getattr(config, 'EMAIL_SENDER_PASSWORD', None):
+        log.warning("Email not sent: Missing SMTP credentials in config.py")
+        return
+
+    formatted_time = datetime.datetime.now().strftime("%H:%M:%S")
+
+    body = (
+        f"Aquarium Control System Report\n"
+        f"Event: ESP32 Online\n"
+        f"Timestamp: {formatted_time}\n\n"
+        f"The Aquarium Control System (ESP32) is back online and responding to health pings."
+    )
+
+    msg = EmailMessage()
+    msg['Subject'] = f"{getattr(config, 'EMAIL_SUBJECT', 'Aquarium Control Logs')} - ESP32 Back Online"
+    msg['From'] = f"Aquarium Control <{config.EMAIL_SENDER_ACCOUNT}>"
+    msg['To'] = f"User <{getattr(config, 'EMAIL_RECIPIENT', '')}>"
+    msg.set_content(body)
+
+    try:
+        log.info("Sending online email report")
+        with smtplib.SMTP_SSL(getattr(config, 'SMTP_HOST', 'smtp.gmail.com'), getattr(config, 'SMTP_PORT', 465)) as server:
+            server.login(config.EMAIL_SENDER_ACCOUNT, config.EMAIL_SENDER_PASSWORD)
+            server.send_message(msg)
+        log.info("Online email sent successfully.")
+    except Exception as exc:
+        log.error("Failed to send online email: %s", exc)
