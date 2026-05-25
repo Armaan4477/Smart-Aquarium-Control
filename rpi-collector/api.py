@@ -9,17 +9,55 @@ from flask import Flask, jsonify, request, abort
 import db
 import collector
 import config
+import requests
 
 log = logging.getLogger(__name__)
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 
-# ── frontend ───────────────────────────────────────────────────────────────
+# ── frontend & proxy ───────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
     return app.send_static_file("index.html")
 
+@app.route("/api/config")
+def get_config():
+    """Return frontend-needed configuration."""
+    return jsonify({"esp32_ip": config.ESP32_IP})
 
+@app.route("/proxy/<path:subpath>", methods=["GET", "POST", "DELETE"])
+def proxy(subpath):
+    """Forward requests to the ESP32 main web server (port 80)."""
+    esp32_url = f"http://{config.ESP32_IP}:80/{subpath}"
+    try:
+        if request.method == "GET":
+            resp = requests.get(esp32_url, params=request.args, timeout=10)
+        elif request.method == "POST":
+            # Forward both JSON and form data
+            if request.is_json:
+                resp = requests.post(esp32_url, json=request.json, timeout=10)
+            else:
+                resp = requests.post(esp32_url, data=request.form, timeout=10)
+            
+            # Immediately poll the ESP32 status after any POST so the local DB is up-to-date
+            # for any subsequent frontend refresh.
+            if resp.ok:
+                try:
+                    collector._poll_status()
+                except Exception as e:
+                    log.error(f"Force poll failed: {e}")
+        elif request.method == "DELETE":
+            resp = requests.delete(esp32_url, params=request.args, timeout=10)
+        
+        # We try to return the JSON response if it's JSON, else raw text
+        try:
+            return jsonify(resp.json()), resp.status_code
+        except ValueError:
+            return resp.text, resp.status_code
+            
+    except requests.exceptions.RequestException as e:
+        log.error(f"Proxy error to {esp32_url}: {e}")
+        return jsonify({"error": "ESP32 unreachable or timed out."}), 502
 
 # ── helpers ────────────────────────────────────────────────────────────────
 

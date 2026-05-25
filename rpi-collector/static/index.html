@@ -30,6 +30,12 @@
             </div>
         </header>
 
+        <!-- System Error Banner (Hidden by default) -->
+        <div id="system-error-banner" class="error-banner hidden">
+            <span class="error-icon">⚠️</span>
+            <span id="system-error-text">System Error Active</span>
+        </div>
+
         <main>
             <!-- Current Status Cards -->
             <section class="cards-grid">
@@ -49,12 +55,30 @@
                 </div>
                 <div class="glass-panel card">
                     <div class="card-icon relay-icon"></div>
-                    <div class="card-content">
+                    <div class="card-content" style="flex: 1;">
                         <h3>Relays</h3>
                         <div class="relays-container" id="val-relays">
-                            <span class="relay-badge" id="relay-1">1</span>
-                            <span class="relay-badge" id="relay-2">2</span>
-                            <span class="relay-badge" id="relay-3">3</span>
+                            <div class="relay-row">
+                                <span class="relay-name">WaveMaker</span>
+                                <div class="relay-status-group">
+                                    <button class="relay-toggle" id="relay-toggle-1" onclick="toggleRelay(1)">OFF</button>
+                                    <span class="override-badge hidden" id="override-1">OVERRIDE</span>
+                                </div>
+                            </div>
+                            <div class="relay-row">
+                                <span class="relay-name">Light</span>
+                                <div class="relay-status-group">
+                                    <button class="relay-toggle" id="relay-toggle-2" onclick="toggleRelay(2)">OFF</button>
+                                    <span class="override-badge hidden" id="override-2">OVERRIDE</span>
+                                </div>
+                            </div>
+                            <div class="relay-row">
+                                <span class="relay-name">Air Pump</span>
+                                <div class="relay-status-group">
+                                    <button class="relay-toggle" id="relay-toggle-3" onclick="toggleRelay(3)">OFF</button>
+                                    <span class="override-badge hidden" id="override-3">OVERRIDE</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -84,6 +108,31 @@
                 </div>
                 <div class="chart-container">
                     <canvas id="tempChart"></canvas>
+                </div>
+            </section>
+
+            <!-- ESP32 Control Panels -->
+            <section class="glass-panel schedule-section">
+                <div class="section-header">
+                    <h2>ESP32 Control Panels</h2>
+                </div>
+                <div class="external-links-grid">
+                    <a href="#" target="_blank" class="glass-link-btn" id="link-main-sched">
+                        <span class="link-title">Main Schedules</span>
+                        <span class="link-icon">↗</span>
+                    </a>
+                    <a href="#" target="_blank" class="glass-link-btn" id="link-temp-sched">
+                        <span class="link-title">Temporary Schedules</span>
+                        <span class="link-icon">↗</span>
+                    </a>
+                    <a href="#" target="_blank" class="glass-link-btn" id="link-temp-ctrl">
+                        <span class="link-title">Temperature Control</span>
+                        <span class="link-icon">↗</span>
+                    </a>
+                    <a href="#" target="_blank" class="glass-link-btn" id="link-disp-ctrl">
+                        <span class="link-title">Display Control</span>
+                        <span class="link-icon">↗</span>
+                    </a>
                 </div>
             </section>
 

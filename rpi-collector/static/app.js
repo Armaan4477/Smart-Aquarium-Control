@@ -8,15 +8,17 @@ const els = {
     connText: document.getElementById('conn-text'),
     valIntTemp: document.getElementById('val-int-temp'),
     valExtTemp: document.getElementById('val-ext-temp'),
-    relay1: document.getElementById('relay-1'),
-    relay2: document.getElementById('relay-2'),
-    relay3: document.getElementById('relay-3'),
+    relay1: document.getElementById('relay-toggle-1'),
+    relay2: document.getElementById('relay-toggle-2'),
+    relay3: document.getElementById('relay-toggle-3'),
     valUptime: document.getElementById('val-uptime'),
     lastUpdated: document.getElementById('last-updated'),
     timeRange: document.getElementById('time-range'),
     refreshBtn: document.getElementById('refresh-btn'),
     logsBody: document.getElementById('logs-body'),
-    logSearch: document.getElementById('log-search')
+    logSearch: document.getElementById('log-search'),
+    errorBanner: document.getElementById('system-error-banner'),
+    errorText: document.getElementById('system-error-text')
 };
 
 // State
@@ -34,7 +36,26 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Auto-refresh
     setInterval(fetchData, REFRESH_INTERVAL_MS);
+    
+    // Initialize external links
+    initializeLinks();
 });
+
+async function initializeLinks() {
+    try {
+        const res = await fetch('/api/config');
+        if (!res.ok) throw new Error('Failed to fetch config');
+        const config = await res.json();
+        
+        const ip = config.esp32_ip;
+        document.getElementById('link-main-sched').href = `http://${ip}/mainSchedules`;
+        document.getElementById('link-temp-sched').href = `http://${ip}/tempschedules`;
+        document.getElementById('link-temp-ctrl').href = `http://${ip}/tempcontrol`;
+        document.getElementById('link-disp-ctrl').href = `http://${ip}/displayctrl`;
+    } catch (e) {
+        console.error("Could not initialize links:", e);
+    }
+}
 
 // Set Connection Status
 function setConnectionStatus(status) {
@@ -94,26 +115,59 @@ async function fetchLatestStatus() {
     // Uptime
     els.valUptime.textContent = formatUptime(data.uptime_seconds, data.uptime_days);
     
+    // Error Banner
+    if (data.has_error) {
+        let msg = "System Error Active";
+        if (data.temp_error && data.ext_temp_error) {
+            msg = "Critical: Both internal and external temperature sensors failed!";
+        } else if (data.temp_error) {
+            msg = "Critical: Internal temperature sensor failed!";
+        } else if (data.ext_temp_error) {
+            msg = "Critical: External temperature sensor failed!";
+        }
+        els.errorText.textContent = msg;
+        els.errorBanner.classList.remove('hidden');
+    } else {
+        els.errorBanner.classList.add('hidden');
+    }
+    
     // Relays
-    updateRelayBadge(els.relay1, data.relay1, data.override1);
-    updateRelayBadge(els.relay2, data.relay2, data.override2);
+    updateRelayBadge(els.relay1, document.getElementById('override-1'), data.relay1, data.override1);
+    updateRelayBadge(els.relay2, document.getElementById('override-2'), data.relay2, data.override2);
     // Assuming relay 3 uses override 1 logic per backend implementation
-    updateRelayBadge(els.relay3, data.relay3, data.override1); 
+    updateRelayBadge(els.relay3, document.getElementById('override-3'), data.relay3, data.override1); 
 }
 
-function updateRelayBadge(el, state, override) {
+function updateRelayBadge(relayEl, overrideEl, state, override) {
     if (state === 1) {
-        el.classList.add('on');
+        relayEl.classList.add('on');
+        relayEl.textContent = 'ON';
     } else {
-        el.classList.remove('on');
+        relayEl.classList.remove('on');
+        relayEl.textContent = 'OFF';
     }
     
     if (override === 1) {
-        el.classList.add('override');
-        el.title = "Manual Override Active";
+        overrideEl.classList.remove('hidden');
     } else {
-        el.classList.remove('override');
-        el.title = "Scheduled";
+        overrideEl.classList.add('hidden');
+    }
+}
+
+// Control Relays
+async function toggleRelay(relayNumber) {
+    const el = document.getElementById(`relay-toggle-${relayNumber}`);
+    const originalText = el.textContent;
+    el.textContent = '...';
+    try {
+        const res = await fetch(`/proxy/relay/${relayNumber}`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to toggle relay');
+        // Immediately fetch status to update UI
+        await fetchLatestStatus();
+    } catch (e) {
+        console.error(e);
+        el.textContent = originalText;
+        alert("Error toggling relay. Check connection.");
     }
 }
 
