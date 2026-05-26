@@ -78,7 +78,19 @@ function formatUptime(seconds, days) {
 
 // Format Date
 function formatDateTime(isoString) {
-    const d = new Date(isoString);
+    if (!isoString) return '--';
+    
+    let d;
+    // Check if it matches DD/MM/YYYY HH:MM:SS format from ESP32
+    const match = isoString.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
+    if (match) {
+        // match: 1=DD, 2=MM, 3=YYYY, 4=HH, 5=mm, 6=ss
+        d = new Date(match[3], match[2] - 1, match[1], match[4], match[5], match[6]);
+    } else {
+        d = new Date(isoString);
+    }
+    
+    if (isNaN(d.getTime())) return isoString;
     return d.toLocaleString(undefined, { 
         month: 'short', day: 'numeric', 
         hour: '2-digit', minute: '2-digit', second: '2-digit'
@@ -369,7 +381,7 @@ function renderLogs() {
         
         const tdTime = document.createElement('td');
         tdTime.className = 'log-time';
-        tdTime.textContent = formatDateTime(log.collected_at);
+        tdTime.textContent = formatDateTime(log.esp32_time || log.collected_at);
         
         const tdMsg = document.createElement('td');
         tdMsg.className = 'log-msg';
