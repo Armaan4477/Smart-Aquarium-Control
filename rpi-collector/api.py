@@ -94,7 +94,7 @@ def get_temperature():
       limit=N        max rows (default 100, max 1000)
       since=ISO      only rows after this UTC datetime (e.g. 2026-05-01T00:00:00Z)
     """
-    limit = _parse_int(request.args.get("limit"), default=100)
+    limit = _parse_int(request.args.get("limit"), default=100, max_v=100000)
     since = request.args.get("since")
 
     query = "SELECT * FROM status_readings"

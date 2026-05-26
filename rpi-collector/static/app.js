@@ -324,13 +324,20 @@ async function fetchChartData() {
     // or just fetch up to limit=1000 which is the API default.
     let limit = 1000;
     if (hours > 24) limit = 3000; // Arbitrary higher limit for longer ranges
+    if (hours > 72) limit = 5000;
+    if (hours > 168) limit = 10000;
+    if (hours > 360) limit = 20000;
+    if (hours === 0) limit = 100000; // All time
     
     // Calculate 'since'
-    const sinceDate = new Date();
-    sinceDate.setHours(sinceDate.getHours() - hours);
-    const sinceIso = sinceDate.toISOString();
+    let sinceIso = "";
+    if (hours > 0) {
+        const sinceDate = new Date();
+        sinceDate.setHours(sinceDate.getHours() - hours);
+        sinceIso = sinceDate.toISOString();
+    }
     
-    const res = await fetch(`/temperature?limit=${limit}&since=${sinceIso}`);
+    const res = await fetch(`/temperature?limit=${limit}${sinceIso ? `&since=${sinceIso}` : ''}`);
     if (!res.ok) throw new Error('Chart data fetch failed');
     const data = await res.json();
     
