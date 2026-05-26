@@ -11,6 +11,7 @@ services:
       - ./data:/data      # SQLite DB persists across restarts / rebuilds
     environment:
       - PYTHONUNBUFFERED=1
+      - TZ=Asia/Kolkata
     # Optional: limit resource usage on the Pi
     deploy:
       resources:

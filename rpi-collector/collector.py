@@ -134,23 +134,40 @@ def _poll_errors():
     new_ext_temp = current_ext_temp_error and not email_tracking_state["last_ext_temp_error"]
     new_general = current_has_error and not email_tracking_state["last_has_error"]
 
-    if new_temp:
-        mailer.send_email_report("Temperature Sensor Error", data)
-    if new_ext_temp:
-        mailer.send_email_report("External Temperature Sensor Error", data)
-        
-    # Only send general error if it's not accompanied by a specific error
-    if new_general and not (new_temp or new_ext_temp):
-        mailer.send_email_report("General Error Detected", data)
-        
     email_tracking_state["last_has_error"] = current_has_error
     email_tracking_state["last_temp_error"] = current_temp_error
     email_tracking_state["last_ext_temp_error"] = current_ext_temp_error
-    
-    # Check for 90 minute periodic interval (5400 seconds)
-    if current_time - email_tracking_state["last_periodic_email"] >= 5400:
-        mailer.send_email_report("Status Check", data)
-        email_tracking_state["last_periodic_email"] = current_time
+
+    needs_email = new_temp or new_ext_temp or new_general or (
+        current_time - email_tracking_state["last_periodic_email"] >= 5400
+    )
+
+    if needs_email:
+        # Re-fetch the latest status so the email contains the freshest data
+        fresh_data = _fetch(_ESP32_STATUS_URL)
+        if fresh_data is None:
+            log.warning("Could not refresh status data before sending email; using existing data.")
+            fresh_data = data
+
+        uptime_sec = uptime_state["rpi_uptime_seconds"]
+        email_data = {
+            **fresh_data,
+            "uptime_seconds": uptime_sec % 86400,
+            "uptime_days": uptime_sec // 86400,
+        }
+
+        if new_temp:
+            mailer.send_email_report("Temperature Sensor Error", email_data)
+        if new_ext_temp:
+            mailer.send_email_report("External Temperature Sensor Error", email_data)
+
+        # Only send general error if it's not accompanied by a specific error
+        if new_general and not (new_temp or new_ext_temp):
+            mailer.send_email_report("General Error Detected", email_data)
+
+        if current_time - email_tracking_state["last_periodic_email"] >= 5400:
+            mailer.send_email_report("Status Check", email_data)
+            email_tracking_state["last_periodic_email"] = current_time
 
 
 def _poll_logs():
