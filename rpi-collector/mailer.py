@@ -55,47 +55,75 @@ def _send(subject: str, body_plain: str, body_html: str, attachment_bytes: bytes
 # ── CSS / base template ────────────────────────────────────────────────────
 
 _BASE_STYLE = """
-  body { margin:0; padding:0; background:#0a1628; font-family:'Segoe UI',Helvetica,Arial,sans-serif; color:#cbd5e1; }
-  .wrapper { max-width:620px; margin:32px auto; background:#0f2040; border-radius:16px;
+  /* ── Reset ── */
+  body, table, td, p, a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+  body { margin:0; padding:0; background:#0a1628;
+         font-family:'Segoe UI',Helvetica,Arial,sans-serif; color:#cbd5e1; }
+  /* ── Outer centering shell ── */
+  .email-shell { width:100%; background:#0a1628; }
+  /* ── Card ── */
+  .wrapper { width:100%; max-width:620px; margin:0 auto;
+             background:#0f2040; border-radius:16px;
              overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
-  .header { padding:28px 32px 24px; background:linear-gradient(135deg,#0e3460 0%,#1a5276 100%);
+  /* ── Header ── */
+  .header { padding:28px 32px 24px;
+            background:linear-gradient(135deg,#0e3460 0%,#1a5276 100%);
             border-bottom:1px solid #1e3a5f; }
   .header-fish { font-size:28px; }
-  .header h1 { margin:8px 0 4px; font-size:20px; font-weight:700; color:#e0f2fe; letter-spacing:0.3px; }
+  .header h1 { margin:8px 0 4px; font-size:20px; font-weight:700;
+               color:#e0f2fe; letter-spacing:0.3px; }
   .header p  { margin:0; font-size:13px; color:#94a3b8; }
-  .badge { display:inline-block; padding:4px 12px; border-radius:99px; font-size:12px;
-           font-weight:600; margin-top:10px; }
+  /* ── Badges ── */
+  .badge { display:inline-block; padding:4px 12px; border-radius:99px;
+           font-size:12px; font-weight:600; margin-top:10px; }
   .badge-ok     { background:#0d3321; color:#4ade80; border:1px solid #166534; }
   .badge-warn   { background:#3b1f00; color:#fbbf24; border:1px solid #92400e; }
   .badge-error  { background:#3b0a0a; color:#f87171; border:1px solid #991b1b; }
   .badge-offline{ background:#1e1b4b; color:#a5b4fc; border:1px solid #3730a3; }
+  /* ── Sections ── */
   .section { padding:24px 32px; border-bottom:1px solid #1e3a5f; }
   .section:last-child { border-bottom:none; }
   .section-title { font-size:11px; font-weight:700; letter-spacing:1.2px;
                    text-transform:uppercase; color:#64748b; margin-bottom:14px; }
+  /* ── Data grid (table-based for email safety) ── */
   .grid { display:table; width:100%; border-collapse:collapse; }
-  .row { display:table-row; }
-  .cell-label { display:table-cell; padding:7px 12px 7px 0; font-size:13px; color:#64748b;
-                width:45%; vertical-align:middle; }
-  .cell-value { display:table-cell; padding:7px 0; font-size:13px; color:#e2e8f0;
-                font-weight:600; vertical-align:middle; }
-  .pill { display:inline-block; padding:2px 10px; border-radius:99px; font-size:12px; font-weight:600; }
+  .row  { display:table-row; }
+  .cell-label { display:table-cell; padding:7px 12px 7px 0; font-size:13px;
+                color:#64748b; width:45%; vertical-align:middle; }
+  .cell-value { display:table-cell; padding:7px 0; font-size:13px;
+                color:#e2e8f0; font-weight:600; vertical-align:middle; }
+  /* ── Pills ── */
+  .pill { display:inline-block; padding:2px 10px; border-radius:99px;
+          font-size:12px; font-weight:600; }
   .pill-on      { background:#0d3321; color:#4ade80; }
   .pill-off     { background:#1e293b; color:#64748b; }
   .pill-active  { background:#1c1917; color:#fb923c; }
   .pill-inactive{ background:#1e293b; color:#64748b; }
   .pill-error   { background:#3b0a0a; color:#f87171; }
   .pill-ok      { background:#0d3321; color:#4ade80; }
-  .temp-big { font-size:32px; font-weight:800; color:#38bdf8; }
-  .temp-unit{ font-size:16px; color:#7dd3fc; }
-  .temp-row { display:inline-block; margin-right:24px; }
+  /* ── Temperature display ── */
+  .temp-big   { font-size:32px; font-weight:800; color:#38bdf8; }
+  .temp-unit  { font-size:16px; color:#7dd3fc; }
+  .temp-row   { display:inline-block; margin-right:24px; text-align:center; }
   .temp-label { font-size:11px; color:#64748b; margin-top:2px; }
-  .logs-box { background:#081428; border:1px solid #1e3a5f; border-radius:8px;
-              padding:14px; max-height:180px; overflow:auto; }
-  .logs-box pre { margin:0; font-family:'Courier New',monospace; font-size:11px;
-                  color:#7dd3fc; line-height:1.7; white-space:pre-wrap; word-break:break-all; }
-  .footer { padding:18px 32px; background:#081428; text-align:center; font-size:11px; color:#334155; }
-  .divider { border:none; border-top:1px solid #1e3a5f; margin:0; }
+  /* ── Attachment notice ── */
+  .attach-notice { background:#081428; border:1px solid #1e3a5f; border-radius:8px;
+                   padding:14px 18px; display:flex; align-items:center; gap:12px; }
+  .attach-icon { font-size:22px; flex-shrink:0; }
+  .attach-text { font-size:13px; color:#94a3b8; line-height:1.6; }
+  .attach-text strong { color:#e2e8f0; }
+  /* ── Footer ── */
+  .footer { padding:18px 32px; background:#081428;
+            text-align:center; font-size:11px; color:#334155; }
+  /* ── Responsive: full-width card on small screens ── */
+  @media only screen and (max-width:660px) {
+    .email-shell { padding:0 !important; }
+    .wrapper     { border-radius:0 !important; }
+    .header,
+    .section,
+    .footer      { padding-left:20px !important; padding-right:20px !important; }
+    .temp-big    { font-size:26px !important; }
+  }
 """
 
 
@@ -110,14 +138,20 @@ def _html_wrap(header_html: str, content_html: str, footer_note: str = "") -> st
   <style>{_BASE_STYLE}</style>
 </head>
 <body>
-  <div class="wrapper">
-    {header_html}
-    {content_html}
-    <div class="footer">
-      🐠 Smart Aquarium Control System &nbsp;·&nbsp; Automated notification
-      {"&nbsp;·&nbsp; " + footer_note if footer_note else ""}
-    </div>
-  </div>
+  <!-- Outer shell centres the card on desktop; collapses to full-width on mobile -->
+  <table class="email-shell" cellpadding="0" cellspacing="0" role="presentation"
+         style="width:100%;background:#0a1628;padding:32px 16px;">
+    <tr><td align="center">
+      <div class="wrapper">
+        {header_html}
+        {content_html}
+        <div class="footer">
+          🐠 Smart Aquarium Control System &nbsp;·&nbsp; Automated notification
+          {"&nbsp;·&nbsp; " + footer_note if footer_note else ""}
+        </div>
+      </div>
+    </td></tr>
+  </table>
 </body>
 </html>"""
 
@@ -192,7 +226,7 @@ def send_email_report(trigger: str, status_data: dict) -> None:
     content_html = f"""
     <div class="section">
       <div class="section-title">Temperature</div>
-      <div>
+      <div style="text-align:center">
         <div class="temp-row">
           <div class="temp-big">{internal_c:.1f}<span class="temp-unit"> °C</span></div>
           <div class="temp-label">Internal</div>
@@ -202,7 +236,7 @@ def send_email_report(trigger: str, status_data: dict) -> None:
           <div class="temp-label">External</div>
         </div>
       </div>
-      <div style="margin-top:12px">{temp_flags_html}</div>
+      <div style="margin-top:12px;text-align:center">{temp_flags_html}</div>
     </div>
 
     <div class="section">
@@ -246,8 +280,14 @@ def send_email_report(trigger: str, status_data: dict) -> None:
     </div>
 
     <div class="section">
-      <div class="section-title">Recent Logs (last 40 entries — full log attached)</div>
-      <div class="logs-box"><pre>{logs_text or "No log entries available."}</pre></div>
+      <div class="section-title">System Logs</div>
+      <div class="attach-notice">
+        <div class="attach-icon">📎</div>
+        <div class="attach-text">
+          <strong>logs.txt</strong> is attached to this email.<br>
+          It contains the latest 40 log entries from the ESP32 in chronological order.
+        </div>
+      </div>
     </div>"""
 
     html = _html_wrap(header_html, content_html)
