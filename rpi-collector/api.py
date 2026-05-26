@@ -124,7 +124,8 @@ def get_temperature_latest():
         return jsonify({"error": "No data yet"}), 404
     
     result = _row_to_dict(row)
-    result["is_offline"] = collector.uptime_state.get("is_offline", False)
+    result["is_offline"]     = collector.uptime_state.get("is_offline", False)
+    result["uptime_pending"] = collector.uptime_state.get("uptime_pending", False)
     return jsonify(result)
 
 
@@ -209,7 +210,8 @@ def get_relays_latest():
         return jsonify({"error": "No data yet"}), 404
     
     result = _row_to_dict(row)
-    result["is_offline"] = collector.uptime_state.get("is_offline", False)
+    result["is_offline"]     = collector.uptime_state.get("is_offline", False)
+    result["uptime_pending"] = collector.uptime_state.get("uptime_pending", False)
     return jsonify(result)
 
 

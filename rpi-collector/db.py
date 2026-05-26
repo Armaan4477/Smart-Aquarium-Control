@@ -52,8 +52,41 @@ def init_db():
 
             CREATE INDEX IF NOT EXISTS idx_logs_collected
                 ON log_entries(collected_at);
+            CREATE TABLE IF NOT EXISTS collector_state (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
         """)
     log.info("Database initialised at %s", DB_PATH)
+
+
+def get_state(key: str, default=None):
+    """Read a scalar value from the persistent collector_state table.
+
+    Returns *default* when the table does not yet exist (i.e. this is called
+    before init_db() has run on a fresh deployment).
+    """
+    try:
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT value FROM collector_state WHERE key=?", (key,)
+            ).fetchone()
+        if row is None:
+            return default
+        return row[0]
+    except sqlite3.OperationalError:
+        # Table hasn't been created yet — init_db() will create it shortly.
+        return default
+
+
+def set_state(key: str, value) -> None:
+    """Write (insert-or-replace) a scalar value into collector_state."""
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO collector_state (key, value) VALUES (?, ?)"
+            " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, str(value)),
+        )
 
 
 def purge_old_records(retention_days: int):

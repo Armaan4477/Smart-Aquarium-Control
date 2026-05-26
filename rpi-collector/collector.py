@@ -31,10 +31,17 @@ email_tracking_state = {
 }
 
 # Uptime and ping tracking state
+# uptime_seconds is restored from the persistent DB on module load so that a
+# container restart does NOT reset the counter back to zero.
+# uptime_pending is True from container startup until we receive at least one
+# successful health ping — during this window the API returns None for uptime
+# so the frontend can display '--' instead of a stale/wrong value.
+_persisted_uptime = db.get_state("uptime_seconds", default="0")
 uptime_state = {
-    "rpi_uptime_seconds": 0,
+    "rpi_uptime_seconds": int(_persisted_uptime),
     "failed_ping_count": 0,
-    "is_offline": False
+    "is_offline": False,
+    "uptime_pending": True,   # True until first successful ping after (re)start
 }
 
 _ESP32_STATUS_URL = f"http://{config.ESP32_IP}:{config.ESP32_PORT}/api/status"
@@ -254,8 +261,22 @@ def _health_ping():
     try:
         resp = requests.get(url, auth=_AUTH, timeout=3.0)
         if resp.status_code == 200:
+            # First successful ping after a (re)start — clear the pending flag
+            # so the API starts surfacing real uptime values instead of '--'.
+            if uptime_state["uptime_pending"]:
+                uptime_state["uptime_pending"] = False
+                log.info("First health ping received — uptime counter active.")
+
             uptime_state["rpi_uptime_seconds"] += 10
             uptime_state["failed_ping_count"] = 0
+
+            # Persist updated uptime so a future container restart can resume
+            # from the correct value rather than resetting to 0.
+            try:
+                db.set_state("uptime_seconds", uptime_state["rpi_uptime_seconds"])
+            except Exception as exc:
+                log.warning("Failed to persist uptime_seconds: %s", exc)
+
             if uptime_state["is_offline"]:
                 uptime_state["is_offline"] = False
                 log.info("ESP32 is back online. Sending email.")

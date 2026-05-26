@@ -139,7 +139,9 @@ async function fetchLatestStatus() {
     els.valExtTemp.textContent = data.external_c !== null ? `${data.external_c.toFixed(1)}°C` : '--°C';
     
     // Uptime
-    if (data.is_offline) {
+    // Show '--' when offline OR when the container just restarted and hasn't
+    // yet received its first health ping (uptime_pending = true).
+    if (data.is_offline || data.uptime_pending) {
         els.valUptime.textContent = "--";
     } else {
         els.valUptime.textContent = formatUptime(data.uptime_seconds, data.uptime_days);
@@ -263,7 +265,7 @@ function initChart() {
                                 label += ': ';
                             }
                             if (context.parsed.y !== null) {
-                                label += context.parsed.y.toFixed(1) + '°C';
+                                label += context.parsed.y.toFixed(2) + '°C';
                             }
                             return label;
                         }
@@ -287,7 +289,13 @@ function initChart() {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     border: { display: false },
                     ticks: {
-                        callback: function(value) { return value.toFixed(1) + '°C'; }
+                        callback: function(value) {
+                            // Use 2 dp when the visible Y range is narrow (< 1 °C)
+                            // so closely-packed values remain distinguishable.
+                            const range = this.max - this.min;
+                            const decimals = range < 1 ? 2 : 1;
+                            return value.toFixed(decimals) + '°C';
+                        }
                     }
                 }
             }
