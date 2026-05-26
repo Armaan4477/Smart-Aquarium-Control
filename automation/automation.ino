@@ -1057,9 +1057,12 @@ void setup() {
   tempTemperature();
 
   Wire.begin(OLED_SDA, OLED_SCL);
+  Wire.setClock(50000);
+
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     storeLogEntry("OLED init failed");
   } else {
+    Wire.setClock(50000);
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     updateOLED();
