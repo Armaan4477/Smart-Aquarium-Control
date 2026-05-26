@@ -25,7 +25,9 @@ email_tracking_state = {
     "last_has_error": False,
     "last_temp_error": False,
     "last_ext_temp_error": False,
-    "last_periodic_email": time.time()
+    # Tracks which 90-minute slot index (since midnight) was last emailed.
+    # Initialised to the *current* slot so we don't fire immediately on start.
+    "last_periodic_email_slot": None,
 }
 
 # Uptime and ping tracking state
@@ -116,20 +118,31 @@ def _poll_status():
         last_status_poll = {"time": now, "ok": False, "error": str(exc)}
 
 
+def _current_email_slot() -> int:
+    """Return the index of the current 90-minute slot since midnight (0-based).
+
+    Slots are fixed to wall-clock time anchored at 00:00 local time:
+      slot 0  → 00:00 – 01:29
+      slot 1  → 01:30 – 02:59
+      slot 2  → 03:00 – 04:29
+      …and so on (16 slots per day).
+    """
+    now = datetime.datetime.now()
+    minutes_since_midnight = now.hour * 60 + now.minute
+    return minutes_since_midnight // 90
+
+
 def _poll_errors():
     """Fetch /api/status to check for errors and trigger emails."""
     data = _fetch(_ESP32_STATUS_URL)
     if data is None:
         return
 
-    # --- Email logic ---
-    current_time = time.time()
-    
-    # Check for error transitions
+    # --- Error-transition email logic ---
     current_has_error = bool(data.get("has_error"))
     current_temp_error = bool(data.get("temp_error"))
     current_ext_temp_error = bool(data.get("ext_temp_error"))
-    
+
     new_temp = current_temp_error and not email_tracking_state["last_temp_error"]
     new_ext_temp = current_ext_temp_error and not email_tracking_state["last_ext_temp_error"]
     new_general = current_has_error and not email_tracking_state["last_has_error"]
@@ -138,9 +151,30 @@ def _poll_errors():
     email_tracking_state["last_temp_error"] = current_temp_error
     email_tracking_state["last_ext_temp_error"] = current_ext_temp_error
 
-    needs_email = new_temp or new_ext_temp or new_general or (
-        current_time - email_tracking_state["last_periodic_email"] >= 5400
-    )
+    # --- Fixed-schedule periodic email logic ---
+    # Determine which 90-minute wall-clock slot we are currently in.
+    current_slot = _current_email_slot()
+
+    # Initialise last_periodic_email_slot to the current slot on first run so
+    # we don't immediately fire an email on startup.
+    if email_tracking_state["last_periodic_email_slot"] is None:
+        email_tracking_state["last_periodic_email_slot"] = current_slot
+
+    periodic_due = current_slot != email_tracking_state["last_periodic_email_slot"]
+
+    # If the ESP32 is currently offline, skip the periodic status email for
+    # this slot (the offline alert email already notified the user). Mark the
+    # slot as consumed so we don't double-send once it comes back.
+    if periodic_due and uptime_state["is_offline"]:
+        log.info(
+            "Skipping periodic status email for slot %d – ESP32 is offline "
+            "(offline alert already sent).",
+            current_slot,
+        )
+        email_tracking_state["last_periodic_email_slot"] = current_slot
+        periodic_due = False
+
+    needs_email = new_temp or new_ext_temp or new_general or periodic_due
 
     if needs_email:
         # Re-fetch the latest status so the email contains the freshest data
@@ -165,9 +199,9 @@ def _poll_errors():
         if new_general and not (new_temp or new_ext_temp):
             mailer.send_email_report("General Error Detected", email_data)
 
-        if current_time - email_tracking_state["last_periodic_email"] >= 5400:
+        if periodic_due:
             mailer.send_email_report("Status Check", email_data)
-            email_tracking_state["last_periodic_email"] = current_time
+            email_tracking_state["last_periodic_email_slot"] = current_slot
 
 
 def _poll_logs():
