@@ -260,7 +260,7 @@ main {
 
 .card-content .value {
     grid-area: value;
-    align-self: start;
+    align-self: center;
     font-size: 2.75rem;
     font-weight: 700;
     color: var(--text-primary);
@@ -271,7 +271,7 @@ main {
 
 .card-content .value-small {
     grid-area: value;
-    align-self: start;
+    align-self: center;
     font-size: 2.1rem;
     font-weight: 700;
     color: var(--text-primary);
@@ -283,7 +283,7 @@ main {
 /* Relays */
 .relays-container {
     grid-area: value;
-    align-self: start;
+    align-self: center;
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
