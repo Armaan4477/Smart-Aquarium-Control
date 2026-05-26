@@ -287,7 +287,7 @@ function initChart() {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
                     border: { display: false },
                     ticks: {
-                        callback: function(value) { return value + '°'; }
+                        callback: function(value) { return value.toFixed(1) + '°C'; }
                     }
                 }
             }

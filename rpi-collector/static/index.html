@@ -26,8 +26,8 @@
     <div class="container">
         <header class="glass-panel header">
             <h1>Smart Aquarium</h1>
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <button id="refresh-btn" class="glass-button" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;">Refresh</button>
+            <div class="header-controls">
+                <button id="refresh-btn" class="glass-button">Refresh</button>
                 <div class="status-indicator">
                     <span id="conn-status" class="dot loading"></span>
                     <span id="conn-text">Connecting...</span>
@@ -59,8 +59,8 @@
                     </div>
                 </div>
                 <div class="glass-panel card">
-                    <div class="card-icon relay-icon"></div>
-                    <div class="card-content" style="flex: 1;">
+                    <div class="card-icon relay-icon" style="align-self: flex-start;"></div>
+                    <div class="card-content">
                         <h3>Relays</h3>
                         <div class="relays-container" id="val-relays">
                             <div class="relay-row">

@@ -82,7 +82,14 @@ body {
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 2rem 1.5rem;
+    padding: 1.5rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+/* Main content area — spaces the section panels apart */
+main {
     display: flex;
     flex-direction: column;
     gap: 2rem;
@@ -96,7 +103,7 @@ body {
     border: 1px solid var(--glass-border);
     border-radius: 16px;
     box-shadow: var(--shadow-md);
-    padding: 1.5rem;
+    padding: 1.25rem 1.5rem;
 }
 
 /* Header & Banners */
@@ -104,7 +111,9 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 2rem;
+    padding: 0.875rem 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
 }
 
 .header h1 {
@@ -116,13 +125,20 @@ body {
     -webkit-text-fill-color: transparent;
 }
 
+.header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    flex-wrap: wrap;
+}
+
 .error-banner {
-    background: rgba(239, 68, 68, 0.15); /* Red tinted glass */
+    background: rgba(239, 68, 68, 0.15);
     backdrop-filter: var(--blur-strong);
     -webkit-backdrop-filter: var(--blur-strong);
     border: 1px solid rgba(239, 68, 68, 0.4);
     border-radius: 12px;
-    padding: 1rem 1.5rem;
+    padding: 0.875rem 1.25rem;
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -143,21 +159,24 @@ body {
 
 .error-icon {
     font-size: 1.25rem;
+    flex-shrink: 0;
 }
 
 .status-indicator {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    font-size: 0.9rem;
+    gap: 0.5rem;
+    font-size: 0.875rem;
     color: var(--text-secondary);
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .dot {
     width: 10px;
     height: 10px;
     border-radius: 50%;
+    flex-shrink: 0;
     background-color: var(--text-secondary);
 }
 
@@ -174,14 +193,15 @@ body {
 /* Cards Grid */
 .cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.25rem;
 }
 
 .card {
     display: flex;
-    align-items: center;
-    gap: 1.5rem;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.125rem 1.25rem;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -191,9 +211,10 @@ body {
 }
 
 .card-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 11px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -207,38 +228,43 @@ body {
 .relay-icon { background-color: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.2); }
 .uptime-icon { background-color: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.2); }
 
-/* Note: SVG icons could be added via CSS mask or inline, simplified here for compactness */
-.temp-icon::after { content: '🌡️'; font-size: 1.5rem; }
-.temp-icon-alt::after { content: '🌡️'; font-size: 1.5rem; filter: hue-rotate(90deg); }
-.relay-icon::after { content: '⚡'; font-size: 1.5rem; }
-.uptime-icon::after { content: '⏱️'; font-size: 1.5rem; }
+.temp-icon::after { content: '🌡️'; font-size: 1.4rem; }
+.temp-icon-alt::after { content: '🌡️'; font-size: 1.4rem; filter: hue-rotate(90deg); }
+.relay-icon::after { content: '⚡'; font-size: 1.4rem; }
+.uptime-icon::after { content: '⏱️'; font-size: 1.4rem; }
+
+.card-content {
+    flex: 1;
+    min-width: 0;
+}
 
 .card-content h3 {
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     color: var(--text-secondary);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.2rem;
 }
 
 .card-content .value {
-    font-size: 2rem;
+    font-size: 1.875rem;
     font-weight: 700;
     color: var(--text-primary);
+    line-height: 1.2;
 }
 
 .card-content .value-small {
-    font-size: 1.25rem;
-    line-height: 1.2;
+    font-size: 1.2rem;
+    line-height: 1.3;
 }
 
 /* Relays */
 .relays-container {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
     width: 100%;
 }
 
@@ -247,33 +273,42 @@ body {
     justify-content: space-between;
     align-items: center;
     background: rgba(255, 255, 255, 0.02);
-    padding: 0.25rem 0.5rem;
+    padding: 0.3rem 0.5rem;
     border-radius: 6px;
     border: 1px solid rgba(255, 255, 255, 0.05);
+    gap: 0.5rem;
 }
 
 .relay-name {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--text-primary);
     font-weight: 600;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .relay-status-group {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
+    flex-shrink: 0;
 }
 
 .relay-toggle {
     padding: 2px 8px;
     border-radius: 4px;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 700;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--glass-border);
     color: var(--text-secondary);
     transition: all 0.2s ease;
     cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
 }
 
 .relay-toggle:hover {
@@ -292,14 +327,15 @@ body {
 }
 
 .override-badge {
-    padding: 2px 6px;
+    padding: 2px 5px;
     border-radius: 4px;
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     font-weight: 800;
     letter-spacing: 0.5px;
     background: rgba(251, 146, 60, 0.2);
     border: 1px solid var(--accent-orange);
     color: var(--accent-orange);
+    white-space: nowrap;
 }
 
 .hidden {
@@ -310,7 +346,7 @@ body {
 .external-links-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1.5rem;
+    gap: 1rem;
 }
 
 .glass-link-btn {
@@ -320,14 +356,15 @@ body {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--glass-border);
     border-radius: 12px;
-    padding: 1.25rem 1.5rem;
+    padding: 1rem 1.25rem;
     text-decoration: none;
     color: var(--text-primary);
     transition: all 0.3s ease;
+    gap: 0.5rem;
 }
 
 .glass-link-btn:hover {
-    background: rgba(56, 189, 248, 0.1); /* Light blue tint on hover */
+    background: rgba(56, 189, 248, 0.1);
     border-color: var(--accent-blue);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15);
@@ -338,14 +375,16 @@ body {
 }
 
 .link-title {
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: 600;
+    min-width: 0;
 }
 
 .link-icon {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     color: var(--accent-blue);
     opacity: 0.8;
+    flex-shrink: 0;
     transition: transform 0.3s ease;
 }
 
@@ -359,13 +398,13 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.25rem;
     flex-wrap: wrap;
-    gap: 1rem;
+    gap: 0.75rem;
 }
 
 .section-header h2 {
-    font-size: 1.25rem;
+    font-size: 1.125rem;
     font-weight: 600;
 }
 
@@ -379,10 +418,10 @@ body {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid var(--glass-border);
     color: var(--text-primary);
-    padding: 0.5rem 1rem;
+    padding: 0.45rem 0.9rem;
     border-radius: 8px;
     font-family: inherit;
-    font-size: 0.875rem;
+    font-size: 0.85rem;
     outline: none;
     transition: border-color 0.2s ease, background 0.2s ease;
 }
@@ -414,13 +453,13 @@ body {
 /* Chart Container */
 .chart-container {
     position: relative;
-    height: 400px;
+    height: 360px;
     width: 100%;
 }
 
 /* Logs Table */
 .logs-container {
-    max-height: 400px;
+    max-height: 380px;
     overflow-y: auto;
     border-radius: 8px;
     border: 1px solid var(--glass-border);
@@ -428,7 +467,7 @@ body {
 
 /* Custom Scrollbar for logs */
 .logs-container::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
 }
 .logs-container::-webkit-scrollbar-track {
     background: rgba(0, 0, 0, 0.1);
@@ -452,18 +491,19 @@ body {
     top: 0;
     background: rgba(15, 23, 42, 0.95);
     backdrop-filter: blur(4px);
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     font-weight: 600;
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
     border-bottom: 1px solid var(--glass-border);
     z-index: 1;
 }
 
 .logs-table td {
-    padding: 0.75rem 1rem;
+    padding: 0.6rem 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    font-size: 0.9rem;
+    font-size: 0.875rem;
+    vertical-align: top;
 }
 
 .logs-table tr:last-child td {
@@ -477,11 +517,13 @@ body {
 .log-time {
     color: var(--text-secondary);
     white-space: nowrap;
-    width: 180px;
+    width: 160px;
+    min-width: 120px;
 }
 
 .log-msg {
     color: var(--text-primary);
+    word-break: break-word;
 }
 .log-msg.error-text {
     color: var(--accent-red);
@@ -491,14 +533,127 @@ body {
 .footer {
     text-align: center;
     color: var(--text-secondary);
-    font-size: 0.875rem;
-    padding: 1rem 0;
+    font-size: 0.825rem;
+    padding: 0.75rem 0;
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .header { padding: 1rem; }
-    .chart-container { height: 300px; }
-    .controls { width: 100%; justify-content: stretch; }
-    .controls > * { flex: 1; }
+/* ===== Responsive: Tablet ===== */
+@media (max-width: 900px) {
+    .cards-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* ===== Responsive: Mobile ===== */
+@media (max-width: 600px) {
+    .container {
+        padding: 1rem 0.875rem;
+        gap: 1.5rem;
+    }
+
+    main {
+        gap: 1.5rem;
+    }
+
+    .header {
+        padding: 0.75rem 1rem;
+        gap: 0.5rem;
+    }
+
+    .header h1 {
+        font-size: 1.4rem;
+    }
+
+    .glass-panel {
+        padding: 1rem;
+        border-radius: 12px;
+    }
+
+    /* Stack cards to 1 column on small phones */
+    .cards-grid {
+        grid-template-columns: 1fr;
+        gap: 0.875rem;
+    }
+
+    .card {
+        align-items: center;
+        padding: 1rem;
+    }
+
+    .card-content .value {
+        font-size: 1.6rem;
+    }
+
+    /* ESP32 links: 1 column on mobile */
+    .external-links-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .glass-link-btn {
+        padding: 0.875rem 1rem;
+    }
+
+    .link-title {
+        font-size: 0.95rem;
+    }
+
+    .chart-container {
+        height: 260px;
+    }
+
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .controls {
+        width: 100%;
+    }
+
+    .controls > * {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .logs-container {
+        max-height: 300px;
+    }
+
+    /* Log time column: narrower and wrapping on tiny screens */
+    .log-time {
+        width: auto;
+        min-width: 0;
+        white-space: normal;
+        font-size: 0.78rem;
+    }
+
+    .logs-table td {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.82rem;
+    }
+
+    .logs-table th {
+        padding: 0.6rem 0.75rem;
+    }
+
+    .status-indicator {
+        font-size: 0.8rem;
+    }
+}
+
+/* ===== Responsive: Very small phones ===== */
+@media (max-width: 380px) {
+    .header h1 {
+        font-size: 1.2rem;
+    }
+
+    .card-content .value {
+        font-size: 1.4rem;
+    }
+
+    .chart-container {
+        height: 220px;
+    }
 }
