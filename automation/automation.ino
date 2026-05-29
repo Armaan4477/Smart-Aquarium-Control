@@ -76,6 +76,9 @@ void handleSaveDisplaySchedule();
 void loadDisplaySchedule();
 void saveDisplaySchedule();
 void applyOledSchedule();
+void handleApiStatus();
+void handleApiLogs();
+void handleApiPing();
 
 struct Schedule {
   int id;
@@ -789,6 +792,7 @@ WiFiClientSecure ssl_client;
 SMTPClient smtp(ssl_client);
 
 WebServer server(80);
+WebServer apiServer(82); // Collector API — handled on Core 0 (emailLoop)
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
@@ -1036,6 +1040,12 @@ void setup() {
   server.on("/display/schedule", HTTP_GET, handleGetDisplaySchedule);
   server.on("/display/schedule/save", HTTP_POST, handleSaveDisplaySchedule);
   server.begin();
+
+  // Collector API server — routes served on Core 0 (emailLoop), port 82
+  apiServer.on("/api/status", HTTP_GET, handleApiStatus);
+  apiServer.on("/api/logs",   HTTP_GET, handleApiLogs);
+  apiServer.on("/api/ping",   HTTP_GET, handleApiPing);
+  apiServer.begin();
   EEPROM.begin(EEPROM_SIZE);
   loadSchedulesFromEEPROM();
   loadCalibrationSettings();
@@ -1047,9 +1057,12 @@ void setup() {
   tempTemperature();
 
   Wire.begin(OLED_SDA, OLED_SCL);
+  Wire.setClock(50000);
+
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     storeLogEntry("OLED init failed");
   } else {
+    Wire.setClock(50000);
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     updateOLED();
@@ -4647,6 +4660,7 @@ void emailLoop(void* parameter) {
   unsigned long lastOledScheduleCheck = 0;
   for (;;) {
     resetWatchdog();
+    apiServer.handleClient(); // Collector API runs on Core 0
     handleTemperature();
     handleExternalTemperature();
 
@@ -5343,6 +5357,7 @@ void overrideLEDState() {
 }
 
 void sendEmailWithLogs(const String& trigger) {
+  return;
   if (!WiFi.isConnected()) {
     storeLogEntry("Failed to send email: No WiFi connection");
     return;
@@ -5875,6 +5890,74 @@ void tempTemperature() {
     if (externalTempC != DEVICE_DISCONNECTED_C) {
         lastValidExternalTemperature = externalTempC + sensorCalibration.externalOffset;
     }
+}
+
+// Collector API handlers — served via apiServer (port 82) on Core 0 (emailLoop)
+void handleApiPing() {
+  apiServer.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+void handleApiStatus() {
+
+  String ts = "null";
+  struct tm t;
+  if (validTimeSync && getLocalTime(&t)) {
+    char buf[20];
+    sprintf(buf, "%02d/%02d/%d %02d:%02d:%02d",
+            t.tm_mday, t.tm_mon + 1, t.tm_year + 1900,
+            t.tm_hour, t.tm_min, t.tm_sec);
+    ts = "\"" + String(buf) + "\"";
+  }
+
+  String json = "{";
+  json += "\"internal_c\":"  + String(lastValidTemperature, 2)         + ",";
+  json += "\"external_c\":"  + String(lastValidExternalTemperature, 2) + ",";
+  json += "\"relay1\":"      + String((relay1State || overrideRelay1) ? "true" : "false") + ",";
+  json += "\"relay2\":"      + String((relay2State || overrideRelay2) ? "true" : "false") + ",";
+  json += "\"relay3\":"      + String((relay3State || overrideRelay1) ? "true" : "false") + ",";
+  json += "\"override1\":"   + String(overrideRelay1 ? "true" : "false") + ",";
+  json += "\"override2\":"   + String(overrideRelay2 ? "true" : "false") + ",";
+  json += "\"has_error\":"         + String(hasError             ? "true" : "false") + ",";
+  json += "\"temp_error\":"        + String(hasTempError         ? "true" : "false") + ",";
+  json += "\"ext_temp_error\":"    + String(hasExternalTempError ? "true" : "false") + ",";
+
+  json += "\"time_synced\":"       + String(validTimeSync ? "true" : "false") + ",";
+  json += "\"timestamp\":"         + ts;
+  json += "}";
+
+  apiServer.send(200, "application/json", json);
+}
+
+void handleApiLogs() {
+  // Re-serve the logs JSON via apiServer (Core 0)
+  if (!spiffsInitialized) {
+    apiServer.send(500, "application/json", "{\"error\":\"LittleFS not initialized!\"}");
+    return;
+  }
+  if (littleFsMutex != NULL) {
+    if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+      apiServer.send(503, "application/json", "{\"error\":\"Filesystem busy, try again\"}");
+      return;
+    }
+  }
+  StaticJsonDocument<2352> doc;
+  doc.clear();
+  File file = LittleFS.open("/logs.json", "r");
+  if (!file) {
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+    apiServer.send(404, "application/json", "{\"logs\":[]}");
+    return;
+  }
+  DeserializationError error = deserializeJson(doc, file);
+  file.close();
+  if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+  if (error) {
+    apiServer.send(500, "application/json", "{\"error\":\"Failed to parse logs!\"}");
+    return;
+  }
+  String response;
+  serializeJson(doc, response);
+  apiServer.send(200, "application/json", response);
 }
 
 void handleGetRawTemperatureData() {

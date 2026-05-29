@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Aquarium Dashboard</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.1/dist/chartjs-adapter-moment.min.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <div class="container">
+        <header class="glass-panel header">
+            <h1>Smart Aquarium</h1>
+            <div class="header-controls">
+                <button id="refresh-btn" class="glass-button">Refresh</button>
+                <div class="status-indicator">
+                    <span id="conn-status" class="dot loading"></span>
+                    <span id="conn-text">Connecting...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- System Error Banner (Hidden by default) -->
+        <div id="system-error-banner" class="error-banner hidden">
+            <span class="error-icon">⚠️</span>
+            <span id="system-error-text">System Error Active</span>
+        </div>
+
+        <main>
+            <!-- Current Status Cards -->
+            <section class="cards-grid">
+                <div class="glass-panel card">
+                    <div class="card-icon temp-icon"></div>
+                    <div class="card-content">
+                        <h3>Internal Temp</h3>
+                        <p class="value" id="val-int-temp">--°C</p>
+                    </div>
+                </div>
+                <div class="glass-panel card">
+                    <div class="card-icon temp-icon-alt"></div>
+                    <div class="card-content">
+                        <h3>External Temp</h3>
+                        <p class="value" id="val-ext-temp">--°C</p>
+                    </div>
+                </div>
+                <div class="glass-panel card">
+                    <div class="card-icon relay-icon" style="align-self: start;"></div>
+                    <div class="card-content">
+                        <h3>Relays</h3>
+                        <div class="relays-container" id="val-relays">
+                            <div class="relay-row">
+                                <span class="relay-name">WaveMaker</span>
+                                <div class="relay-status-group">
+                                    <button class="relay-toggle" id="relay-toggle-1" onclick="toggleRelay(1)">OFF</button>
+                                    <span class="override-badge hidden" id="override-1">OVERRIDE</span>
+                                </div>
+                            </div>
+                            <div class="relay-row">
+                                <span class="relay-name">Light</span>
+                                <div class="relay-status-group">
+                                    <button class="relay-toggle" id="relay-toggle-2" onclick="toggleRelay(2)">OFF</button>
+                                    <span class="override-badge hidden" id="override-2">OVERRIDE</span>
+                                </div>
+                            </div>
+                            <div class="relay-row">
+                                <span class="relay-name">Air Pump</span>
+                                <div class="relay-status-group">
+                                    <button class="relay-toggle" id="relay-toggle-3" onclick="toggleRelay(3)">OFF</button>
+                                    <span class="override-badge hidden" id="override-3">OVERRIDE</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-panel card">
+                    <div class="card-icon uptime-icon"></div>
+                    <div class="card-content">
+                        <h3>Uptime</h3>
+                        <p class="value value-small" id="val-uptime">--</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Temperature Chart -->
+            <section class="glass-panel chart-section">
+                <div class="section-header">
+                    <h2>Temperature History</h2>
+                    <div class="controls">
+                        <select id="time-range" class="glass-input">
+                            <option value="60">Last 1 Hour</option>
+                            <option value="720">Last 12 Hours</option>
+                            <option value="1440">Last 24 Hours</option>
+                            <option value="4320" selected>Last 3 Days</option>
+                            <option value="7200">Last 5 Days</option>
+                            <option value="10080">Last 7 Days</option>
+                            <option value="21600">Last 15 Days</option>
+                            <option value="43200">Last 30 Days</option>
+                            <option value="0">All Time</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </section>
+
+            <!-- ESP32 Control Panels -->
+            <section class="glass-panel schedule-section">
+                <div class="section-header">
+                    <h2>ESP32 Control Panels</h2>
+                </div>
+                <div class="external-links-grid">
+                    <a href="#" target="_blank" class="glass-link-btn" id="link-main-sched">
+                        <span class="link-title">Main Schedules</span>
+                        <span class="link-icon">↗</span>
+                    </a>
+                    <a href="#" target="_blank" class="glass-link-btn" id="link-temp-sched">
+                        <span class="link-title">Temporary Schedules</span>
+                        <span class="link-icon">↗</span>
+                    </a>
+                    <a href="#" target="_blank" class="glass-link-btn" id="link-temp-ctrl">
+                        <span class="link-title">Temperature Control</span>
+                        <span class="link-icon">↗</span>
+                    </a>
+                    <a href="#" target="_blank" class="glass-link-btn" id="link-disp-ctrl">
+                        <span class="link-title">Display Control</span>
+                        <span class="link-icon">↗</span>
+                    </a>
+                </div>
+            </section>
+
+            <!-- System Logs -->
+            <section class="glass-panel logs-section">
+                <div class="section-header">
+                    <h2>System Logs</h2>
+                    <div class="controls">
+                        <input type="text" id="log-search" class="glass-input" placeholder="Search logs...">
+                    </div>
+                </div>
+                <div class="logs-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-body">
+                            <!-- Logs injected here via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+        
+        <footer class="footer">
+            <p>Smart Aquarium Collector Dashboard &bull; Last updated: <span id="last-updated">--</span></p>
+        </footer>
+    </div>
+
+    <!-- Custom JS -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
