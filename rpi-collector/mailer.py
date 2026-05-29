@@ -1,6 +1,9 @@
 import smtplib
 import datetime
 import logging
+import socket
+import threading
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
@@ -9,15 +12,77 @@ import db
 
 log = logging.getLogger(__name__)
 
+# ── Internet connectivity check ─────────────────────────────────────────────
+
+def _check_internet(host: str = "8.8.8.8", port: int = 53, timeout: float = 3.0) -> bool:
+    """Return True if we can reach the internet (DNS via TCP to Google's resolver)."""
+    try:
+        socket.setdefaulttimeout(timeout)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+        return True
+    except OSError:
+        return False
+
+
+# ── Pending-email queue (used when internet is unavailable at send time) ────
+
+_pending_lock: threading.Lock = threading.Lock()
+_pending_queue: list[dict] = []   # each entry: {subject, plain, html, attachment_bytes, attachment_name}
+
+
+def _enqueue(subject: str, body_plain: str, body_html: str,
+             attachment_bytes: bytes | None, attachment_name: str) -> None:
+    """Add an email to the pending queue to be sent once internet is available."""
+    with _pending_lock:
+        _pending_queue.append({
+            "subject": subject,
+            "body_plain": body_plain,
+            "body_html": body_html,
+            "attachment_bytes": attachment_bytes,
+            "attachment_name": attachment_name,
+        })
+    log.info("Email queued (no internet): %s  [queue length=%d]", subject, len(_pending_queue))
+
+
+def _retry_pending() -> None:
+    """Background loop: drain the pending queue as soon as internet is available."""
+    while True:
+        time.sleep(15)  # check every 15 s
+        with _pending_lock:
+            if not _pending_queue:
+                continue
+            if not _check_internet():
+                log.debug("Internet still unavailable — %d email(s) remain queued.", len(_pending_queue))
+                continue
+            # Internet is back — send all queued emails
+            log.info("Internet restored. Sending %d queued email(s).", len(_pending_queue))
+            to_send = list(_pending_queue)
+            _pending_queue.clear()
+
+        for item in to_send:
+            _send_now(
+                item["subject"],
+                item["body_plain"],
+                item["body_html"],
+                item["attachment_bytes"],
+                item["attachment_name"],
+            )
+
+
+# Start the retry thread at module load (daemon so it dies with the process)
+_retry_thread = threading.Thread(target=_retry_pending, name="mailer_retry", daemon=True)
+_retry_thread.start()
+
+
 # ── shared helpers ─────────────────────────────────────────────────────────
 
 def _now_str() -> str:
     return datetime.datetime.now().astimezone().strftime("%d %b %Y, %H:%M:%S %Z")
 
 
-def _send(subject: str, body_plain: str, body_html: str, attachment_bytes: bytes | None = None,
-          attachment_name: str = "logs.txt") -> None:
-    """Low-level helper that builds and sends a MIME email."""
+def _send_now(subject: str, body_plain: str, body_html: str, attachment_bytes: bytes | None = None,
+              attachment_name: str = "logs.txt") -> None:
+    """Low-level helper that builds and sends a MIME email (no internet check)."""
     if not getattr(config, "EMAIL_SENDER_ACCOUNT", None) or \
        not getattr(config, "EMAIL_SENDER_PASSWORD", None):
         log.warning("Email not sent: Missing SMTP credentials in config.py")
@@ -50,6 +115,15 @@ def _send(subject: str, body_plain: str, body_html: str, attachment_bytes: bytes
         log.info("Email sent successfully.")
     except Exception as exc:
         log.error("Failed to send email: %s", exc)
+
+
+def _send(subject: str, body_plain: str, body_html: str, attachment_bytes: bytes | None = None,
+          attachment_name: str = "logs.txt") -> None:
+    """Send an email, queuing it if internet is currently unavailable."""
+    if _check_internet():
+        _send_now(subject, body_plain, body_html, attachment_bytes, attachment_name)
+    else:
+        _enqueue(subject, body_plain, body_html, attachment_bytes, attachment_name)
 
 
 # ── CSS / base template ────────────────────────────────────────────────────

@@ -292,10 +292,22 @@ function initChart() {
                 x: {
                     type: 'time',
                     time: {
-                        tooltipFormat: 'MMM D, HH:mm'
+                        unit: 'hour',
+                        stepSize: 2,
+                        tooltipFormat: 'MMM D, HH:mm',
+                        displayFormats: {
+                            minute: 'HH:mm',
+                            hour:   'HH:mm',
+                            day:    'MMM D'
+                        }
                     },
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    border: { display: false }
+                    border: { display: false },
+                    ticks: {
+                        maxRotation: 0,
+                        autoSkip: true,
+                        autoSkipPadding: 20
+                    }
                 },
                 y: {
                     grid: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -315,45 +327,189 @@ function initChart() {
     });
 }
 
+// ── Chart helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Downsample an array to at most maxPoints entries by picking every Nth point.
+ * Always keeps the first and last point so the visible range stays intact.
+ */
+function _downsample(arr, maxPoints) {
+    if (arr.length <= maxPoints) return arr;
+    const step = Math.ceil(arr.length / maxPoints);
+    const result = [];
+    for (let i = 0; i < arr.length; i += step) result.push(arr[i]);
+    // Ensure the last real point is always included
+    if (result[result.length - 1] !== arr[arr.length - 1]) {
+        result.push(arr[arr.length - 1]);
+    }
+    return result;
+}
+
+/**
+ * Return midnight boundaries (local time) between start and end as Date objects.
+ */
+function _midnightsBetween(start, end) {
+    const midnights = [];
+    // Start from the midnight after 'start'
+    const d = new Date(start);
+    d.setHours(24, 0, 0, 0); // next local midnight
+    while (d <= end) {
+        midnights.push(new Date(d));
+        d.setDate(d.getDate() + 1);
+    }
+    return midnights;
+}
+
+// Persist day-boundary info so the afterDraw plugin can read it
+let _dayBoundaries = []; // array of Date objects at local midnight
+let _showDayLines = false;
+
+// Register a Chart.js plugin that draws vertical dotted day-separator lines
+// and date labels rendered INSIDE the chart area (near the top of each line)
+// to avoid colliding with Chart.js's own tick labels on the x-axis.
+Chart.register({
+    id: 'dayBoundaryLines',
+    afterDraw(chart) {
+        if (!_showDayLines || _dayBoundaries.length === 0) return;
+        const { ctx, scales: { x, y } } = chart;
+        const top    = y.top;
+        const bottom = y.bottom;
+
+        const LABEL_FONT   = '11px Outfit, sans-serif';
+        const LABEL_PAD_X  = 6;   // horizontal padding inside the pill
+        const LABEL_PAD_Y  = 3;   // vertical padding inside the pill
+        const LABEL_TOP    = top + 8; // distance from the top of the plot area
+
+        ctx.save();
+
+        for (const midnight of _dayBoundaries) {
+            const xPx = x.getPixelForValue(midnight.getTime());
+            if (xPx < x.left || xPx > x.right) continue;
+
+            // ── Vertical dotted line spanning the full plot area ──
+            ctx.setLineDash([4, 6]);
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+            ctx.lineWidth   = 1;
+            ctx.beginPath();
+            ctx.moveTo(xPx, top);
+            ctx.lineTo(xPx, bottom);
+            ctx.stroke();
+
+            // ── Date label pill drawn inside the chart near the top ──
+            ctx.setLineDash([]); // solid for the pill
+            ctx.font = LABEL_FONT;
+            const label     = midnight.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const textW     = ctx.measureText(label).width;
+            const pillW     = textW + LABEL_PAD_X * 2;
+            const pillH     = 14 + LABEL_PAD_Y * 2;
+            const pillX     = xPx - pillW / 2;
+            const pillY     = LABEL_TOP;
+            const radius    = 4;
+
+            // Pill background
+            ctx.beginPath();
+            ctx.moveTo(pillX + radius, pillY);
+            ctx.lineTo(pillX + pillW - radius, pillY);
+            ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + radius, radius);
+            ctx.lineTo(pillX + pillW, pillY + pillH - radius);
+            ctx.arcTo(pillX + pillW, pillY + pillH, pillX + pillW - radius, pillY + pillH, radius);
+            ctx.lineTo(pillX + radius, pillY + pillH);
+            ctx.arcTo(pillX, pillY + pillH, pillX, pillY + pillH - radius, radius);
+            ctx.lineTo(pillX, pillY + radius);
+            ctx.arcTo(pillX, pillY, pillX + radius, pillY, radius);
+            ctx.closePath();
+            ctx.fillStyle   = 'rgba(14, 30, 58, 0.82)';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.30)';
+            ctx.lineWidth   = 1;
+            ctx.stroke();
+
+            // Pill text
+            ctx.fillStyle   = 'rgba(186, 208, 232, 0.90)';
+            ctx.textAlign   = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, xPx, pillY + pillH / 2);
+        }
+
+        ctx.restore();
+    }
+});
+
 // Fetch Chart Data
 async function fetchChartData() {
-    const hours = parseInt(els.timeRange.value) / 60; // minutes to hours
-    
-    // For large time ranges, we limit points returned to prevent browser lag.
-    // In a real prod environment, the API should downsample. We'll fetch a lot and let ChartJS handle it,
-    // or just fetch up to limit=1000 which is the API default.
-    let limit = 1000;
-    if (hours > 24) limit = 3000; // Arbitrary higher limit for longer ranges
-    if (hours > 72) limit = 5000;
-    if (hours > 168) limit = 10000;
-    if (hours > 360) limit = 20000;
-    if (hours === 0) limit = 100000; // All time
-    
-    // Calculate 'since'
+    const minutes = parseInt(els.timeRange.value); // raw value is already minutes
+    const hours   = minutes / 60;
+
+    // Determine how many raw rows to fetch
+    let limit = 2000;
+    if (hours > 24)  limit = 5000;
+    if (hours > 72)  limit = 10000;
+    if (hours > 168) limit = 20000;
+    if (minutes === 0) limit = 100000; // All time
+
+    // ── Accurate 'since' calculation ──
+    // Use Date.now() minus the exact millisecond offset to avoid the
+    // setHours() roll-over bug that caused ~6h of missing data on 24h view.
     let sinceIso = "";
-    if (hours > 0) {
-        const sinceDate = new Date();
-        sinceDate.setHours(sinceDate.getHours() - hours);
-        sinceIso = sinceDate.toISOString();
+    let sinceDate = null;
+    if (minutes > 0) {
+        sinceDate = new Date(Date.now() - minutes * 60 * 1000);
+        sinceIso  = sinceDate.toISOString();
     }
-    
+
     const res = await fetch(`/temperature?limit=${limit}${sinceIso ? `&since=${sinceIso}` : ''}`);
     if (!res.ok) throw new Error('Chart data fetch failed');
     const data = await res.json();
-    
-    // API returns DESC, Chart.js needs ASC
+
+    // API returns DESC order — Chart.js time axis needs ASC
     data.reverse();
-    
-    const internalData = [];
-    const externalData = [];
-    
+
+    // ── Build raw point arrays ──
+    const rawInternal = [];
+    const rawExternal = [];
     data.forEach(row => {
-        // Use collected_at for the x-axis
         const t = new Date(row.collected_at);
-        internalData.push({ x: t, y: row.internal_c });
-        externalData.push({ x: t, y: row.external_c });
+        rawInternal.push({ x: t, y: row.internal_c });
+        rawExternal.push({ x: t, y: row.external_c });
     });
-    
+
+    // ── Downsample for multi-day views ──
+    // Keep max 300 visible points so the chart is readable without clutter.
+    // For 1h / 12h views keep all points (they're few enough already).
+    const MAX_POINTS = hours <= 12 ? rawInternal.length : 300;
+    const internalData = _downsample(rawInternal, MAX_POINTS);
+    const externalData = _downsample(rawExternal, MAX_POINTS);
+
+    // ── Day-boundary lines (only when span > 1 day) ──
+    _showDayLines = hours > 24;
+    if (_showDayLines && rawInternal.length > 0) {
+        const chartStart = sinceDate || rawInternal[0].x;
+        const chartEnd   = rawInternal[rawInternal.length - 1].x;
+        _dayBoundaries   = _midnightsBetween(chartStart, chartEnd);
+    } else {
+        _dayBoundaries = [];
+    }
+
+    // ── Configure x-axis tick density based on range ──
+    // For multi-day views skip hourly ticks and show fewer, cleaner labels.
+    let xUnit, xStepSize;
+    if (hours <= 2) {
+        xUnit = 'minute'; xStepSize = 15;
+    } else if (hours <= 12) {
+        xUnit = 'hour'; xStepSize = 1;
+    } else if (hours <= 24) {
+        xUnit = 'hour'; xStepSize = 2;
+    } else if (hours <= 72) {
+        xUnit = 'hour'; xStepSize = 6;
+    } else if (hours <= 168) {
+        xUnit = 'hour'; xStepSize = 12;
+    } else {
+        xUnit = 'day'; xStepSize = 1;
+    }
+
+    tempChart.options.scales.x.time.unit     = xUnit;
+    tempChart.options.scales.x.time.stepSize = xStepSize;
+
     tempChart.data.datasets[0].data = internalData;
     tempChart.data.datasets[1].data = externalData;
     tempChart.update();

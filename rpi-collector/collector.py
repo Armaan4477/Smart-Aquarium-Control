@@ -42,6 +42,7 @@ uptime_state = {
     "failed_ping_count": 0,
     "is_offline": False,
     "uptime_pending": True,   # True until first successful ping after (re)start
+    "went_offline_at": None,  # wall-clock time when is_offline first became True
 }
 
 _ESP32_STATUS_URL = f"http://{config.ESP32_IP}:{config.ESP32_PORT}/api/status"
@@ -278,8 +279,26 @@ def _health_ping():
                 log.warning("Failed to persist uptime_seconds: %s", exc)
 
             if uptime_state["is_offline"]:
+                # ESP32 has come back online after an offline period.
+                # Reset the uptime counter to 0 so it reflects continuous
+                # uptime since recovery, not cumulative time that would
+                # incorrectly include the offline gap.
+                offline_duration = 0
+                if uptime_state["went_offline_at"] is not None:
+                    offline_duration = int(
+                        (datetime.datetime.utcnow() - uptime_state["went_offline_at"]).total_seconds()
+                    )
+                log.info(
+                    "ESP32 is back online after %d s offline. Resetting uptime counter.",
+                    offline_duration,
+                )
+                uptime_state["rpi_uptime_seconds"] = 0
+                uptime_state["went_offline_at"] = None
                 uptime_state["is_offline"] = False
-                log.info("ESP32 is back online. Sending email.")
+                try:
+                    db.set_state("uptime_seconds", 0)
+                except Exception as exc:
+                    log.warning("Failed to persist reset uptime_seconds: %s", exc)
                 mailer.send_online_email()
         else:
             _handle_ping_failure()
@@ -290,6 +309,7 @@ def _handle_ping_failure():
     uptime_state["failed_ping_count"] += 1
     if uptime_state["failed_ping_count"] >= 3 and not uptime_state["is_offline"]:
         uptime_state["is_offline"] = True
+        uptime_state["went_offline_at"] = datetime.datetime.utcnow()
         log.warning("ESP32 is offline. Sending email.")
         mailer.send_offline_email()
 

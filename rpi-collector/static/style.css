@@ -332,6 +332,8 @@ main {
     cursor: pointer;
     font-family: inherit;
     white-space: nowrap;
+    min-width: 42px;
+    text-align: center;
 }
 
 .relay-toggle:hover {
