@@ -55,7 +55,6 @@ void checkSchedules();
 void checkScheduleslaunch();
 void activateRelay(int, bool);
 void deactivateRelay(int, bool);
-void toggleLightSequence();
 void broadcastRelayStates();
 void handleGetTemporarySchedules();
 void handleAddTemporarySchedule();
@@ -4913,9 +4912,16 @@ void activateRelay(int relayNum, bool manual) {
       storeLogEntry("Wavemaker activated.");
       break;
     case 2:
-      toggleLightSequence();
       digitalWrite(relay4, LOW);
       relay4State = true;
+      for (int i = 0; i < TOGGLE_COUNT; i++) {
+        digitalWrite(relay2, HIGH);
+        delay(TOGGLE_DELAY);
+        digitalWrite(relay2, LOW);
+        delay(TOGGLE_DELAY);
+      }
+      digitalWrite(relay2, LOW);
+      relay2State = true;
       storeLogEntry("Lights activated.");
       break;
     case 3:
@@ -5137,24 +5143,14 @@ void handleRoot() {
   server.send_P(200, "text/html", mainPage);
 }
 
-void toggleRelay(int relayPin, bool& relayState) {
-  if ((relayPin == relay1 && overrideRelay1) || (relayPin == relay2 && overrideRelay2)) {
-    storeLogEntry("Physical override active, ignoring toggle.");
-    return;
-  }
-  relayState = !relayState;
-  digitalWrite(relayPin, relayState ? LOW : HIGH);
-  storeLogEntry("Relay state changed to: " + String(relayState));
-  broadcastRelayStates();
-}
-
 void handleRelay1() {
   if (server.method() == HTTP_POST) {
     if (overrideRelay1) {
       server.send(403, "application/json", "{\"error\":\"Physical override active\"}");
       return;
     }
-    toggleRelay(relay1, relay1State);
+    if (relay1State) deactivateRelay(1, true);
+    else activateRelay(1, true);
     server.send(200, "application/json", "{\"state\":" + String(relay1State) + "}");
   } else if (server.method() == HTTP_GET) {
     server.send(200, "application/json", "{\"state\":" + String(relay1State) + "}");
@@ -5168,20 +5164,10 @@ void handleRelay2() {
       return;
     }
 
-    if (!relay2State) {
-      toggleLightSequence();
-      digitalWrite(relay4, LOW);
-      relay4State = true;
-    } else {
-      digitalWrite(relay2, HIGH);
-      relay2State = false;
-      digitalWrite(relay4, HIGH);
-      relay4State = false;
-      storeLogEntry("Lights deactivated.");
-    }
+    if (relay2State) deactivateRelay(2, true);
+    else activateRelay(2, true);
 
     server.send(200, "application/json", "{\"state\":" + String(relay2State) + "}");
-    broadcastRelayStates();
   } else if (server.method() == HTTP_GET) {
     server.send(200, "application/json", "{\"state\":" + String(relay2State) + "}");
   }
@@ -5193,25 +5179,15 @@ void handleRelay3() {
       server.send(403, "application/json", "{\"error\":\"Physical override active\"}");
       return;
     }
-    toggleRelay(relay3, relay3State);
+    if (relay3State) deactivateRelay(3, true);
+    else activateRelay(3, true);
     server.send(200, "application/json", "{\"state\":" + String(relay3State) + "}");
   } else if (server.method() == HTTP_GET) {
     server.send(200, "application/json", "{\"state\":" + String(relay3State) + "}");
   }
 }
 
-void toggleLightSequence() {
-  for (int i = 0; i < TOGGLE_COUNT; i++) {
-    digitalWrite(relay2, HIGH);
-    delay(TOGGLE_DELAY);
-    digitalWrite(relay2, LOW);
-    delay(TOGGLE_DELAY);
-  }
-  digitalWrite(relay2, LOW);
-  relay2State = true;
-  //storeLogEntry("Light relay toggled sequence completed");
-  broadcastRelayStates();
-}
+
 
 void handleTime() {
   struct tm timeinfo;
