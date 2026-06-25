@@ -2248,6 +2248,7 @@ const char displayCtrlPage[] PROGMEM = R"html(
     <div id="toast"></div>
     <script>
         let currentData = {};
+        let isEditing = false;
 
         const modeNames = ['Following schedule', 'Forced ON', 'Forced OFF'];
 
@@ -2273,8 +2274,10 @@ const char displayCtrlPage[] PROGMEM = R"html(
             document.getElementById('btn-on').className     = 'override-btn' + (d.overrideMode === 1 ? ' active-on'       : '');
             document.getElementById('btn-off').className    = 'override-btn' + (d.overrideMode === 2 ? ' active-off'      : '');
             // Schedule fields
-            document.getElementById('onTime').value  = pad(d.onHour)  + ':' + pad(d.onMinute);
-            document.getElementById('offTime').value = pad(d.offHour) + ':' + pad(d.offMinute);
+            if (!isEditing) {
+                document.getElementById('onTime').value  = pad(d.onHour)  + ':' + pad(d.onMinute);
+                document.getElementById('offTime').value = pad(d.offHour) + ':' + pad(d.offMinute);
+            }
         }
 
         function loadData() {
@@ -2318,11 +2321,15 @@ const char displayCtrlPage[] PROGMEM = R"html(
             .then(d => {
                 if (d.status === 'success') {
                     showToast('Schedule saved', 'success');
+                    isEditing = false;
                     setTimeout(loadData, 400);
                 } else { showToast('Error: ' + (d.error || 'unknown'), 'error'); }
             })
             .catch(() => showToast('Request failed', 'error'));
         }
+
+        document.getElementById('onTime').addEventListener('input', () => isEditing = true);
+        document.getElementById('offTime').addEventListener('input', () => isEditing = true);
 
         // Refresh status every 5 s
         loadData();
@@ -5690,17 +5697,17 @@ void checkTemporarySchedules() {
       if (schedule.relayNumber == 1) {
         if (!relay1State && !overrideRelay1) {
           activateRelay(1, false);
-          storeLogEntry("Temporary schedule activated Wavemaker");
+         // storeLogEntry("Temporary schedule activated Wavemaker");
         }
       } else if (schedule.relayNumber == 2) {
         if (!relay2State && !overrideRelay2) {
           activateRelay(2, false);
-          storeLogEntry("Temporary schedule activated Lights");
+         // storeLogEntry("Temporary schedule activated Lights");
         }
       } else if (schedule.relayNumber == 3) {
         if (!relay3State && !overrideRelay1) {
           activateRelay(3, false);
-          storeLogEntry("Temporary schedule activated Air Pump");
+        //  storeLogEntry("Temporary schedule activated Air Pump");
         }
       }
 
@@ -5713,17 +5720,17 @@ void checkTemporarySchedules() {
       if (schedule.relayNumber == 1) {
         if (relay1State && !overrideRelay1) {
           deactivateRelay(1, false);
-          storeLogEntry("Temporary schedule deactivated Wavemaker");
+        // storeLogEntry("Temporary schedule deactivated Wavemaker");
         }
       } else if (schedule.relayNumber == 2) {
         if (relay2State && !overrideRelay2) {
           deactivateRelay(2, false);
-          storeLogEntry("Temporary schedule deactivated Lights");
+        //  storeLogEntry("Temporary schedule deactivated Lights");
         }
       } else if (schedule.relayNumber == 3) {
         if (relay3State && !overrideRelay1) {
           deactivateRelay(3, false);
-          storeLogEntry("Temporary schedule deactivated Air Pump");
+        //  storeLogEntry("Temporary schedule deactivated Air Pump");
         }
       }
 
