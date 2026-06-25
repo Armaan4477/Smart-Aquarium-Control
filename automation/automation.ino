@@ -5015,9 +5015,9 @@ void networkLoop(void* parameter) {
     resetWatchdog();
     apiServer.handleClient();
     handleTemperature();
-    resetWatchdog();
+    //resetWatchdog();
     handleExternalTemperature();
-    resetWatchdog();
+    //resetWatchdog();
 
     if ((hasTempError || hasExternalTempError) && millis() - lastOledBlink >= 500) {
       oledBlinkState = !oledBlinkState;
