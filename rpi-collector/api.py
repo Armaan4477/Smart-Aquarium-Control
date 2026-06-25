@@ -70,6 +70,20 @@ def force_refresh():
         log.error(f"Force refresh failed: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.get("/api/email_config")
+def get_email_config():
+    """Return email notification configuration."""
+    is_enabled = db.get_state("email_enabled", "1")
+    return jsonify({"email_enabled": is_enabled == "1"})
+
+@app.post("/api/email_config")
+def set_email_config():
+    """Update email notification configuration."""
+    data = request.json
+    if data and "email_enabled" in data:
+        db.set_state("email_enabled", "1" if data["email_enabled"] else "0")
+    return jsonify({"status": "ok"})
+
 
 # ── helpers ────────────────────────────────────────────────────────────────
 

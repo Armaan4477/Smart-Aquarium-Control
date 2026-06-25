@@ -18,7 +18,8 @@ const els = {
     logsBody: document.getElementById('logs-body'),
     logSearch: document.getElementById('log-search'),
     errorBanner: document.getElementById('system-error-banner'),
-    errorText: document.getElementById('system-error-text')
+    errorText: document.getElementById('system-error-text'),
+    emailToggle: document.getElementById('email-toggle')
 };
 
 // State
@@ -33,6 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
     els.refreshBtn.addEventListener('click', forceFetchData);
     els.timeRange.addEventListener('change', fetchChartData);
     els.logSearch.addEventListener('input', renderLogs);
+    if (els.emailToggle) {
+        els.emailToggle.addEventListener('change', toggleEmailNotifications);
+    }
+    
+    // Fetch email config
+    fetchEmailConfig();
     
     // Auto-refresh
     setInterval(fetchData, REFRESH_INTERVAL_MS);
@@ -40,6 +47,36 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize external links
     initializeLinks();
 });
+
+async function fetchEmailConfig() {
+    try {
+        const res = await fetch('/api/email_config');
+        if (!res.ok) throw new Error('Failed to fetch email config');
+        const data = await res.json();
+        if (els.emailToggle) {
+            els.emailToggle.checked = data.email_enabled;
+        }
+    } catch (e) {
+        console.error("Could not fetch email config:", e);
+    }
+}
+
+async function toggleEmailNotifications(e) {
+    const isEnabled = e.target.checked;
+    try {
+        const res = await fetch('/api/email_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email_enabled: isEnabled })
+        });
+        if (!res.ok) throw new Error('Failed to update email config');
+    } catch (error) {
+        console.error("Error updating email config:", error);
+        // Revert toggle on failure
+        e.target.checked = !isEnabled;
+        alert("Failed to update email settings.");
+    }
+}
 
 async function initializeLinks() {
     try {

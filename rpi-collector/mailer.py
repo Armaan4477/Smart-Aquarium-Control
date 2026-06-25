@@ -83,6 +83,10 @@ def _now_str() -> str:
 def _send_now(subject: str, body_plain: str, body_html: str, attachment_bytes: bytes | None = None,
               attachment_name: str = "logs.txt") -> None:
     """Low-level helper that builds and sends a MIME email (no internet check)."""
+    if db.get_state("email_enabled", "1") != "1":
+        log.info("Email notifications disabled. Skipping email: %s", subject)
+        return
+
     if not getattr(config, "EMAIL_SENDER_ACCOUNT", None) or \
        not getattr(config, "EMAIL_SENDER_PASSWORD", None):
         log.warning("Email not sent: Missing SMTP credentials in config.py")
@@ -120,6 +124,10 @@ def _send_now(subject: str, body_plain: str, body_html: str, attachment_bytes: b
 def _send(subject: str, body_plain: str, body_html: str, attachment_bytes: bytes | None = None,
           attachment_name: str = "logs.txt") -> None:
     """Send an email, queuing it if internet is currently unavailable."""
+    if db.get_state("email_enabled", "1") != "1":
+        log.info("Email notifications disabled. Skipping queue/send for: %s", subject)
+        return
+
     if _check_internet():
         _send_now(subject, body_plain, body_html, attachment_bytes, attachment_name)
     else:
