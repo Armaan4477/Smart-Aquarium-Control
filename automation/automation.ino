@@ -1021,6 +1021,7 @@ void setup() {
   loadSchedulesFromEEPROM();
   loadCalibrationSettings();
   loadDisplaySchedule();
+  loadEmailConfig();
 
   schedules.reserve(MAX_SCHEDULES);
   temporarySchedules.reserve(6);
