@@ -925,7 +925,17 @@ void attemptTimeSync() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
 
   struct tm timeinfo;
-  if (getLocalTime(&timeinfo)) {
+  bool synced = false;
+  unsigned long pollStart = millis();
+  while (millis() - pollStart < 3000) {
+    if (getLocalTime(&timeinfo, 0)) {
+      synced = true;
+      break;
+    }
+    delay(100);
+  }
+
+  if (synced) {
     if (!validTimeSync || timeSyncErrorLogged) {
       storeLogEntry("Time and Date sync successful");
     }
@@ -1067,7 +1077,11 @@ void setup() {
     .idle_core_mask = 0,
     .trigger_panic = true
   };
-  esp_task_wdt_init(&wdt_config);
+  esp_err_t wdt_err = esp_task_wdt_reconfigure(&wdt_config);
+  if (wdt_err != ESP_OK) {
+    esp_task_wdt_deinit();
+    esp_task_wdt_init(&wdt_config);
+  }
   littleFsMutex = xSemaphoreCreateMutex();
 
   xTaskCreatePinnedToCore(
