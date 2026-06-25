@@ -261,7 +261,18 @@ def _health_ping():
     url = f"http://{config.ESP32_IP}:{config.ESP32_PORT}/api/ping"
     try:
         resp = requests.get(url, auth=_AUTH, timeout=3.0)
-        if resp.status_code == 200:
+        is_docker_disabled = False
+        
+        if resp.status_code == 403:
+            try:
+                if resp.json().get("error") == "Docker integration disabled":
+                    is_docker_disabled = True
+            except ValueError:
+                pass
+                
+        if resp.status_code == 200 or is_docker_disabled:
+            uptime_state["docker_disabled"] = is_docker_disabled
+            
             # First successful ping after a (re)start — clear the pending flag
             # so the API starts surfacing real uptime values instead of '--'.
             if uptime_state["uptime_pending"]:

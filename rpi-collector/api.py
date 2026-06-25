@@ -126,6 +126,7 @@ def get_temperature_latest():
     result = _row_to_dict(row)
     result["is_offline"]     = collector.uptime_state.get("is_offline", False)
     result["uptime_pending"] = collector.uptime_state.get("uptime_pending", False)
+    result["docker_disabled"] = collector.uptime_state.get("docker_disabled", False)
     return jsonify(result)
 
 

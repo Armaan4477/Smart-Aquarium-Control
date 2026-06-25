@@ -47,6 +47,7 @@ async function initializeLinks() {
         if (!res.ok) throw new Error('Failed to fetch config');
         const config = await res.json();
         
+        window.ESP32_IP = config.esp32_ip;
         const ip = config.esp32_ip;
         document.getElementById('link-main-sched').href = `http://${ip}/mainSchedules`;
         document.getElementById('link-temp-sched').href = `http://${ip}/tempschedules`;
@@ -160,7 +161,14 @@ async function fetchLatestStatus() {
     }
     
     // Error Banner
-    if (data.has_error) {
+    if (data.docker_disabled) {
+        let link = window.ESP32_IP ? `http://${window.ESP32_IP}/dockerConfig` : '/proxy/dockerConfig';
+        els.errorText.innerHTML = `<strong>Docker Integration Disabled:</strong> The collector cannot fetch the latest status. Please enable it in the <a href="${link}" style="color: inherit; text-decoration: underline;" target="_blank">Docker Settings</a> on the ESP32.`;
+        els.errorBanner.classList.remove('hidden');
+        els.errorBanner.style.backgroundColor = '#ffc107';
+        els.errorBanner.style.color = '#333';
+        els.errorText.style.color = '#333';
+    } else if (data.has_error) {
         let msg = "System Error Active";
         if (data.temp_error && data.ext_temp_error) {
             msg = "Critical: Both internal and external temperature sensors failed!";
@@ -171,6 +179,10 @@ async function fetchLatestStatus() {
         }
         els.errorText.textContent = msg;
         els.errorBanner.classList.remove('hidden');
+        // Reset styles to default error styling
+        els.errorBanner.style.backgroundColor = '';
+        els.errorBanner.style.color = '';
+        els.errorText.style.color = '';
     } else {
         els.errorBanner.classList.add('hidden');
     }
