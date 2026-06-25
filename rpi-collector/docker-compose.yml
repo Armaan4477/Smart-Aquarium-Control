@@ -1,0 +1,25 @@
+services:
+  aquarium-collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: aquarium-collector
+    restart: unless-stopped
+
+    ports:
+      - "5050:5050"
+
+    volumes:
+      - ./data:/data
+
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Kolkata
+
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true

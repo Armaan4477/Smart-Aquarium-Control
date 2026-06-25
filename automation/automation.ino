@@ -7,6 +7,7 @@
 #include <EEPROM.h>
 #include <string>
 #include <Ticker.h>
+#include <esp_task_wdt.h>
 #include <TimeLib.h>
 #include <LittleFS.h>
 #include <WiFiClientSecure.h>
@@ -19,11 +20,11 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define OLED_SDA      21
-#define OLED_SCL      22
-#define SCREEN_WIDTH  128
+#define OLED_SDA 21
+#define OLED_SCL 22
+#define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-#define OLED_RESET    -1
+#define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 bool oledBlinkState = false;
 void updateOLED();
@@ -44,7 +45,7 @@ void handleClearError();
 void handleGetErrorStatus();
 void handleOneClickLight();
 void handleTemperature();
-void emailLoop(void*);
+void networkLoop(void*);
 void mainLoop(void*);
 void sendEmailWithLogs(const String&);
 void checkoverride1();
@@ -54,7 +55,6 @@ void checkSchedules();
 void checkScheduleslaunch();
 void activateRelay(int, bool);
 void deactivateRelay(int, bool);
-void toggleLightSequence();
 void broadcastRelayStates();
 void handleGetTemporarySchedules();
 void handleAddTemporarySchedule();
@@ -71,11 +71,24 @@ void handleSaveCalibrationSettings();
 void tempTemperature();
 void handleGetRawTemperatureData();
 void handleDisplayCtrlPage();
+void handleEmailConfigPage();
+void handleGetEmailConfig();
+void handleSaveEmailConfig();
 void handleGetDisplaySchedule();
 void handleSaveDisplaySchedule();
 void loadDisplaySchedule();
+void loadEmailConfig();
+void saveEmailConfig();
 void saveDisplaySchedule();
 void applyOledSchedule();
+void handleApiStatus();
+void handleApiLogs();
+void handleApiPing();
+void handleDockerConfigPage();
+void handleGetDockerConfig();
+void handleSaveDockerConfig();
+void loadDockerConfig();
+void saveDockerConfig();
 
 struct Schedule {
   int id;
@@ -113,12 +126,25 @@ struct CalibrationData {
 
 struct DisplaySchedule {
   uint8_t magic;
-  int     onHour;
-  int     onMinute;
-  int     offHour;
-  int     offMinute;
+  int onHour;
+  int onMinute;
+  int offHour;
+  int offMinute;
   uint8_t overrideMode;
-  bool    enabled;
+  bool enabled;
+};
+
+struct EmailConfig {
+  uint8_t magic;
+  bool enabled;
+  char senderAccount[64];
+  char senderPassword[64];
+  char recipient[64];
+};
+
+struct DockerConfig {
+  uint8_t magic;
+  bool enabled;
 };
 
 const int relay1 = 18;
@@ -145,9 +171,6 @@ const char* password = "Your_WiFi_Password";
 std::vector<LogEntry> logBuffer;
 bool spiffsInitialized = false;
 WiFiUDP ntpUDP;
-Ticker watchdogTicker;
-unsigned long lastLoopTime = 0;
-const unsigned long watchdogTimeout = 10000;
 unsigned long lastTimeUpdate = 0;
 const long timeUpdateInterval = 1000;
 unsigned long lastNTPSync = 0;
@@ -166,21 +189,21 @@ volatile bool emailInProgress = false;
 std::vector<Schedule> schedules;
 std::vector<TemporarySchedule> temporarySchedules;
 int tempScheduleIdCounter = 0;
-const int EEPROM_SIZE = 512;
+const int EEPROM_SIZE = 1024;
 const int SCHEDULE_SIZE = sizeof(Schedule);
 const int MAX_SCHEDULES = 10;
 const int SCHEDULE_START_ADDR = 0;
 const int TOGGLE_DELAY = 500;
 const int TOGGLE_COUNT = 3;
 const std::vector<String> allowedIPs = {
-  "192.168.29.3", //Rpi
-  "192.168.29.4", //A Mac
-  "192.168.29.5", //A Ipad
-  "192.168.29.6", //A Phone
-  "192.168.29.8", //Acer
-  "192.168.29.9", //N Phone
-  "192.168.29.10", //F moto
-  "192.168.29.11" //S moto
+  "192.168.29.3",   //Rpi
+  "192.168.29.4",   //A Mac
+  "192.168.29.5",   //A Ipad
+  "192.168.29.6",   //A Phone
+  "192.168.29.8",   //Acer
+  "192.168.29.9",   //N Phone
+  "192.168.29.10",  //F moto
+  "192.168.29.11"   //S moto
 };
 unsigned long lastSwitch1Debounce = 0;
 unsigned long lastSwitch2Debounce = 0;
@@ -213,17 +236,24 @@ unsigned long lastTemp = 0;
 unsigned long lastExternalTemp = 0;
 float lastValidTemperature = 0;
 float lastValidExternalTemperature = 0;
-const int MAX_EXTERNAL_TEMP_FAILURES = 8;
+const int MAX_EXTERNAL_TEMP_FAILURES = 3;
 int consecutiveExternalTempFailures = 0;
 bool hasExternalTempError = false;
 bool externalTempErrorLogged = false;
 
-CalibrationData sensorCalibration = {0.0, 0.0};
+CalibrationData sensorCalibration = { 0.0, 0.0 };
 const int CALIBRATION_START_ADDR = SCHEDULE_START_ADDR + (MAX_SCHEDULES * SCHEDULE_SIZE) + 1;
 const int CALIBRATION_SIZE = sizeof(CalibrationData);
 
 const int DISPLAY_SCHEDULE_ADDR = CALIBRATION_START_ADDR + CALIBRATION_SIZE + 1;
-DisplaySchedule displaySchedule = {0xDA, 8, 0, 22, 0, 0, true};
+DisplaySchedule displaySchedule = { 0xDA, 8, 0, 22, 0, 0, true };
+
+const int EMAIL_CONFIG_ADDR = DISPLAY_SCHEDULE_ADDR + sizeof(DisplaySchedule) + 1;
+EmailConfig emailConfig = { 0xE2, true, "", "", "" };
+
+const int DOCKER_CONFIG_ADDR = EMAIL_CONFIG_ADDR + sizeof(EmailConfig) + 1;
+DockerConfig dockerConfig = { 0xD1, true };
+
 bool oledPhysicalState = false;
 
 WiFiEventId_t wifiConnectHandler;
@@ -780,19 +810,17 @@ const size_t favicon_png_len = sizeof(favicon_png);
 
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT 465
-const char* emailSenderAccount = "your-email@gmail.com";
-const char* emailSenderPassword = "your-app-specific-password";
-const char* emailRecipient = "recipient@email.com";
 const char* emailSubject = "Aquarium Control Logs";
 
 WiFiClientSecure ssl_client;
 SMTPClient smtp(ssl_client);
 
 WebServer server(80);
+WebServer apiServer(82);  // Collector API — handled on Core 0 (networkLoop)
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
-const int MAX_TEMP_FAILURES = 8;
+const int MAX_TEMP_FAILURES = 5;
 int consecutiveTempFailures = 0;
 bool hasTempError = false;
 
@@ -848,7 +876,7 @@ void storeLogEntry(const String& msg) {
   if (!spiffsInitialized) return;
 
   if (littleFsMutex != NULL) {
-    if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
+    if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
       return;
     }
   }
@@ -909,54 +937,13 @@ void storeLogEntry(const String& msg) {
 }
 
 void resetWatchdog() {
-  lastLoopTime = millis();
-}
-
-void checkWatchdog() {
-  if (millis() - lastLoopTime > watchdogTimeout) {
-    ESP.restart();
-  }
+  esp_task_wdt_reset();
 }
 
 bool validDateSync = false;
 
 TaskHandle_t networkTask;
 TaskHandle_t controlTask;
-
-
-
-void attemptTimeSync() {
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-  struct tm timeinfo;
-  if (getLocalTime(&timeinfo)) {
-    if (!validTimeSync || timeSyncErrorLogged) {
-      storeLogEntry("Time and Date sync successful");
-    }
-    validTimeSync = true;
-    validDateSync = true;
-    lastNTPSync = millis();
-    clearError();
-    timeSyncErrorLogged = false;
-
-    setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-            timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
-  } else {
-    if (!timeSyncErrorLogged) {
-      storeLogEntry("Time sync failed.");
-      timeSyncErrorLogged = true;
-    }
-    indicateError();
-  }
-}
-
-void onWifiConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
-  if (!wifiConnectionErrorLogged) {
-    storeLogEntry("Connected to WiFi. IP: " + WiFi.localIP().toString());
-    wifiConnectionErrorLogged = false;
-  }
-  attemptTimeSync();
-}
 
 void setup() {
   pinMode(relay1, OUTPUT);
@@ -975,6 +962,11 @@ void setup() {
   // Serial.begin(115200);
   // delay(2000);
 
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  unsigned long wifiStartTime = millis();
+  const unsigned long wifiTimeout = 20000;
+
   sensors.begin();
   externalSensors.begin();
 
@@ -984,27 +976,21 @@ void setup() {
     spiffsInitialized = true;
   }
 
-  wifiConnectHandler = WiFi.onEvent(onWifiConnected, ARDUINO_EVENT_WIFI_STA_CONNECTED);
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  unsigned long wifiStartTime = millis();
-  const unsigned long wifiTimeout = 20000;
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+  while (true) {
+    if (WiFi.status() == WL_CONNECTED) {
+      storeLogEntry("Connected to WiFi");
+      //storeLogEntry("IP Address: " + WiFi.localIP().toString());
+      attemptTimeSync();
+      break;
+    }
 
     if (millis() - wifiStartTime > wifiTimeout) {
       storeLogEntry("WiFi connection failed.");
       indicateError();
       break;
     }
-  }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    storeLogEntry("Connected to WiFi");
-    storeLogEntry("IP Address: " + WiFi.localIP().toString());
-    clearError();
+    delay(1000);
   }
 
   server.on("/", HTTP_GET, handleRoot);
@@ -1035,11 +1021,24 @@ void setup() {
   server.on("/displayctrl", HTTP_GET, handleDisplayCtrlPage);
   server.on("/display/schedule", HTTP_GET, handleGetDisplaySchedule);
   server.on("/display/schedule/save", HTTP_POST, handleSaveDisplaySchedule);
+  server.on("/emailConfig", HTTP_GET, handleEmailConfigPage);
+  server.on("/api/emailConfig", HTTP_GET, handleGetEmailConfig);
+  server.on("/api/emailConfig", HTTP_POST, handleSaveEmailConfig);
+  server.on("/dockerConfig", HTTP_GET, handleDockerConfigPage);
+  server.on("/api/dockerConfig", HTTP_GET, handleGetDockerConfig);
+  server.on("/api/dockerConfig", HTTP_POST, handleSaveDockerConfig);
   server.begin();
+
+  apiServer.on("/api/status", HTTP_GET, handleApiStatus);
+  apiServer.on("/api/logs", HTTP_GET, handleApiLogs);
+  apiServer.on("/api/ping", HTTP_GET, handleApiPing);
+  apiServer.begin();
   EEPROM.begin(EEPROM_SIZE);
   loadSchedulesFromEEPROM();
   loadCalibrationSettings();
   loadDisplaySchedule();
+  loadEmailConfig();
+  loadDockerConfig();
 
   schedules.reserve(MAX_SCHEDULES);
   temporarySchedules.reserve(6);
@@ -1047,9 +1046,12 @@ void setup() {
   tempTemperature();
 
   Wire.begin(OLED_SDA, OLED_SCL);
+  Wire.setClock(50000);
+
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     storeLogEntry("OLED init failed");
   } else {
+    Wire.setClock(50000);
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     updateOLED();
@@ -1058,15 +1060,22 @@ void setup() {
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
-  resetWatchdog();
-  watchdogTicker.attach(1, checkWatchdog);
-
+  const esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = 15000,  // 15 second timeout
+    .idle_core_mask = 0,
+    .trigger_panic = true
+  };
+  esp_err_t wdt_err = esp_task_wdt_reconfigure(&wdt_config);
+  if (wdt_err != ESP_OK) {
+    esp_task_wdt_deinit();
+    esp_task_wdt_init(&wdt_config);
+  }
   littleFsMutex = xSemaphoreCreateMutex();
 
   xTaskCreatePinnedToCore(
-    emailLoop,
-    "emailTask",
-    32768,
+    networkLoop,
+    "networkTask",
+    12288,
     NULL,
     1,
     &networkTask,
@@ -1080,6 +1089,35 @@ void setup() {
     1,
     &controlTask,
     1);
+}
+
+void attemptTimeSync() {
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  struct tm timeinfo;
+  bool synced = getLocalTime(&timeinfo, 10000);
+
+  if (synced) {
+    if (!validTimeSync || timeSyncErrorLogged) {
+      storeLogEntry("Time and Date sync successful");
+    }
+    validTimeSync = true;
+    validDateSync = true;
+    lastNTPSync = millis();
+    if(timeSyncErrorLogged) {
+      clearError();
+    }
+    timeSyncErrorLogged = false;
+
+    setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+            timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+  } else {
+    if (!timeSyncErrorLogged) {
+      storeLogEntry("Time sync failed.");
+      timeSyncErrorLogged = true;
+    }
+    indicateError();
+  }
 }
 
 void indicateError() {
@@ -1130,8 +1168,7 @@ void loadCalibrationSettings() {
   CalibrationData storedData;
   EEPROM.get(CALIBRATION_START_ADDR, storedData);
 
-  if (storedData.internalOffset >= -10.0 && storedData.internalOffset <= 10.0 && 
-      storedData.externalOffset >= -10.0 && storedData.externalOffset <= 10.0) {
+  if (storedData.internalOffset >= -10.0 && storedData.internalOffset <= 10.0 && storedData.externalOffset >= -10.0 && storedData.externalOffset <= 10.0) {
     sensorCalibration = storedData;
     storeLogEntry("Sensor calibration loaded from EEPROM");
   } else {
@@ -1166,14 +1203,13 @@ void handleSaveCalibrationSettings() {
       float internalOffset = doc["internalOffset"];
       float externalOffset = doc["externalOffset"];
 
-      if (internalOffset >= -10.0 && internalOffset <= 10.0 && 
-          externalOffset >= -10.0 && externalOffset <= 10.0) {
-        
+      if (internalOffset >= -10.0 && internalOffset <= 10.0 && externalOffset >= -10.0 && externalOffset <= 10.0) {
+
         sensorCalibration.internalOffset = internalOffset;
         sensorCalibration.externalOffset = externalOffset;
-        
+
         saveCalibrationSettings();
-        
+
         server.send(200, "application/json", "{\"status\":\"success\"}");
         storeLogEntry("Sensor calibration updated: Internal=" + String(internalOffset, 2) + "°C, External=" + String(externalOffset, 2) + "°C");
         return;
@@ -1189,12 +1225,7 @@ void handleSaveCalibrationSettings() {
 void loadDisplaySchedule() {
   DisplaySchedule stored;
   EEPROM.get(DISPLAY_SCHEDULE_ADDR, stored);
-  if (stored.magic == 0xDA &&
-      stored.onHour  >= 0 && stored.onHour  <= 23 &&
-      stored.onMinute>= 0 && stored.onMinute<= 59 &&
-      stored.offHour >= 0 && stored.offHour <= 23 &&
-      stored.offMinute>=0 && stored.offMinute<= 59 &&
-      stored.overrideMode <= 2) {
+  if (stored.magic == 0xDA && stored.onHour >= 0 && stored.onHour <= 23 && stored.onMinute >= 0 && stored.onMinute <= 59 && stored.offHour >= 0 && stored.offHour <= 23 && stored.offMinute >= 0 && stored.offMinute <= 59 && stored.overrideMode <= 2) {
     displaySchedule = stored;
     storeLogEntry("Display schedule loaded from EEPROM");
   } else {
@@ -1208,6 +1239,44 @@ void saveDisplaySchedule() {
   EEPROM.put(DISPLAY_SCHEDULE_ADDR, displaySchedule);
   EEPROM.commit();
   storeLogEntry("Display schedule saved to EEPROM");
+}
+
+void loadEmailConfig() {
+  EmailConfig stored;
+  EEPROM.get(EMAIL_CONFIG_ADDR, stored);
+  if (stored.magic == 0xE2) {
+    emailConfig = stored;
+    storeLogEntry("Email config loaded from EEPROM");
+  } else {
+    saveEmailConfig();
+    storeLogEntry("Using default email config");
+  }
+}
+
+void saveEmailConfig() {
+  emailConfig.magic = 0xE2;
+  EEPROM.put(EMAIL_CONFIG_ADDR, emailConfig);
+  EEPROM.commit();
+  storeLogEntry("Email config saved to EEPROM");
+}
+
+void loadDockerConfig() {
+  DockerConfig stored;
+  EEPROM.get(DOCKER_CONFIG_ADDR, stored);
+  if (stored.magic == 0xD1) {
+    dockerConfig = stored;
+    storeLogEntry("Docker config loaded from EEPROM");
+  } else {
+    saveDockerConfig();
+    storeLogEntry("Using default docker config");
+  }
+}
+
+void saveDockerConfig() {
+  dockerConfig.magic = 0xD1;
+  EEPROM.put(DOCKER_CONFIG_ADDR, dockerConfig);
+  EEPROM.commit();
+  storeLogEntry("Docker config saved to EEPROM");
 }
 
 void applyOledSchedule() {
@@ -1235,7 +1304,7 @@ void applyOledSchedule() {
         struct tm timeinfo;
         if (!getLocalTime(&timeinfo)) { return; }
         int nowMins = timeinfo.tm_hour * 60 + timeinfo.tm_min;
-        int onMins  = displaySchedule.onHour  * 60 + displaySchedule.onMinute;
+        int onMins = displaySchedule.onHour * 60 + displaySchedule.onMinute;
         int offMins = displaySchedule.offHour * 60 + displaySchedule.offMinute;
         if (onMins <= offMins) {
           newState = (nowMins >= onMins && nowMins < offMins);
@@ -1253,22 +1322,99 @@ void applyOledSchedule() {
 }
 
 extern const char displayCtrlPage[] PROGMEM;
+extern const char emailConfigPage[] PROGMEM;
+extern const char dockerConfigPage[] PROGMEM;
 
 void handleDisplayCtrlPage() {
   if (!checkAuthentication()) return;
   server.send_P(200, "text/html", displayCtrlPage);
 }
 
+void handleEmailConfigPage() {
+  if (!checkAuthentication()) return;
+  server.send_P(200, "text/html", emailConfigPage);
+}
+
+void handleGetEmailConfig() {
+  DynamicJsonDocument doc(512);
+  doc["enabled"] = emailConfig.enabled;
+  doc["senderAccount"] = emailConfig.senderAccount;
+  doc["senderPassword"] = emailConfig.senderPassword;
+  doc["recipient"] = emailConfig.recipient;
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleSaveEmailConfig() {
+  if (server.hasArg("plain") == false) {
+    server.send(400, "application/json", "{\"error\":\"Body not received\"}");
+    return;
+  }
+  
+  DynamicJsonDocument doc(512);
+  DeserializationError error = deserializeJson(doc, server.arg("plain"));
+  
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  
+  emailConfig.enabled = doc["enabled"] | true;
+  strlcpy(emailConfig.senderAccount, doc["senderAccount"] | "", sizeof(emailConfig.senderAccount));
+  strlcpy(emailConfig.senderPassword, doc["senderPassword"] | "", sizeof(emailConfig.senderPassword));
+  strlcpy(emailConfig.recipient, doc["recipient"] | "", sizeof(emailConfig.recipient));
+  
+  saveEmailConfig();
+  
+  server.send(200, "application/json", "{\"success\":true}");
+}
+
+void handleDockerConfigPage() {
+  if (!checkAuthentication()) return;
+  server.send_P(200, "text/html", dockerConfigPage);
+}
+
+void handleGetDockerConfig() {
+  DynamicJsonDocument doc(256);
+  doc["enabled"] = dockerConfig.enabled;
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleSaveDockerConfig() {
+  if (server.hasArg("plain") == false) {
+    server.send(400, "application/json", "{\"error\":\"Body not received\"}");
+    return;
+  }
+  
+  DynamicJsonDocument doc(256);
+  DeserializationError error = deserializeJson(doc, server.arg("plain"));
+  
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  
+  dockerConfig.enabled = doc["enabled"] | true;
+  saveDockerConfig();
+  
+  server.send(200, "application/json", "{\"success\":true}");
+}
+
 void handleGetDisplaySchedule() {
   if (!checkAuthentication()) return;
   String json = "{";
-  json += "\"onHour\":"      + String(displaySchedule.onHour)       + ",";
-  json += "\"onMinute\":"    + String(displaySchedule.onMinute)     + ",";
-  json += "\"offHour\":"     + String(displaySchedule.offHour)      + ",";
-  json += "\"offMinute\":"   + String(displaySchedule.offMinute)    + ",";
+  json += "\"onHour\":" + String(displaySchedule.onHour) + ",";
+  json += "\"onMinute\":" + String(displaySchedule.onMinute) + ",";
+  json += "\"offHour\":" + String(displaySchedule.offHour) + ",";
+  json += "\"offMinute\":" + String(displaySchedule.offMinute) + ",";
   json += "\"overrideMode\":" + String(displaySchedule.overrideMode) + ",";
-  json += "\"enabled\":"     + String(displaySchedule.enabled ? "true" : "false") + ",";
-  json += "\"displayOn\":"   + String(oledPhysicalState  ? "true" : "false");
+  json += "\"enabled\":" + String(displaySchedule.enabled ? "true" : "false") + ",";
+  json += "\"displayOn\":" + String(oledPhysicalState ? "true" : "false");
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -1301,28 +1447,26 @@ void handleSaveDisplaySchedule() {
     return;
   }
 
-  int onH  = doc["onHour"]  | displaySchedule.onHour;
-  int onM  = doc["onMinute"]| displaySchedule.onMinute;
+  int onH = doc["onHour"] | displaySchedule.onHour;
+  int onM = doc["onMinute"] | displaySchedule.onMinute;
   int offH = doc["offHour"] | displaySchedule.offHour;
-  int offM = doc["offMinute"]|displaySchedule.offMinute;
-  bool en  = doc.containsKey("enabled") ? doc["enabled"].as<bool>() : displaySchedule.enabled;
+  int offM = doc["offMinute"] | displaySchedule.offMinute;
+  bool en = doc.containsKey("enabled") ? doc["enabled"].as<bool>() : displaySchedule.enabled;
 
-  if (onH <0||onH >23||onM <0||onM >59||offH<0||offH>23||offM<0||offM>59) {
+  if (onH < 0 || onH > 23 || onM < 0 || onM > 59 || offH < 0 || offH > 23 || offM < 0 || offM > 59) {
     server.send(400, "application/json", "{\"error\":\"Time values out of range\"}");
     return;
   }
 
-  displaySchedule.onHour    = onH;
-  displaySchedule.onMinute  = onM;
-  displaySchedule.offHour   = offH;
+  displaySchedule.onHour = onH;
+  displaySchedule.onMinute = onM;
+  displaySchedule.offHour = offH;
   displaySchedule.offMinute = offM;
-  displaySchedule.enabled   = en;
+  displaySchedule.enabled = en;
   saveDisplaySchedule();
   applyOledSchedule();
   server.send(200, "application/json", "{\"status\":\"success\"}");
-  storeLogEntry("Display schedule updated: ON=" + String(onH) + ":" + String(onM) +
-                " OFF=" + String(offH) + ":" + String(offM) +
-                " enabled=" + String(en));
+  storeLogEntry("Display schedule updated: ON=" + String(onH) + ":" + String(onM) + " OFF=" + String(offH) + ":" + String(offM) + " enabled=" + String(en));
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
@@ -1337,13 +1481,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         IPAddress ip = webSocket.remoteIP(num);
         //storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString());
 
-        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
-                        ",\"relay2\":" + String(relay2State || overrideRelay2) + 
-                        ",\"relay3\":" + String(relay3State || overrideRelay1) + 
-                        ",\"temperature\":" + String(lastValidTemperature, 1) + 
-                        ",\"relay1Name\":\"WaveMaker\"" + 
-                        ",\"relay2Name\":\"Light\"" + 
-                        ",\"relay3Name\":\"Air Pump\"}";
+        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"relay1Name\":\"WaveMaker\"" + ",\"relay2Name\":\"Light\"" + ",\"relay3Name\":\"Air Pump\"}";
         webSocket.sendTXT(num, message);
       }
       break;
@@ -1740,6 +1878,8 @@ const char mainPage[] PROGMEM = R"html(
                 <button class="button nav-button" onclick="showSchedules()">Main Schedules</button>
                 <button class="button nav-button" onclick="showTempControl()">Temperature Control</button>
                 <button class="button nav-button" onclick="showDisplayCtrl()">Display Control</button>
+                <button class="button nav-button" onclick="showEmailConfig()">Email Settings</button>
+                <button class="button nav-button" onclick="showDockerConfig()">Docker Settings</button>
                 <button class="button nav-button nav-full" onclick="showLogs()">System Logs</button>
             </div>
         </div>
@@ -1935,6 +2075,13 @@ const char mainPage[] PROGMEM = R"html(
         function showLogs() {
             window.location.href = '/logs';
         }
+        function showEmailConfig() {
+            window.location.href = '/emailConfig';
+        }
+
+        function showDockerConfig() {
+            window.location.href = '/dockerConfig';
+        }
         function showTempControl() {
             window.location.href = '/tempcontrol';
         }
@@ -1966,6 +2113,522 @@ const char mainPage[] PROGMEM = R"html(
         document.getElementById('btn1').textContent = `${relayNames[1]} (OFF)`;
         document.getElementById('btn2').textContent = `${relayNames[2]} (OFF)`;
         document.getElementById('btn3').textContent = `${relayNames[3]} (OFF)`;
+    </script>
+</body>
+</html>
+)html";
+
+const char emailConfigPage[] PROGMEM = R"html(
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" type="image/png" href="/favicon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Settings</title>
+    <style>
+        :root {
+            --primary-color: #1976D2;
+            --primary-dark: #0D47A1;
+            --primary-light: #BBDEFB;
+            --accent-color: #03A9F4;
+            --success-color: #4CAF50;
+            --warning-color: #FFC107;
+            --error-color: #F44336;
+            --text-color: #333;
+            --text-light: #757575;
+            --background-color: #f5f7fa;
+            --card-color: #ffffff;
+            --border-radius: 8px;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding-bottom: 40px;
+        }
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+            margin-bottom: 30px;
+        }
+        header h1 { margin: 0; font-size: 2rem; letter-spacing: 0.5px; }
+        header p { margin: 5px 0 0; opacity: 0.85; font-size: 0.95rem; }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            margin: 5px 0 20px 0;
+            transition: var(--transition);
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+        .button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .header-actions {
+            margin-bottom: 20px;
+            overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .card {
+            background: var(--card-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 25px;
+            margin-bottom: 25px;
+            transition: var(--transition);
+        }
+        .card:hover { box-shadow: 0 5px 15px rgba(0,0,0,0.15); }
+        .card h3 {
+            color: var(--primary-color);
+            font-size: 1.4rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 18px;
+            align-items: flex-end;
+        }
+        .form-group { display: flex; flex-direction: column; flex: 1; min-width: 120px; }
+        .form-group label {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input[type=email],
+        .form-group input[type=text],
+        .form-group input[type=password] {
+            padding: 10px 12px;
+            border: 1.5px solid #ddd;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: var(--transition);
+            width: 100%;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(25,118,210,0.12);
+        }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .toggle-row label { font-size: 1rem; cursor: pointer; user-select: none; }
+        input[type=checkbox] {
+            width: 18px; height: 18px;
+            accent-color: var(--primary-color);
+            cursor: pointer;
+        }
+        .save-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: var(--shadow);
+            margin-top: 6px;
+        }
+        .save-btn:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .save-btn:active { transform: translateY(1px); }
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { background: var(--success-color); }
+        #toast.error   { background: var(--error-color); }
+        @media (max-width: 600px) {
+            .form-row { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Email Settings</h1>
+        <p>Manage system notifications and credentials</p>
+    </header>
+
+    <div class="container">
+        <div class="header-actions">
+            <button onclick="goBack()" class="button">Back to Dashboard</button>
+        </div>
+
+        <div class="card">
+            <h3>Configuration</h3>
+            <div class="toggle-row">
+                <input type="checkbox" id="emailEnabled">
+                <label for="emailEnabled">Enable Email Notifications</label>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group" style="flex: 1 1 100%;">
+                    <label for="senderAccount">Sender Email</label>
+                    <input type="email" id="senderAccount" placeholder="e.g. your_email@gmail.com">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group" style="flex: 1 1 100%;">
+                    <label for="senderPassword">Sender App Password</label>
+                    <input type="password" id="senderPassword" placeholder="e.g. abcd efgh ijkl mnop">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group" style="flex: 1 1 100%;">
+                    <label for="recipient">Receiver Email</label>
+                    <input type="email" id="recipient" placeholder="e.g. receiver_email@gmail.com">
+                </div>
+            </div>
+
+            <button class="save-btn" onclick="saveEmailConfig()">Save Settings</button>
+        </div>
+    </div>
+    
+    <div id="toast"></div>
+
+    <script>
+        function goBack() { window.location.href = '/'; }
+        
+        function showToast(msg, type='success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = type + ' show';
+            setTimeout(() => t.className = '', 3000);
+        }
+        
+        function loadConfig() {
+            fetch('/api/emailConfig')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('emailEnabled').checked = data.enabled;
+                    document.getElementById('senderAccount').value = data.senderAccount;
+                    document.getElementById('senderPassword').value = data.senderPassword;
+                    document.getElementById('recipient').value = data.recipient;
+                })
+                .catch(err => {
+                    console.error('Failed to load email config', err);
+                    showToast('Failed to load configuration', 'error');
+                });
+        }
+        
+        function saveEmailConfig() {
+            const data = {
+                enabled: document.getElementById('emailEnabled').checked,
+                senderAccount: document.getElementById('senderAccount').value,
+                senderPassword: document.getElementById('senderPassword').value,
+                recipient: document.getElementById('recipient').value
+            };
+            
+            const btn = document.querySelector('.save-btn');
+            btn.textContent = "Saving...";
+            btn.disabled = true;
+            
+            fetch('/api/emailConfig', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Configuration saved successfully!', 'success');
+                } else {
+                    showToast('Failed to save configuration', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Save error', err);
+                showToast('Error saving configuration', 'error');
+            })
+            .finally(() => {
+                btn.textContent = "Save Settings";
+                btn.disabled = false;
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', loadConfig);
+    </script>
+</body>
+</html>
+)html";
+
+const char dockerConfigPage[] PROGMEM = R"html(
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" type="image/png" href="/favicon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docker Settings</title>
+    <style>
+        :root {
+            --primary-color: #1976D2;
+            --primary-dark: #0D47A1;
+            --primary-light: #BBDEFB;
+            --accent-color: #03A9F4;
+            --success-color: #4CAF50;
+            --warning-color: #FFC107;
+            --error-color: #F44336;
+            --text-color: #333;
+            --text-light: #757575;
+            --background-color: #f5f7fa;
+            --card-color: #ffffff;
+            --border-radius: 8px;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding-bottom: 40px;
+        }
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+            margin-bottom: 30px;
+        }
+        header h1 { margin: 0; font-size: 2rem; letter-spacing: 0.5px; }
+        header p { margin: 5px 0 0; opacity: 0.85; font-size: 0.95rem; }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            margin: 5px 0 20px 0;
+            transition: var(--transition);
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+        .button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .header-actions {
+            margin-bottom: 20px;
+            overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .card {
+            background: var(--card-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 25px;
+            margin-bottom: 25px;
+            transition: var(--transition);
+        }
+        .card h3 {
+            color: var(--primary-color);
+            font-size: 1.4rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .toggle-row label { font-size: 1rem; cursor: pointer; user-select: none; }
+        input[type=checkbox] {
+            width: 18px; height: 18px;
+            accent-color: var(--primary-color);
+            cursor: pointer;
+        }
+        .save-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: var(--shadow);
+            margin-top: 6px;
+        }
+        .save-btn:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .save-btn:active { transform: translateY(1px); }
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { background: var(--success-color); }
+        #toast.error   { background: var(--error-color); }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Docker Settings</h1>
+        <p>Manage Docker integration endpoints</p>
+    </header>
+
+    <div class="container">
+        <div class="header-actions">
+            <button onclick="goBack()" class="button">Back to Dashboard</button>
+        </div>
+
+        <div class="card">
+            <h3>Configuration</h3>
+            <div class="toggle-row">
+                <input type="checkbox" id="dockerEnabled">
+                <label for="dockerEnabled">Enable Docker Integration (API Endpoints)</label>
+            </div>
+            
+            <button class="save-btn" onclick="saveDockerConfig()">Save Settings</button>
+        </div>
+    </div>
+    
+    <div id="toast"></div>
+
+    <script>
+        function goBack() { window.location.href = '/'; }
+        
+        function showToast(msg, type='success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = type + ' show';
+            setTimeout(() => t.className = '', 3000);
+        }
+        
+        function loadConfig() {
+            fetch('/api/dockerConfig')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('dockerEnabled').checked = data.enabled;
+                })
+                .catch(err => {
+                    console.error('Failed to load docker config', err);
+                    showToast('Failed to load configuration', 'error');
+                });
+        }
+        
+        function saveDockerConfig() {
+            const data = {
+                enabled: document.getElementById('dockerEnabled').checked
+            };
+            
+            const btn = document.querySelector('.save-btn');
+            btn.textContent = "Saving...";
+            btn.disabled = true;
+            
+            fetch('/api/dockerConfig', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Configuration saved successfully!', 'success');
+                } else {
+                    showToast('Failed to save configuration', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Save error', err);
+                showToast('Error saving configuration', 'error');
+            })
+            .finally(() => {
+                btn.textContent = "Save Settings";
+                btn.disabled = false;
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', loadConfig);
     </script>
 </body>
 </html>
@@ -2242,6 +2905,7 @@ const char displayCtrlPage[] PROGMEM = R"html(
     <div id="toast"></div>
     <script>
         let currentData = {};
+        let isEditing = false;
 
         const modeNames = ['Following schedule', 'Forced ON', 'Forced OFF'];
 
@@ -2267,8 +2931,10 @@ const char displayCtrlPage[] PROGMEM = R"html(
             document.getElementById('btn-on').className     = 'override-btn' + (d.overrideMode === 1 ? ' active-on'       : '');
             document.getElementById('btn-off').className    = 'override-btn' + (d.overrideMode === 2 ? ' active-off'      : '');
             // Schedule fields
-            document.getElementById('onTime').value  = pad(d.onHour)  + ':' + pad(d.onMinute);
-            document.getElementById('offTime').value = pad(d.offHour) + ':' + pad(d.offMinute);
+            if (!isEditing) {
+                document.getElementById('onTime').value  = pad(d.onHour)  + ':' + pad(d.onMinute);
+                document.getElementById('offTime').value = pad(d.offHour) + ':' + pad(d.offMinute);
+            }
         }
 
         function loadData() {
@@ -2312,11 +2978,15 @@ const char displayCtrlPage[] PROGMEM = R"html(
             .then(d => {
                 if (d.status === 'success') {
                     showToast('Schedule saved', 'success');
+                    isEditing = false;
                     setTimeout(loadData, 400);
                 } else { showToast('Error: ' + (d.error || 'unknown'), 'error'); }
             })
             .catch(() => showToast('Request failed', 'error'));
         }
+
+        document.getElementById('onTime').addEventListener('input', () => isEditing = true);
+        document.getElementById('offTime').addEventListener('input', () => isEditing = true);
 
         // Refresh status every 5 s
         loadData();
@@ -4639,16 +5309,19 @@ void loop() {
   vTaskDelete(NULL);
 }
 
-void emailLoop(void* parameter) {
+void networkLoop(void* parameter) {
+  esp_task_wdt_add(NULL);
   unsigned long lastEmailAttempt = 0;
   const unsigned long EMAIL_RETRY_INTERVAL = 30000;
-  
   unsigned long lastOledBlink = 0;
   unsigned long lastOledScheduleCheck = 0;
   for (;;) {
     resetWatchdog();
+    apiServer.handleClient();
     handleTemperature();
+    //resetWatchdog();
     handleExternalTemperature();
+    //resetWatchdog();
 
     if ((hasTempError || hasExternalTempError) && millis() - lastOledBlink >= 500) {
       oledBlinkState = !oledBlinkState;
@@ -4668,7 +5341,9 @@ void emailLoop(void* parameter) {
           storeLogEntry("Attempting to reconnect to WiFi...");
           wifiConnectionErrorLogged = true;
         }
+        resetWatchdog();
         WiFi.reconnect();
+        resetWatchdog();
         lastWifiConnectAttempt = currentMillis;
       }
     } else {
@@ -4678,11 +5353,17 @@ void emailLoop(void* parameter) {
       }
 
       if (!validTimeSync) {
-        attemptTimeSync();
+        unsigned long currentMillis = millis();
+        if (currentMillis - lastNtpRetry >= NTP_RETRY_INTERVAL) {
+          lastNtpRetry = currentMillis;
+          resetWatchdog();
+          attemptTimeSync();
+          resetWatchdog();
+        }
       }
 
       unsigned long currentTime = millis();
-      
+
       if (!startupemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
         lastEmailAttempt = currentTime;
         sendEmailWithLogs("Device is powered on");
@@ -4705,6 +5386,7 @@ void emailLoop(void* parameter) {
 }
 
 void mainLoop(void* parameter) {
+  esp_task_wdt_add(NULL);
   for (;;) {
     server.handleClient();
     webSocket.loop();
@@ -4712,14 +5394,6 @@ void mainLoop(void* parameter) {
     checkoverride1();
     checkoverride2();
     overrideLEDState();
-
-    if (!validTimeSync && WiFi.status() == WL_CONNECTED) {
-      unsigned long currentMillis = millis();
-      if (currentMillis - lastNtpRetry >= NTP_RETRY_INTERVAL) {
-        attemptTimeSync();
-        lastNtpRetry = currentMillis;
-      }
-    }
 
     static unsigned long lastSecondCheck = 0;
     if (millis() - lastSecondCheck >= 1000) {
@@ -4734,9 +5408,11 @@ void mainLoop(void* parameter) {
           unsigned long currentSeconds = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
 
           // 90 minute check
-          if (currentSeconds - last90MinCheck >= CHECK_90MIN_INTERVAL || (last90MinCheck > currentSeconds && currentSeconds >= 0)) {
-            String timeStr = String(timeinfo.tm_hour) + ":" + (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min);
-            storeLogEntry("Device is powered on at " + timeStr);
+          if (currentSeconds - last90MinCheck >= CHECK_90MIN_INTERVAL) {
+            if (hasLaunchedSchedules) {
+              String timeStr = String(timeinfo.tm_hour) + ":" + (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min);
+              storeLogEntry("Device is powered on at " + timeStr);
+            }
             last90MinCheck = currentSeconds;
 
             if (startupemail && !pointemail) {
@@ -4858,29 +5534,41 @@ void checkScheduleslaunch() {
 
   if (!overrideRelay1) {
     if (relay1ShouldBeOn) {
-      activateRelay(1, false);
-      //storeLogEntry("Relay 1 activated by startup schedule check");
+      if (!relay1State) {
+        activateRelay(1, false);
+        //storeLogEntry("Relay 1 activated by startup schedule check");
+      }
     } else {
-      deactivateRelay(1, false);
-      //storeLogEntry("Relay 1 deactivated by startup schedule check");
+      if (relay1State) {
+        deactivateRelay(1, false);
+        //storeLogEntry("Relay 1 deactivated by startup schedule check");
+      }
     }
 
     if (relay3ShouldBeOn) {
-      activateRelay(3, false);
-     // storeLogEntry("Relay 3 activated by startup schedule check");
+      if (!relay3State) {
+        activateRelay(3, false);
+        // storeLogEntry("Relay 3 activated by startup schedule check");
+      }
     } else {
-      deactivateRelay(3, false);
-     // storeLogEntry("Relay 3 deactivated by startup schedule check");
+      if (relay3State) {
+        deactivateRelay(3, false);
+        // storeLogEntry("Relay 3 deactivated by startup schedule check");
+      }
     }
   }
 
   if (!overrideRelay2) {
     if (relay2ShouldBeOn) {
-      activateRelay(2, false);
-     // storeLogEntry("Relay 2 activated by startup schedule check");
+      if (!relay2State) {
+        activateRelay(2, false);
+        // storeLogEntry("Relay 2 activated by startup schedule check");
+      }
     } else {
-      deactivateRelay(2, false);
-     // storeLogEntry("Relay 2 deactivated by startup schedule check");
+      if (relay2State) {
+        deactivateRelay(2, false);
+        // storeLogEntry("Relay 2 deactivated by startup schedule check");
+      }
     }
   }
 }
@@ -4898,9 +5586,16 @@ void activateRelay(int relayNum, bool manual) {
       storeLogEntry("Wavemaker activated.");
       break;
     case 2:
-      toggleLightSequence();
       digitalWrite(relay4, LOW);
       relay4State = true;
+      for (int i = 0; i < TOGGLE_COUNT; i++) {
+        digitalWrite(relay2, HIGH);
+        delay(TOGGLE_DELAY);
+        digitalWrite(relay2, LOW);
+        delay(TOGGLE_DELAY);
+      }
+      digitalWrite(relay2, LOW);
+      relay2State = true;
       storeLogEntry("Lights activated.");
       break;
     case 3:
@@ -4941,18 +5636,8 @@ void deactivateRelay(int relayNum, bool manual) {
 }
 
 void broadcastRelayStates() {
-  sensors.requestTemperatures();
-  externalSensors.requestTemperatures();
-  
-  float internalRaw = sensors.getTempC(sensorAddress);
-  float externalRaw = externalSensors.getTempC(externalSensorAddress);
-  
-  if (internalRaw == DEVICE_DISCONNECTED_C) {
-    internalRaw = lastValidTemperature - sensorCalibration.internalOffset;
-  }
-  if (externalRaw == DEVICE_DISCONNECTED_C) {
-    externalRaw = lastValidExternalTemperature - sensorCalibration.externalOffset;
-  }
+  float internalRaw = lastValidTemperature - sensorCalibration.internalOffset;
+  float externalRaw = lastValidExternalTemperature - sensorCalibration.externalOffset;
 
   String message;
   message.reserve(300);
@@ -5132,24 +5817,14 @@ void handleRoot() {
   server.send_P(200, "text/html", mainPage);
 }
 
-void toggleRelay(int relayPin, bool& relayState) {
-  if ((relayPin == relay1 && overrideRelay1) || (relayPin == relay2 && overrideRelay2)) {
-    storeLogEntry("Physical override active, ignoring toggle.");
-    return;
-  }
-  relayState = !relayState;
-  digitalWrite(relayPin, relayState ? LOW : HIGH);
-  storeLogEntry("Relay state changed to: " + String(relayState));
-  broadcastRelayStates();
-}
-
 void handleRelay1() {
   if (server.method() == HTTP_POST) {
     if (overrideRelay1) {
       server.send(403, "application/json", "{\"error\":\"Physical override active\"}");
       return;
     }
-    toggleRelay(relay1, relay1State);
+    if (relay1State) deactivateRelay(1, true);
+    else activateRelay(1, true);
     server.send(200, "application/json", "{\"state\":" + String(relay1State) + "}");
   } else if (server.method() == HTTP_GET) {
     server.send(200, "application/json", "{\"state\":" + String(relay1State) + "}");
@@ -5163,20 +5838,10 @@ void handleRelay2() {
       return;
     }
 
-    if (!relay2State) {
-      toggleLightSequence();
-      digitalWrite(relay4, LOW);
-      relay4State = true;
-    } else {
-      digitalWrite(relay2, HIGH);
-      relay2State = false;
-      digitalWrite(relay4, HIGH);
-      relay4State = false;
-      storeLogEntry("Lights deactivated.");
-    }
+    if (relay2State) deactivateRelay(2, true);
+    else activateRelay(2, true);
 
     server.send(200, "application/json", "{\"state\":" + String(relay2State) + "}");
-    broadcastRelayStates();
   } else if (server.method() == HTTP_GET) {
     server.send(200, "application/json", "{\"state\":" + String(relay2State) + "}");
   }
@@ -5188,25 +5853,15 @@ void handleRelay3() {
       server.send(403, "application/json", "{\"error\":\"Physical override active\"}");
       return;
     }
-    toggleRelay(relay3, relay3State);
+    if (relay3State) deactivateRelay(3, true);
+    else activateRelay(3, true);
     server.send(200, "application/json", "{\"state\":" + String(relay3State) + "}");
   } else if (server.method() == HTTP_GET) {
     server.send(200, "application/json", "{\"state\":" + String(relay3State) + "}");
   }
 }
 
-void toggleLightSequence() {
-  for (int i = 0; i < TOGGLE_COUNT; i++) {
-    digitalWrite(relay2, HIGH);
-    delay(TOGGLE_DELAY);
-    digitalWrite(relay2, LOW);
-    delay(TOGGLE_DELAY);
-  }
-  digitalWrite(relay2, LOW);
-  relay2State = true;
-  //storeLogEntry("Light relay toggled sequence completed");
-  broadcastRelayStates();
-}
+
 
 void handleTime() {
   struct tm timeinfo;
@@ -5256,10 +5911,10 @@ void handleOneClickLight() {
     digitalWrite(relay2, LOW);
     relay2State = true;
     server.send(200, "application/json", "{\"status\":\"success\"}");
-    storeLogEntry("Relay 2 toggled off-on via One Click.");
+    storeLogEntry("Light Colour changed via button.");
   } else {
     server.send(403, "application/json", "{\"error\":\"Light is off\"}");
-    storeLogEntry("One Click failed: Light is off.");
+    storeLogEntry("Colour Change failed: Light is off.");
   }
 }
 
@@ -5343,6 +5998,10 @@ void overrideLEDState() {
 }
 
 void sendEmailWithLogs(const String& trigger) {
+  if (!emailConfig.enabled) {
+    return;
+  }
+
   if (!WiFi.isConnected()) {
     storeLogEntry("Failed to send email: No WiFi connection");
     return;
@@ -5409,8 +6068,8 @@ void sendEmailWithLogs(const String& trigger) {
   ssl_client.setInsecure();
 
   SMTPMessage message;
-  message.headers.add(rfc822_from, "Aquarium Control <" + String(emailSenderAccount) + ">");
-  message.headers.add(rfc822_to, "User <" + String(emailRecipient) + ">");
+  message.headers.add(rfc822_from, "Aquarium Control <" + String(emailConfig.senderAccount) + ">");
+  message.headers.add(rfc822_to, "User <" + String(emailConfig.recipient) + ">");
   message.headers.add(rfc822_subject, String(emailSubject) + " - " + trigger);
 
   struct tm timeinfo;
@@ -5469,7 +6128,7 @@ void sendEmailWithLogs(const String& trigger) {
   bool authenticated = false;
   resetWatchdog();
   try {
-    authenticated = smtp.authenticate(emailSenderAccount, emailSenderPassword, readymail_auth_password);
+    authenticated = smtp.authenticate(emailConfig.senderAccount, emailConfig.senderPassword, readymail_auth_password);
   } catch (...) {
     storeLogEntry("Exception during SMTP authentication");
     authenticated = false;
@@ -5528,7 +6187,7 @@ void handleTemperature() {
       consecutiveTempFailures++;
       if (consecutiveTempFailures >= MAX_TEMP_FAILURES) {
         if (!tempErrorLogged) {
-          storeLogEntry("Error: Temperature sensor failed " + String(consecutiveTempFailures) + " times");
+          storeLogEntry("Error: Internal Temperature sensor failed " + String(consecutiveTempFailures) + " times");
           tempErrorLogged = true;
           sendEmailWithLogs("Temperature Sensor Error");
         }
@@ -5579,14 +6238,14 @@ void handleAddTemporarySchedule() {
       }
 
       int relayNumber = doc["relay"].as<int>();
-      
+
       int existingSchedulesCount = 0;
       for (const auto& schedule : temporarySchedules) {
         if (schedule.relayNumber == relayNumber) {
           existingSchedulesCount++;
         }
       }
-      
+
       if (existingSchedulesCount >= 2) {
         server.send(400, "application/json", "{\"error\":\"Each relay can have a maximum of 2 temporary schedules\"}");
         storeLogEntry("Add Temporary Schedule failed: Maximum schedules reached for relay " + String(relayNumber));
@@ -5692,17 +6351,17 @@ void checkTemporarySchedules() {
       if (schedule.relayNumber == 1) {
         if (!relay1State && !overrideRelay1) {
           activateRelay(1, false);
-          storeLogEntry("Temporary schedule activated Wavemaker");
+         // storeLogEntry("Temporary schedule activated Wavemaker");
         }
       } else if (schedule.relayNumber == 2) {
         if (!relay2State && !overrideRelay2) {
           activateRelay(2, false);
-          storeLogEntry("Temporary schedule activated Lights");
+         // storeLogEntry("Temporary schedule activated Lights");
         }
       } else if (schedule.relayNumber == 3) {
         if (!relay3State && !overrideRelay1) {
           activateRelay(3, false);
-          storeLogEntry("Temporary schedule activated Air Pump");
+        //  storeLogEntry("Temporary schedule activated Air Pump");
         }
       }
 
@@ -5715,17 +6374,17 @@ void checkTemporarySchedules() {
       if (schedule.relayNumber == 1) {
         if (relay1State && !overrideRelay1) {
           deactivateRelay(1, false);
-          storeLogEntry("Temporary schedule deactivated Wavemaker");
+        // storeLogEntry("Temporary schedule deactivated Wavemaker");
         }
       } else if (schedule.relayNumber == 2) {
         if (relay2State && !overrideRelay2) {
           deactivateRelay(2, false);
-          storeLogEntry("Temporary schedule deactivated Lights");
+        //  storeLogEntry("Temporary schedule deactivated Lights");
         }
       } else if (schedule.relayNumber == 3) {
         if (relay3State && !overrideRelay1) {
           deactivateRelay(3, false);
-          storeLogEntry("Temporary schedule deactivated Air Pump");
+        //  storeLogEntry("Temporary schedule deactivated Air Pump");
         }
       }
 
@@ -5781,7 +6440,7 @@ void handleExternalTemperature() {
       consecutiveExternalTempFailures++;
       if (consecutiveExternalTempFailures >= MAX_EXTERNAL_TEMP_FAILURES) {
         if (!externalTempErrorLogged) {
-          storeLogEntry("Error: External temperature sensor failed " + String(consecutiveExternalTempFailures) + " times");
+          storeLogEntry("Error: External Temperature sensor failed " + String(consecutiveExternalTempFailures) + " times");
           sendEmailWithLogs("External Temperature Sensor Error");
           indicateError();
           externalTempErrorLogged = true;
@@ -5812,7 +6471,7 @@ void updateOLED() {
   display.setCursor(74, 0);
   display.print("EXTERNAL");
 
-  display.drawFastHLine(0,  10, 63, SSD1306_WHITE);
+  display.drawFastHLine(0, 10, 63, SSD1306_WHITE);
   display.drawFastHLine(65, 10, 63, SSD1306_WHITE);
 
   if (hasTempError) {
@@ -5862,39 +6521,119 @@ void updateOLED() {
 }
 
 void tempTemperature() {
-    sensors.requestTemperatures();
-    float tempC = sensors.getTempC(sensorAddress);
+  sensors.requestTemperatures();
+  float tempC = sensors.getTempC(sensorAddress);
 
-    if (tempC != DEVICE_DISCONNECTED_C) {
-        lastValidTemperature = tempC + sensorCalibration.internalOffset;
+  if (tempC != DEVICE_DISCONNECTED_C) {
+    lastValidTemperature = tempC + sensorCalibration.internalOffset;
+  }
+
+  externalSensors.requestTemperatures();
+  float externalTempC = externalSensors.getTempC(externalSensorAddress);
+
+  if (externalTempC != DEVICE_DISCONNECTED_C) {
+    lastValidExternalTemperature = externalTempC + sensorCalibration.externalOffset;
+  }
+}
+
+// Collector API handlers — served via apiServer (port 82) on Core 0 (networkLoop)
+void handleApiPing() {
+  if (!dockerConfig.enabled) {
+    apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
+    return;
+  }
+  apiServer.send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+void handleApiStatus() {
+  if (!dockerConfig.enabled) {
+    apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
+    return;
+  }
+
+  String ts = "null";
+  struct tm t;
+  if (validTimeSync && getLocalTime(&t)) {
+    char buf[20];
+    sprintf(buf, "%02d/%02d/%d %02d:%02d:%02d",
+            t.tm_mday, t.tm_mon + 1, t.tm_year + 1900,
+            t.tm_hour, t.tm_min, t.tm_sec);
+    ts = "\"" + String(buf) + "\"";
+  }
+
+  String json = "{";
+  json += "\"internal_c\":" + String(lastValidTemperature, 2) + ",";
+  json += "\"external_c\":" + String(lastValidExternalTemperature, 2) + ",";
+  json += "\"relay1\":" + String((relay1State || overrideRelay1) ? "true" : "false") + ",";
+  json += "\"relay2\":" + String((relay2State || overrideRelay2) ? "true" : "false") + ",";
+  json += "\"relay3\":" + String((relay3State || overrideRelay1) ? "true" : "false") + ",";
+  json += "\"override1\":" + String(overrideRelay1 ? "true" : "false") + ",";
+  json += "\"override2\":" + String(overrideRelay2 ? "true" : "false") + ",";
+  json += "\"has_error\":" + String(hasError ? "true" : "false") + ",";
+  json += "\"temp_error\":" + String(hasTempError ? "true" : "false") + ",";
+  json += "\"ext_temp_error\":" + String(hasExternalTempError ? "true" : "false") + ",";
+
+  json += "\"time_synced\":" + String(validTimeSync ? "true" : "false") + ",";
+  json += "\"timestamp\":" + ts;
+  json += "}";
+
+  apiServer.send(200, "application/json", json);
+}
+
+void handleApiLogs() {
+  if (!dockerConfig.enabled) {
+    apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
+    return;
+  }
+  // Re-serve the logs JSON via apiServer (Core 0)
+  if (!spiffsInitialized) {
+    apiServer.send(500, "application/json", "{\"error\":\"LittleFS not initialized!\"}");
+    return;
+  }
+  if (littleFsMutex != NULL) {
+    if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+      apiServer.send(503, "application/json", "{\"error\":\"Filesystem busy, try again\"}");
+      return;
     }
-
-    externalSensors.requestTemperatures();
-    float externalTempC = externalSensors.getTempC(externalSensorAddress);
-
-    if (externalTempC != DEVICE_DISCONNECTED_C) {
-        lastValidExternalTemperature = externalTempC + sensorCalibration.externalOffset;
-    }
+  }
+  StaticJsonDocument<2352> doc;
+  doc.clear();
+  File file = LittleFS.open("/logs.json", "r");
+  if (!file) {
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+    apiServer.send(404, "application/json", "{\"logs\":[]}");
+    return;
+  }
+  DeserializationError error = deserializeJson(doc, file);
+  file.close();
+  if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+  if (error) {
+    apiServer.send(500, "application/json", "{\"error\":\"Failed to parse logs!\"}");
+    return;
+  }
+  String response;
+  serializeJson(doc, response);
+  apiServer.send(200, "application/json", response);
 }
 
 void handleGetRawTemperatureData() {
   sensors.requestTemperatures();
   externalSensors.requestTemperatures();
-  
+
   float internalRaw = sensors.getTempC(sensorAddress);
   float externalRaw = externalSensors.getTempC(externalSensorAddress);
-  
+
   if (internalRaw == DEVICE_DISCONNECTED_C) {
     internalRaw = lastValidTemperature - sensorCalibration.internalOffset;
   }
   if (externalRaw == DEVICE_DISCONNECTED_C) {
     externalRaw = lastValidExternalTemperature - sensorCalibration.externalOffset;
   }
-  
+
   String json = "{";
   json += "\"internalRaw\":" + String(internalRaw, 2) + ",";
   json += "\"externalRaw\":" + String(externalRaw, 2);
   json += "}";
-  
+
   server.send(200, "application/json", json);
 }
