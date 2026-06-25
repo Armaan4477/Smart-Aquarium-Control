@@ -43,6 +43,7 @@ void handleUpdateSchedule();
 void handleRelayStatus();
 void handleClearError();
 void handleGetErrorStatus();
+void handleApiClearError();
 void handleOneClickLight();
 void handleTemperature();
 void networkLoop(void*);
@@ -161,10 +162,13 @@ bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
 bool relay4State = false;
-bool timeSyncErrorLogged = false;
-bool tempErrorLogged = false;
-bool triggerederror = false;
-bool wifiConnectionErrorLogged = false;
+const uint16_t ERR_WIFI     = 1 << 0;
+const uint16_t ERR_NTP      = 1 << 1;
+const uint16_t ERR_TEMP_INT = 1 << 2;
+const uint16_t ERR_TEMP_EXT = 1 << 3;
+
+uint16_t activeErrors = 0;
+uint16_t acknowledgedErrors = 0;
 
 const char* ssid = "Your_WiFi_SSID";
 const char* password = "Your_WiFi_Password";
@@ -179,7 +183,6 @@ unsigned long lastSecond = 0;
 bool validTimeSync = false;
 unsigned long last90MinCheck = 0;
 const unsigned long CHECK_90MIN_INTERVAL = 5400;
-bool hasError = false;
 bool hasLaunchedSchedules = false;
 bool startupemail = false;
 bool pointemail = false;
@@ -238,8 +241,6 @@ float lastValidTemperature = 0;
 float lastValidExternalTemperature = 0;
 const int MAX_EXTERNAL_TEMP_FAILURES = 3;
 int consecutiveExternalTempFailures = 0;
-bool hasExternalTempError = false;
-bool externalTempErrorLogged = false;
 
 CalibrationData sensorCalibration = { 0.0, 0.0 };
 const int CALIBRATION_START_ADDR = SCHEDULE_START_ADDR + (MAX_SCHEDULES * SCHEDULE_SIZE) + 1;
@@ -822,7 +823,6 @@ WebSocketsServer webSocket = WebSocketsServer(81);
 
 const int MAX_TEMP_FAILURES = 5;
 int consecutiveTempFailures = 0;
-bool hasTempError = false;
 
 const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 19800;  // 5 hours 30 minutes offset for IST
@@ -986,7 +986,7 @@ void setup() {
 
     if (millis() - wifiStartTime > wifiTimeout) {
       storeLogEntry("WiFi connection failed.");
-      indicateError();
+      activeErrors |= ERR_WIFI;
       break;
     }
 
@@ -1032,6 +1032,7 @@ void setup() {
   apiServer.on("/api/status", HTTP_GET, handleApiStatus);
   apiServer.on("/api/logs", HTTP_GET, handleApiLogs);
   apiServer.on("/api/ping", HTTP_GET, handleApiPing);
+  apiServer.on("/api/errors/clear", HTTP_POST, handleApiClearError);
   apiServer.begin();
   EEPROM.begin(EEPROM_SIZE);
   loadSchedulesFromEEPROM();
@@ -1098,45 +1099,25 @@ void attemptTimeSync() {
   bool synced = getLocalTime(&timeinfo, 10000);
 
   if (synced) {
-    if (!validTimeSync || timeSyncErrorLogged) {
+    if (!validTimeSync || (activeErrors & ERR_NTP) || (acknowledgedErrors & ERR_NTP)) {
       storeLogEntry("Time and Date sync successful");
     }
     validTimeSync = true;
     validDateSync = true;
     lastNTPSync = millis();
-    if(timeSyncErrorLogged) {
-      clearError();
-    }
-    timeSyncErrorLogged = false;
+    activeErrors &= ~ERR_NTP;
+    acknowledgedErrors &= ~ERR_NTP;
 
     setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
             timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
   } else {
-    if (!timeSyncErrorLogged) {
+    if (!(activeErrors & ERR_NTP) && !(acknowledgedErrors & ERR_NTP)) {
       storeLogEntry("Time sync failed.");
-      timeSyncErrorLogged = true;
+      activeErrors |= ERR_NTP;
     }
-    indicateError();
   }
 }
 
-void indicateError() {
-  if (!triggerederror) {
-    storeLogEntry("Error triggered.");
-    digitalWrite(errorLEDPin, HIGH);
-    triggerederror = true;
-  }
-  hasError = true;
-}
-
-void clearError() {
-  storeLogEntry("Error cleared.");
-  digitalWrite(errorLEDPin, LOW);
-  hasError = false;
-  triggerederror = false;
-  timeSyncErrorLogged = false;
-  tempErrorLogged = false;
-}
 
 void saveSchedulesToEEPROM() {
   int addr = SCHEDULE_START_ADDR;
@@ -1830,6 +1811,44 @@ const char mainPage[] PROGMEM = R"html(
             }
         }
 
+
+        #errorSection h3 {
+            color: #fff;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        .error-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        .dismiss-btn {
+            background-color: #fff;
+            color: var(--error-color);
+            padding: 5px 15px;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .dismiss-btn:hover {
+            background-color: #f1f1f1;
+            transform: scale(1.05);
+        }
+        .dismiss-all {
+            background-color: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            width: 100%;
+        }
+        .dismiss-all:hover {
+            background-color: #fff;
+            color: var(--error-color);
+        }
     </style>
 </head>
 <body>
@@ -1856,11 +1875,6 @@ const char mainPage[] PROGMEM = R"html(
             </div>
         </div>
 
-        <div id="errorSection">
-            <p>Error detected!</p>
-            <button id="clearErrorBtn" onclick="clearError()">Clear Error</button>
-        </div>
-        
         <div class="control-section">
             <h3>Relay Controls</h3>
             <div class="relay-buttons">
@@ -1871,6 +1885,8 @@ const char mainPage[] PROGMEM = R"html(
             </div>
         </div>
 
+        <div id="errorSection" style="display: none;" class="control-section"></div>
+        
         <div class="control-section">
             <h3>System Navigation</h3>
             <div class="navigation-buttons">
@@ -2058,18 +2074,40 @@ const char mainPage[] PROGMEM = R"html(
             fetch('/error/status')
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('errorSection').style.display = data.hasError ? 'block' : 'none';
+                    const errSec = document.getElementById('errorSection');
+                    if (!errSec) return;
+                    let activeErrors = data.activeErrors || 0;
+                    if (activeErrors > 0) {
+                        let html = '<h3>System Errors Detected</h3>';
+                        if (activeErrors & 1) html += '<p>WiFi Disconnected <button onclick="clearError(1)">Dismiss</button></p>';
+                        if (activeErrors & 2) html += '<p>Time Sync Failed <button onclick="clearError(2)">Dismiss</button></p>';
+                        if (activeErrors & 4) html += '<p>Internal Temp Sensor Failed <button onclick="clearError(4)">Dismiss</button></p>';
+                        if (activeErrors & 8) html += '<p>External Temp Sensor Failed <button onclick="clearError(8)">Dismiss</button></p>';
+                        html += '<button onclick="clearError(\'all\')">Dismiss All</button>';
+                        errSec.innerHTML = html;
+                        errSec.style.display = 'block';
+                    } else {
+                        errSec.style.display = 'none';
+                    }
                 })
                 .catch(() => {
-                    document.getElementById('errorSection').style.display = 'block';
+                    const errSec = document.getElementById('errorSection');
+                    if (errSec) errSec.style.display = 'none';
                 });
         }
 
-        function clearError() {
-            fetch('/error/clear', { method: 'POST' })
-                .then(response => response.ok ? response.json() : { status: 'error' })
-                .then(data => { if (data.status === 'success') { document.getElementById('errorSection').style.display = 'none'; } else { throw new Error('Failed to clear error'); } })
-                .catch(error => { alert('Failed to clear error: ' + error.message); });
+        function clearError(errId) {
+            fetch('/error/clear', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error_id: errId })
+            })
+            .then(response => response.ok ? response.json() : { status: 'error' })
+            .then(data => { 
+                if (data.status === 'success') { checkErrorStatus(); } 
+                else { throw new Error('Failed to clear error'); }
+            })
+            .catch(error => { alert('Failed to clear error: ' + error.message); });
         }
 
         function showLogs() {
@@ -2292,6 +2330,44 @@ const char emailConfigPage[] PROGMEM = R"html(
         #toast.error   { background: var(--error-color); }
         @media (max-width: 600px) {
             .form-row { flex-direction: column; align-items: stretch; }
+        }
+
+        #errorSection h3 {
+            color: #fff;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        .error-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        .dismiss-btn {
+            background-color: #fff;
+            color: var(--error-color);
+            padding: 5px 15px;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .dismiss-btn:hover {
+            background-color: #f1f1f1;
+            transform: scale(1.05);
+        }
+        .dismiss-all {
+            background-color: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            width: 100%;
+        }
+        .dismiss-all:hover {
+            background-color: #fff;
+            color: var(--error-color);
         }
     </style>
 </head>
@@ -2548,6 +2624,44 @@ const char dockerConfigPage[] PROGMEM = R"html(
         #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         #toast.success { background: var(--success-color); }
         #toast.error   { background: var(--error-color); }
+
+        #errorSection h3 {
+            color: #fff;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        .error-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        .dismiss-btn {
+            background-color: #fff;
+            color: var(--error-color);
+            padding: 5px 15px;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .dismiss-btn:hover {
+            background-color: #f1f1f1;
+            transform: scale(1.05);
+        }
+        .dismiss-all {
+            background-color: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            width: 100%;
+        }
+        .dismiss-all:hover {
+            background-color: #fff;
+            color: var(--error-color);
+        }
     </style>
 </head>
 <body>
@@ -2851,6 +2965,44 @@ const char displayCtrlPage[] PROGMEM = R"html(
         @media (max-width: 600px) {
             .override-group { grid-template-columns: 1fr; }
             .form-row { flex-direction: column; align-items: stretch; }
+        }
+
+        #errorSection h3 {
+            color: #fff;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        .error-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        .dismiss-btn {
+            background-color: #fff;
+            color: var(--error-color);
+            padding: 5px 15px;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .dismiss-btn:hover {
+            background-color: #f1f1f1;
+            transform: scale(1.05);
+        }
+        .dismiss-all {
+            background-color: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            width: 100%;
+        }
+        .dismiss-all:hover {
+            background-color: #fff;
+            color: var(--error-color);
         }
     </style>
 </head>
@@ -3198,6 +3350,44 @@ const char logsPage[] PROGMEM = R"html(
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+
+        #errorSection h3 {
+            color: #fff;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        .error-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        .dismiss-btn {
+            background-color: #fff;
+            color: var(--error-color);
+            padding: 5px 15px;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .dismiss-btn:hover {
+            background-color: #f1f1f1;
+            transform: scale(1.05);
+        }
+        .dismiss-all {
+            background-color: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            width: 100%;
+        }
+        .dismiss-all:hover {
+            background-color: #fff;
+            color: var(--error-color);
         }
     </style>
 </head>
@@ -3582,6 +3772,44 @@ const char tempctrl[] PROGMEM = R"html(
             .calibration-save-button {
                 padding: 12px;
             }
+        }
+
+        #errorSection h3 {
+            color: #fff;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        .error-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        .dismiss-btn {
+            background-color: #fff;
+            color: var(--error-color);
+            padding: 5px 15px;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .dismiss-btn:hover {
+            background-color: #f1f1f1;
+            transform: scale(1.05);
+        }
+        .dismiss-all {
+            background-color: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            width: 100%;
+        }
+        .dismiss-all:hover {
+            background-color: #fff;
+            color: var(--error-color);
         }
     </style>
 </head>
@@ -4342,6 +4570,44 @@ const char tempschedules[] PROGMEM = R"html(
             }
         }
 
+
+        #errorSection h3 {
+            color: #fff;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        .error-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        .dismiss-btn {
+            background-color: #fff;
+            color: var(--error-color);
+            padding: 5px 15px;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .dismiss-btn:hover {
+            background-color: #f1f1f1;
+            transform: scale(1.05);
+        }
+        .dismiss-all {
+            background-color: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            width: 100%;
+        }
+        .dismiss-all:hover {
+            background-color: #fff;
+            color: var(--error-color);
+        }
     </style>
 </head>
 <body>
@@ -5024,6 +5290,44 @@ const char mainSchedules[] PROGMEM = R"html(
             }
         }
 
+
+        #errorSection h3 {
+            color: #fff;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+        }
+        .error-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0,0,0,0.15);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        .dismiss-btn {
+            background-color: #fff;
+            color: var(--error-color);
+            padding: 5px 15px;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .dismiss-btn:hover {
+            background-color: #f1f1f1;
+            transform: scale(1.05);
+        }
+        .dismiss-all {
+            background-color: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            width: 100%;
+        }
+        .dismiss-all:hover {
+            background-color: #fff;
+            color: var(--error-color);
+        }
     </style>
 </head>
 <body>
@@ -5170,18 +5474,40 @@ const char mainSchedules[] PROGMEM = R"html(
             fetch('/error/status')
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('errorSection').style.display = data.hasError ? 'block' : 'none';
+                    const errSec = document.getElementById('errorSection');
+                    if (!errSec) return;
+                    let activeErrors = data.activeErrors || 0;
+                    if (activeErrors > 0) {
+                        let html = '<h3>System Errors Detected</h3>';
+                        if (activeErrors & 1) html += '<p>WiFi Disconnected <button onclick="clearError(1)">Dismiss</button></p>';
+                        if (activeErrors & 2) html += '<p>Time Sync Failed <button onclick="clearError(2)">Dismiss</button></p>';
+                        if (activeErrors & 4) html += '<p>Internal Temp Sensor Failed <button onclick="clearError(4)">Dismiss</button></p>';
+                        if (activeErrors & 8) html += '<p>External Temp Sensor Failed <button onclick="clearError(8)">Dismiss</button></p>';
+                        html += '<button onclick="clearError(\'all\')">Dismiss All</button>';
+                        errSec.innerHTML = html;
+                        errSec.style.display = 'block';
+                    } else {
+                        errSec.style.display = 'none';
+                    }
                 })
                 .catch(() => {
-                    document.getElementById('errorSection').style.display = 'block';
+                    const errSec = document.getElementById('errorSection');
+                    if (errSec) errSec.style.display = 'none';
                 });
         }
 
-        function clearError() {
-            fetch('/error/clear', { method: 'POST' })
-                .then(response => response.ok ? response.json() : { status: 'error' })
-                .then(data => { if (data.status === 'success') { document.getElementById('errorSection').style.display = 'none'; } else { throw new Error('Failed to clear error'); } })
-                .catch(error => { alert('Failed to clear error: ' + error.message); });
+        function clearError(errId) {
+            fetch('/error/clear', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error_id: errId })
+            })
+            .then(response => response.ok ? response.json() : { status: 'error' })
+            .then(data => { 
+                if (data.status === 'success') { checkErrorStatus(); } 
+                else { throw new Error('Failed to clear error'); }
+            })
+            .catch(error => { alert('Failed to clear error: ' + error.message); });
         }
 
         function showSuccessDialog() {
@@ -5323,7 +5649,7 @@ void networkLoop(void* parameter) {
     handleExternalTemperature();
     //resetWatchdog();
 
-    if ((hasTempError || hasExternalTempError) && millis() - lastOledBlink >= 500) {
+    if (((activeErrors & ERR_TEMP_INT) || (activeErrors & ERR_TEMP_EXT)) && millis() - lastOledBlink >= 500) {
       oledBlinkState = !oledBlinkState;
       updateOLED();
       lastOledBlink = millis();
@@ -5335,22 +5661,17 @@ void networkLoop(void* parameter) {
     }
 
     if (WiFi.status() != WL_CONNECTED) {
-      unsigned long currentMillis = millis();
-      if (currentMillis - lastWifiConnectAttempt > WIFI_RECONNECT_INTERVAL) {
-        if (!wifiConnectionErrorLogged) {
-          storeLogEntry("Attempting to reconnect to WiFi...");
-          wifiConnectionErrorLogged = true;
-        }
-        resetWatchdog();
-        WiFi.reconnect();
-        resetWatchdog();
-        lastWifiConnectAttempt = currentMillis;
+      if (!(activeErrors & ERR_WIFI) && !(acknowledgedErrors & ERR_WIFI)) {
+        storeLogEntry("WiFi disconnected");
+        activeErrors |= ERR_WIFI;
       }
     } else {
-      if (wifiConnectionErrorLogged) {
-        storeLogEntry("WiFi connection restored");
-        wifiConnectionErrorLogged = false;
+      if ((activeErrors & ERR_WIFI) || (acknowledgedErrors & ERR_WIFI)) {
+        storeLogEntry("WiFi reconnected");
+        activeErrors &= ~ERR_WIFI;
+        acknowledgedErrors &= ~ERR_WIFI;
       }
+    }
 
       if (!validTimeSync) {
         unsigned long currentMillis = millis();
@@ -5380,7 +5701,6 @@ void networkLoop(void* parameter) {
         sendEmailWithLogs("Status Check");
         pointemail = false;
       }
-    }
     delay(5);
   }
 }
@@ -5754,11 +6074,11 @@ void handleAddSchedule() {
       schedules.push_back(newSchedule);
       saveSchedulesToEEPROM();
       server.send(200, "application/json", "{\"status\":\"success\"}");
-      clearError();
+      //clearError();
       broadcastRelayStates();
       return;
     }
-    indicateError();
+    //indicateError();
   }
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
@@ -5773,13 +6093,13 @@ void handleDeleteSchedule() {
       saveSchedulesToEEPROM();
       storeLogEntry("Schedule deleted successfully");
       server.send(200, "application/json", "{\"status\":\"success\"}");
-      clearError();
+     // clearError();
       broadcastRelayStates();
       return;
     }
-    indicateError();
+    //indicateError();
   }
-  storeLogEntry("Invalid delete request");
+  //storeLogEntry("Invalid delete request");
   server.send(400, "application/json", "{\"error\":\"Invalid schedule ID\"}");
 }
 
@@ -5798,13 +6118,13 @@ void handleUpdateSchedule() {
         saveSchedulesToEEPROM();
         server.send(200, "application/json", "{\"status\":\"success\"}");
         storeLogEntry("Schedule ID " + String(id) + " " + String(enabled ? "activated." : "deactivated."));
-        clearError();
+       // clearError();
         broadcastRelayStates();
         return;
       } else {
         server.send(400, "application/json", "{\"error\":\"Invalid schedule ID\"}");
         storeLogEntry("Invalid schedule update request for ID: " + String(id));
-        indicateError();
+        //indicateError();
         return;
       }
     }
@@ -5894,13 +6214,54 @@ void handleRelayStatus() {
 }
 
 void handleClearError() {
-  clearError();
-  server.send(200, "application/json", "{\"status\":\"success\"}");
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    StaticJsonDocument<200> doc;
+    DeserializationError error = deserializeJson(doc, body);
+    if (!error && doc.containsKey("error_id")) {
+      if (doc["error_id"].is<String>() && doc["error_id"].as<String>() == "all") {
+         acknowledgedErrors |= activeErrors;
+         activeErrors = 0;
+      } else {
+         uint16_t err_id = doc["error_id"].as<uint16_t>();
+         acknowledgedErrors |= err_id;
+         activeErrors &= ~err_id;
+      }
+      server.send(200, "application/json", "{\"status\":\"success\"}");
+      return;
+    }
+  }
+  server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+}
+
+void handleApiClearError() {
+  if (apiServer.hasArg("plain")) {
+    String body = apiServer.arg("plain");
+    StaticJsonDocument<200> doc;
+    DeserializationError error = deserializeJson(doc, body);
+    if (!error && doc.containsKey("error_id")) {
+      if (doc["error_id"].is<String>() && doc["error_id"].as<String>() == "all") {
+         acknowledgedErrors |= activeErrors;
+         activeErrors = 0;
+      } else {
+         uint16_t err_id = doc["error_id"].as<uint16_t>();
+         acknowledgedErrors |= err_id;
+         activeErrors &= ~err_id;
+      }
+      apiServer.send(200, "application/json", "{\"status\":\"success\"}");
+      return;
+    }
+  }
+  apiServer.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
 
 void handleGetErrorStatus() {
-  String json = "{\"hasError\":" + String(hasError ? "true" : "false") + "}";
-  server.send(200, "application/json", json);
+  StaticJsonDocument<256> doc;
+  doc["activeErrors"] = activeErrors;
+  doc["acknowledgedErrors"] = acknowledgedErrors;
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
 }
 
 void handleOneClickLight() {
@@ -5981,11 +6342,57 @@ void checkoverride2() {
 void overrideLEDState() {
   bool anyOverrideActive = overrideRelay1 || overrideRelay2;
 
-  if (hasError) {
-    return;
-  }
-
-  if (anyOverrideActive) {
+  if (activeErrors > 0) {
+    unsigned long now = millis();
+    uint16_t priorityError = 0;
+    if (activeErrors & ERR_WIFI) priorityError = ERR_WIFI;
+    else if (activeErrors & ERR_TEMP_INT) priorityError = ERR_TEMP_INT;
+    else if (activeErrors & ERR_TEMP_EXT) priorityError = ERR_TEMP_EXT;
+    else if (activeErrors & ERR_NTP) priorityError = ERR_NTP;
+    
+    static int blinkCount = 0;
+    static unsigned long stateStart = 0;
+    static bool isBlinking = false;
+    
+    if (priorityError == ERR_WIFI) {
+      if (now - lastBlinkTime >= 250) {
+        lastBlinkTime = now;
+        blinkState = !blinkState;
+        digitalWrite(errorLEDPin, blinkState);
+      }
+      return;
+    }
+    
+    int targetBlinks = 0;
+    if (priorityError == ERR_TEMP_INT) targetBlinks = 2;
+    else if (priorityError == ERR_TEMP_EXT) targetBlinks = 3;
+    else if (priorityError == ERR_NTP) targetBlinks = 4;
+    else targetBlinks = 1;
+    
+    if (isBlinking) {
+      if (now - stateStart >= 200) { 
+        stateStart = now;
+        blinkState = !blinkState;
+        digitalWrite(errorLEDPin, blinkState);
+        if (!blinkState) {
+          blinkCount++;
+          if (blinkCount >= targetBlinks) {
+            isBlinking = false;
+            blinkCount = 0;
+          }
+        }
+      }
+    } else {
+      if (now - stateStart >= 1500) {
+        stateStart = now;
+        isBlinking = true;
+        blinkState = true;
+        digitalWrite(errorLEDPin, HIGH);
+      } else {
+        digitalWrite(errorLEDPin, LOW);
+      }
+    }
+  } else if (anyOverrideActive) {
     if (millis() - lastBlinkTime >= BLINK_INTERVAL) {
       lastBlinkTime = millis();
       blinkState = !blinkState;
@@ -6093,7 +6500,8 @@ void sendEmailWithLogs(const String& trigger) {
   textMsg += "Relay 3 (Air Pump): " + String(relay3State ? "ON" : "OFF") + "\n";
   textMsg += "Override 1: " + String(overrideRelay1 ? "Active" : "Inactive") + "\n";
   textMsg += "Override 2: " + String(overrideRelay2 ? "Active" : "Inactive") + "\n";
-  textMsg += "Error Status: " + String(hasError ? "Error Present" : "No Errors") + "\n\n";
+  textMsg += "Total Active Errors: " + String(__builtin_popcount(activeErrors)) + "\n";
+  textMsg += "Total Acknowledged Errors: " + String(__builtin_popcount(acknowledgedErrors)) + "\n\n";
   textMsg += "Full logs are attached as logs.json";
 
   message.text.body(textMsg);
@@ -6178,21 +6586,20 @@ void handleTemperature() {
       broadcastRelayStates();
       updateOLED();
       consecutiveTempFailures = 0;
-      if (hasTempError) {
-        clearError();
-        hasTempError = false;
-        tempErrorLogged = false;
+      if ((activeErrors & ERR_TEMP_INT) || (acknowledgedErrors & ERR_TEMP_INT)) {
+        activeErrors &= ~ERR_TEMP_INT;
+        acknowledgedErrors &= ~ERR_TEMP_INT;
       }
     } else {
       consecutiveTempFailures++;
       if (consecutiveTempFailures >= MAX_TEMP_FAILURES) {
-        if (!tempErrorLogged) {
+        if (!(activeErrors & ERR_TEMP_INT) && !(acknowledgedErrors & ERR_TEMP_INT)) {
           storeLogEntry("Error: Internal Temperature sensor failed " + String(consecutiveTempFailures) + " times");
-          tempErrorLogged = true;
-          sendEmailWithLogs("Temperature Sensor Error");
+          sendEmailWithLogs("Internal Temperature Sensor Error");
+          activeErrors |= ERR_TEMP_INT;
+        } else if (!(acknowledgedErrors & ERR_TEMP_INT)) {
+          activeErrors |= ERR_TEMP_INT; // ensure it's set if not acknowledged
         }
-        indicateError();
-        hasTempError = true;
       }
     }
 
@@ -6300,10 +6707,10 @@ void handleAddTemporarySchedule() {
         logMsg += " OFF at " + String(newSchedule.offHour) + ":" + (newSchedule.offMinute < 10 ? "0" : "") + String(newSchedule.offMinute);
       }
       storeLogEntry(logMsg);
-      clearError();
+     // clearError();
       return;
     }
-    indicateError();
+   // indicateError();
   }
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
@@ -6318,13 +6725,13 @@ void handleDeleteTemporarySchedule() {
         temporarySchedules.erase(it);
         storeLogEntry("Temporary schedule deleted successfully");
         server.send(200, "application/json", "{\"status\":\"success\"}");
-        clearError();
+       // clearError();
         return;
       }
     }
-    indicateError();
+    //indicateError();
   }
-  storeLogEntry("Invalid temporary schedule delete request");
+  //storeLogEntry("Invalid temporary schedule delete request");
   server.send(400, "application/json", "{\"error\":\"Invalid schedule ID\"}");
 }
 
@@ -6430,22 +6837,21 @@ void handleExternalTemperature() {
       broadcastRelayStates();
       updateOLED();
       consecutiveExternalTempFailures = 0;
-      if (hasExternalTempError) {
+      if ((activeErrors & ERR_TEMP_EXT) || (acknowledgedErrors & ERR_TEMP_EXT)) {
         storeLogEntry("External temperature sensor restored");
-        hasExternalTempError = false;
-        externalTempErrorLogged = false;
-        clearError();
+        activeErrors &= ~ERR_TEMP_EXT;
+        acknowledgedErrors &= ~ERR_TEMP_EXT;
       }
     } else {
       consecutiveExternalTempFailures++;
       if (consecutiveExternalTempFailures >= MAX_EXTERNAL_TEMP_FAILURES) {
-        if (!externalTempErrorLogged) {
+        if (!(activeErrors & ERR_TEMP_EXT) && !(acknowledgedErrors & ERR_TEMP_EXT)) {
           storeLogEntry("Error: External Temperature sensor failed " + String(consecutiveExternalTempFailures) + " times");
           sendEmailWithLogs("External Temperature Sensor Error");
-          indicateError();
-          externalTempErrorLogged = true;
+          activeErrors |= ERR_TEMP_EXT;
+        } else if (!(acknowledgedErrors & ERR_TEMP_EXT)) {
+          activeErrors |= ERR_TEMP_EXT; // ensure it's set if not acknowledged
         }
-        hasExternalTempError = true;
       }
     }
 
@@ -6474,7 +6880,7 @@ void updateOLED() {
   display.drawFastHLine(0, 10, 63, SSD1306_WHITE);
   display.drawFastHLine(65, 10, 63, SSD1306_WHITE);
 
-  if (hasTempError) {
+  if (activeErrors & ERR_TEMP_INT) {
     if (oledBlinkState) {
       display.setTextSize(4);
       display.setCursor(16, 20);
@@ -6495,7 +6901,7 @@ void updateOLED() {
     display.setCursor(unitX + 9, 43);
     display.print("C");
   }
-  if (hasExternalTempError) {
+  if (activeErrors & ERR_TEMP_EXT) {
     if (oledBlinkState) {
       display.setTextSize(4);
       display.setCursor(79, 20);
@@ -6569,9 +6975,8 @@ void handleApiStatus() {
   json += "\"relay3\":" + String((relay3State || overrideRelay1) ? "true" : "false") + ",";
   json += "\"override1\":" + String(overrideRelay1 ? "true" : "false") + ",";
   json += "\"override2\":" + String(overrideRelay2 ? "true" : "false") + ",";
-  json += "\"has_error\":" + String(hasError ? "true" : "false") + ",";
-  json += "\"temp_error\":" + String(hasTempError ? "true" : "false") + ",";
-  json += "\"ext_temp_error\":" + String(hasExternalTempError ? "true" : "false") + ",";
+  json += "\"active_errors\":" + String(activeErrors) + ",";
+  json += "\"acknowledged_errors\":" + String(acknowledgedErrors) + ",";
 
   json += "\"time_synced\":" + String(validTimeSync ? "true" : "false") + ",";
   json += "\"timestamp\":" + ts;
