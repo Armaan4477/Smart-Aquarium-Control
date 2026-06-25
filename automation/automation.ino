@@ -84,6 +84,11 @@ void applyOledSchedule();
 void handleApiStatus();
 void handleApiLogs();
 void handleApiPing();
+void handleDockerConfigPage();
+void handleGetDockerConfig();
+void handleSaveDockerConfig();
+void loadDockerConfig();
+void saveDockerConfig();
 
 struct Schedule {
   int id;
@@ -135,6 +140,11 @@ struct EmailConfig {
   char senderAccount[64];
   char senderPassword[64];
   char recipient[64];
+};
+
+struct DockerConfig {
+  uint8_t magic;
+  bool enabled;
 };
 
 const int relay1 = 18;
@@ -240,6 +250,9 @@ DisplaySchedule displaySchedule = { 0xDA, 8, 0, 22, 0, 0, true };
 
 const int EMAIL_CONFIG_ADDR = DISPLAY_SCHEDULE_ADDR + sizeof(DisplaySchedule) + 1;
 EmailConfig emailConfig = { 0xE2, true, "", "", "" };
+
+const int DOCKER_CONFIG_ADDR = EMAIL_CONFIG_ADDR + sizeof(EmailConfig) + 1;
+DockerConfig dockerConfig = { 0xD1, true };
 
 bool oledPhysicalState = false;
 
@@ -1011,6 +1024,9 @@ void setup() {
   server.on("/emailConfig", HTTP_GET, handleEmailConfigPage);
   server.on("/api/emailConfig", HTTP_GET, handleGetEmailConfig);
   server.on("/api/emailConfig", HTTP_POST, handleSaveEmailConfig);
+  server.on("/dockerConfig", HTTP_GET, handleDockerConfigPage);
+  server.on("/api/dockerConfig", HTTP_GET, handleGetDockerConfig);
+  server.on("/api/dockerConfig", HTTP_POST, handleSaveDockerConfig);
   server.begin();
 
   apiServer.on("/api/status", HTTP_GET, handleApiStatus);
@@ -1022,6 +1038,7 @@ void setup() {
   loadCalibrationSettings();
   loadDisplaySchedule();
   loadEmailConfig();
+  loadDockerConfig();
 
   schedules.reserve(MAX_SCHEDULES);
   temporarySchedules.reserve(6);
@@ -1243,6 +1260,25 @@ void saveEmailConfig() {
   storeLogEntry("Email config saved to EEPROM");
 }
 
+void loadDockerConfig() {
+  DockerConfig stored;
+  EEPROM.get(DOCKER_CONFIG_ADDR, stored);
+  if (stored.magic == 0xD1) {
+    dockerConfig = stored;
+    storeLogEntry("Docker config loaded from EEPROM");
+  } else {
+    saveDockerConfig();
+    storeLogEntry("Using default docker config");
+  }
+}
+
+void saveDockerConfig() {
+  dockerConfig.magic = 0xD1;
+  EEPROM.put(DOCKER_CONFIG_ADDR, dockerConfig);
+  EEPROM.commit();
+  storeLogEntry("Docker config saved to EEPROM");
+}
+
 void applyOledSchedule() {
   if (!validTimeSync) {
     if (oledPhysicalState) {
@@ -1287,6 +1323,7 @@ void applyOledSchedule() {
 
 extern const char displayCtrlPage[] PROGMEM;
 extern const char emailConfigPage[] PROGMEM;
+extern const char dockerConfigPage[] PROGMEM;
 
 void handleDisplayCtrlPage() {
   if (!checkAuthentication()) return;
@@ -1330,6 +1367,40 @@ void handleSaveEmailConfig() {
   strlcpy(emailConfig.recipient, doc["recipient"] | "", sizeof(emailConfig.recipient));
   
   saveEmailConfig();
+  
+  server.send(200, "application/json", "{\"success\":true}");
+}
+
+void handleDockerConfigPage() {
+  if (!checkAuthentication()) return;
+  server.send_P(200, "text/html", dockerConfigPage);
+}
+
+void handleGetDockerConfig() {
+  DynamicJsonDocument doc(256);
+  doc["enabled"] = dockerConfig.enabled;
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleSaveDockerConfig() {
+  if (server.hasArg("plain") == false) {
+    server.send(400, "application/json", "{\"error\":\"Body not received\"}");
+    return;
+  }
+  
+  DynamicJsonDocument doc(256);
+  DeserializationError error = deserializeJson(doc, server.arg("plain"));
+  
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  
+  dockerConfig.enabled = doc["enabled"] | true;
+  saveDockerConfig();
   
   server.send(200, "application/json", "{\"success\":true}");
 }
@@ -1808,6 +1879,7 @@ const char mainPage[] PROGMEM = R"html(
                 <button class="button nav-button" onclick="showTempControl()">Temperature Control</button>
                 <button class="button nav-button" onclick="showDisplayCtrl()">Display Control</button>
                 <button class="button nav-button" onclick="showEmailConfig()">Email Settings</button>
+                <button class="button nav-button" onclick="showDockerConfig()">Docker Settings</button>
                 <button class="button nav-button nav-full" onclick="showLogs()">System Logs</button>
             </div>
         </div>
@@ -2005,6 +2077,10 @@ const char mainPage[] PROGMEM = R"html(
         }
         function showEmailConfig() {
             window.location.href = '/emailConfig';
+        }
+
+        function showDockerConfig() {
+            window.location.href = '/dockerConfig';
         }
         function showTempControl() {
             window.location.href = '/tempcontrol';
@@ -2302,6 +2378,234 @@ const char emailConfigPage[] PROGMEM = R"html(
             btn.disabled = true;
             
             fetch('/api/emailConfig', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Configuration saved successfully!', 'success');
+                } else {
+                    showToast('Failed to save configuration', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Save error', err);
+                showToast('Error saving configuration', 'error');
+            })
+            .finally(() => {
+                btn.textContent = "Save Settings";
+                btn.disabled = false;
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', loadConfig);
+    </script>
+</body>
+</html>
+)html";
+
+const char dockerConfigPage[] PROGMEM = R"html(
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" type="image/png" href="/favicon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Docker Settings</title>
+    <style>
+        :root {
+            --primary-color: #1976D2;
+            --primary-dark: #0D47A1;
+            --primary-light: #BBDEFB;
+            --accent-color: #03A9F4;
+            --success-color: #4CAF50;
+            --warning-color: #FFC107;
+            --error-color: #F44336;
+            --text-color: #333;
+            --text-light: #757575;
+            --background-color: #f5f7fa;
+            --card-color: #ffffff;
+            --border-radius: 8px;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding-bottom: 40px;
+        }
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+            margin-bottom: 30px;
+        }
+        header h1 { margin: 0; font-size: 2rem; letter-spacing: 0.5px; }
+        header p { margin: 5px 0 0; opacity: 0.85; font-size: 0.95rem; }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            margin: 5px 0 20px 0;
+            transition: var(--transition);
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+        .button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .header-actions {
+            margin-bottom: 20px;
+            overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .card {
+            background: var(--card-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 25px;
+            margin-bottom: 25px;
+            transition: var(--transition);
+        }
+        .card h3 {
+            color: var(--primary-color);
+            font-size: 1.4rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .toggle-row label { font-size: 1rem; cursor: pointer; user-select: none; }
+        input[type=checkbox] {
+            width: 18px; height: 18px;
+            accent-color: var(--primary-color);
+            cursor: pointer;
+        }
+        .save-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: var(--shadow);
+            margin-top: 6px;
+        }
+        .save-btn:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .save-btn:active { transform: translateY(1px); }
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { background: var(--success-color); }
+        #toast.error   { background: var(--error-color); }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Docker Settings</h1>
+        <p>Manage Docker integration endpoints</p>
+    </header>
+
+    <div class="container">
+        <div class="header-actions">
+            <button onclick="goBack()" class="button">Back to Dashboard</button>
+        </div>
+
+        <div class="card">
+            <h3>Configuration</h3>
+            <div class="toggle-row">
+                <input type="checkbox" id="dockerEnabled">
+                <label for="dockerEnabled">Enable Docker Integration (API Endpoints)</label>
+            </div>
+            
+            <button class="save-btn" onclick="saveDockerConfig()">Save Settings</button>
+        </div>
+    </div>
+    
+    <div id="toast"></div>
+
+    <script>
+        function goBack() { window.location.href = '/'; }
+        
+        function showToast(msg, type='success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = type + ' show';
+            setTimeout(() => t.className = '', 3000);
+        }
+        
+        function loadConfig() {
+            fetch('/api/dockerConfig')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('dockerEnabled').checked = data.enabled;
+                })
+                .catch(err => {
+                    console.error('Failed to load docker config', err);
+                    showToast('Failed to load configuration', 'error');
+                });
+        }
+        
+        function saveDockerConfig() {
+            const data = {
+                enabled: document.getElementById('dockerEnabled').checked
+            };
+            
+            const btn = document.querySelector('.save-btn');
+            btn.textContent = "Saving...";
+            btn.disabled = true;
+            
+            fetch('/api/dockerConfig', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -6234,10 +6538,18 @@ void tempTemperature() {
 
 // Collector API handlers — served via apiServer (port 82) on Core 0 (networkLoop)
 void handleApiPing() {
+  if (!dockerConfig.enabled) {
+    apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
+    return;
+  }
   apiServer.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
 void handleApiStatus() {
+  if (!dockerConfig.enabled) {
+    apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
+    return;
+  }
 
   String ts = "null";
   struct tm t;
@@ -6269,6 +6581,10 @@ void handleApiStatus() {
 }
 
 void handleApiLogs() {
+  if (!dockerConfig.enabled) {
+    apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
+    return;
+  }
   // Re-serve the logs JSON via apiServer (Core 0)
   if (!spiffsInitialized) {
     apiServer.send(500, "application/json", "{\"error\":\"LittleFS not initialized!\"}");
