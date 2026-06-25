@@ -126,7 +126,7 @@ The collector exposes a local API for data visualization and querying. All endpo
 ## ESP32 Integration
 
 The data collector interacts with two dedicated endpoints on the ESP32 firmware (`automation.ino`):
-- `GET /api/status`: Returns calibrated temps, relay states, override flags, error flags, and uptime.
+- `GET /api/status`: Returns calibrated temps, relay states, override flags, error flags and uptime.
 - `GET /api/logs`: Returns system logs.
 
 **Security**: Ensure your Raspberry Pi's IP address (e.g., `192.168.29.3`) is included in the `allowedIPs` whitelist within the ESP32 code so the collector can poll without authentication.

@@ -3,7 +3,7 @@
 ![Platform](https://img.shields.io/badge/platform-ESP32-green.svg)
 ![Framework](https://img.shields.io/badge/framework-Arduino-orange.svg)
 
-This directory contains the firmware for the ESP32-based hardware controller. It handles real-time equipment scheduling, temperature monitoring, manual overrides, and serves a robust local web interface.
+This directory contains the firmware for the ESP32-based hardware controller. It handles real-time equipment scheduling, temperature monitoring, manual overrides and serves a robust local web interface.
 
 ## Key Features
 
@@ -25,7 +25,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
   - **Switch 2**: Overrides Main Light (Relay 2 & 4)
 - **Comprehensive Logging & Alerts**:
   - Persistent event logging stored on LittleFS.
-  - Automated email notifications for system startups, periodic status checks, and sensor errors.
+  - Automated email notifications for system startups, periodic status checks and sensor errors.
   - Dedicated hardware LED for immediate visual error indication.
 - **Robust Timekeeping**: Automatic NTP time synchronization with built-in retry logic.
 
@@ -104,7 +104,7 @@ The intuitive web dashboard provides complete control over your aquarium. Naviga
 - **Email Config**: Manage SMTP email credentials directly from the web interface (saved persistently to EEPROM).
 - **Docker Config**: Configure connection settings for the Raspberry Pi data collector.
 - **Display Control**: Configure OLED screen behavior, including operating hours and manual overrides.
-- **System Logs**: Review historical events, errors, and system warnings.
+- **System Logs**: Review historical events, errors and system warnings.
 
 ### Physical Manual Overrides
 Physical switches allow you to instantly override automated schedules without accessing the web interface:
