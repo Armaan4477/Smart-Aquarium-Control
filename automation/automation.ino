@@ -149,7 +149,6 @@ const char* password = "Your_WiFi_Password";
 std::vector<LogEntry> logBuffer;
 bool spiffsInitialized = false;
 WiFiUDP ntpUDP;
-// Hardware WDT used instead of Ticker-based watchdog (ESP.restart() from ISR is unsafe)
 unsigned long lastTimeUpdate = 0;
 const long timeUpdateInterval = 1000;
 unsigned long lastNTPSync = 0;
@@ -160,11 +159,11 @@ unsigned long last90MinCheck = 0;
 const unsigned long CHECK_90MIN_INTERVAL = 5400;
 bool hasError = false;
 bool hasLaunchedSchedules = false;
-bool startupemail = false;
-bool pointemail = false;
+// bool startupemail = false;
+// bool pointemail = false;
 unsigned long logIdCounter = 0;
 SemaphoreHandle_t littleFsMutex = NULL;
-volatile bool emailInProgress = false;
+// volatile bool emailInProgress = false;
 std::vector<Schedule> schedules;
 std::vector<TemporarySchedule> temporarySchedules;
 int tempScheduleIdCounter = 0;
@@ -1063,15 +1062,12 @@ void setup() {
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
-  resetWatchdog();
   const esp_task_wdt_config_t wdt_config = {
     .timeout_ms = 15000,  // 15 second timeout
     .idle_core_mask = 0,
     .trigger_panic = true
   };
   esp_task_wdt_init(&wdt_config);
-  esp_task_wdt_add(NULL);
-
   littleFsMutex = xSemaphoreCreateMutex();
 
   xTaskCreatePinnedToCore(
@@ -4637,16 +4633,17 @@ void loop() {
 
 void networkLoop(void* parameter) {
   esp_task_wdt_add(NULL);
-  unsigned long lastEmailAttempt = 0;
-  const unsigned long EMAIL_RETRY_INTERVAL = 30000;
-
+  // unsigned long lastEmailAttempt = 0;
+  // const unsigned long EMAIL_RETRY_INTERVAL = 30000;
   unsigned long lastOledBlink = 0;
   unsigned long lastOledScheduleCheck = 0;
   for (;;) {
     resetWatchdog();
     apiServer.handleClient();
     handleTemperature();
+    //resetWatchdog();
     handleExternalTemperature();
+    //resetWatchdog();
 
     if ((hasTempError || hasExternalTempError) && millis() - lastOledBlink >= 500) {
       oledBlinkState = !oledBlinkState;
@@ -4689,20 +4686,20 @@ void networkLoop(void* parameter) {
 
       unsigned long currentTime = millis();
 
-      if (!startupemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
-        lastEmailAttempt = currentTime;
-        startupemail = true;
+      // if (!startupemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
+      //   lastEmailAttempt = currentTime;
+      //   startupemail = true;
 
-        struct tm timeinfo;
-        if (getLocalTime(&timeinfo)) {
-          last90MinCheck = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
-        }
-      }
+      //   struct tm timeinfo;
+      //   if (getLocalTime(&timeinfo)) {
+      //     last90MinCheck = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
+      //   }
+      // }
 
-      if (pointemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
-        lastEmailAttempt = currentTime;
-        pointemail = false;
-      }
+      // if (pointemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
+      //   lastEmailAttempt = currentTime;
+      //   pointemail = false;
+      // }
     }
     delay(5);
   }
@@ -4736,9 +4733,9 @@ void mainLoop(void* parameter) {
             storeLogEntry("Device is powered on at " + timeStr);
             last90MinCheck = currentSeconds;
 
-            if (startupemail && !pointemail) {
-              pointemail = true;
-            }
+            // if (startupemail && !pointemail) {
+            //   pointemail = true;
+            // }
           }
 
           static int prevDay = -1;
@@ -4757,7 +4754,7 @@ void mainLoop(void* parameter) {
       checkScheduleslaunch();
       storeLogEntry("Startup Schedule Check Success");
       hasLaunchedSchedules = true;
-      startupemail = false;
+      //startupemail = false;
 
       if (WiFi.status() == WL_CONNECTED) {
         delay(100);

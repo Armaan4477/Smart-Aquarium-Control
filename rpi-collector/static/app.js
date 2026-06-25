@@ -441,10 +441,12 @@ async function fetchChartData() {
     const hours   = minutes / 60;
 
     // Determine how many raw rows to fetch
-    let limit = 2000;
-    if (hours > 24)  limit = 5000;
-    if (hours > 72)  limit = 10000;
-    if (hours > 168) limit = 20000;
+    // A reading every minute = 1440 points/day
+    let limit = 2000; // 1h, 12h, 24h
+    if (hours > 24)   limit = 5000;   // 3 days (4320)
+    if (hours >= 120) limit = 12000;  // 5 days (7200) & 7 days (10080)
+    if (hours >= 360) limit = 25000;  // 15 days (21600)
+    if (hours >= 720) limit = 50000;  // 30 days (43200)
     if (minutes === 0) limit = 100000; // All time
 
     // ── Accurate 'since' calculation ──
