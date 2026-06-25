@@ -71,9 +71,14 @@ void handleSaveCalibrationSettings();
 void tempTemperature();
 void handleGetRawTemperatureData();
 void handleDisplayCtrlPage();
+void handleEmailConfigPage();
+void handleGetEmailConfig();
+void handleSaveEmailConfig();
 void handleGetDisplaySchedule();
 void handleSaveDisplaySchedule();
 void loadDisplaySchedule();
+void loadEmailConfig();
+void saveEmailConfig();
 void saveDisplaySchedule();
 void applyOledSchedule();
 void handleApiStatus();
@@ -124,6 +129,14 @@ struct DisplaySchedule {
   bool enabled;
 };
 
+struct EmailConfig {
+  uint8_t magic;
+  bool enabled;
+  char senderAccount[64];
+  char senderPassword[64];
+  char recipient[64];
+};
+
 const int relay1 = 18;
 const int relay2 = 19;
 const int relay3 = 23;
@@ -166,7 +179,7 @@ volatile bool emailInProgress = false;
 std::vector<Schedule> schedules;
 std::vector<TemporarySchedule> temporarySchedules;
 int tempScheduleIdCounter = 0;
-const int EEPROM_SIZE = 512;
+const int EEPROM_SIZE = 1024;
 const int SCHEDULE_SIZE = sizeof(Schedule);
 const int MAX_SCHEDULES = 10;
 const int SCHEDULE_START_ADDR = 0;
@@ -224,6 +237,10 @@ const int CALIBRATION_SIZE = sizeof(CalibrationData);
 
 const int DISPLAY_SCHEDULE_ADDR = CALIBRATION_START_ADDR + CALIBRATION_SIZE + 1;
 DisplaySchedule displaySchedule = { 0xDA, 8, 0, 22, 0, 0, true };
+
+const int EMAIL_CONFIG_ADDR = DISPLAY_SCHEDULE_ADDR + sizeof(DisplaySchedule) + 1;
+EmailConfig emailConfig = { 0xE2, true, "", "", "" };
+
 bool oledPhysicalState = false;
 
 WiFiEventId_t wifiConnectHandler;
@@ -780,9 +797,6 @@ const size_t favicon_png_len = sizeof(favicon_png);
 
 #define SMTP_HOST "smtp.gmail.com"
 #define SMTP_PORT 465
-const char* emailSenderAccount = "your-email@gmail.com";
-const char* emailSenderPassword = "your-app-specific-password";
-const char* emailRecipient = "recipient@email.com";
 const char* emailSubject = "Aquarium Control Logs";
 
 WiFiClientSecure ssl_client;
@@ -994,6 +1008,9 @@ void setup() {
   server.on("/displayctrl", HTTP_GET, handleDisplayCtrlPage);
   server.on("/display/schedule", HTTP_GET, handleGetDisplaySchedule);
   server.on("/display/schedule/save", HTTP_POST, handleSaveDisplaySchedule);
+  server.on("/emailConfig", HTTP_GET, handleEmailConfigPage);
+  server.on("/api/emailConfig", HTTP_GET, handleGetEmailConfig);
+  server.on("/api/emailConfig", HTTP_POST, handleSaveEmailConfig);
   server.begin();
 
   apiServer.on("/api/status", HTTP_GET, handleApiStatus);
@@ -1206,6 +1223,25 @@ void saveDisplaySchedule() {
   storeLogEntry("Display schedule saved to EEPROM");
 }
 
+void loadEmailConfig() {
+  EmailConfig stored;
+  EEPROM.get(EMAIL_CONFIG_ADDR, stored);
+  if (stored.magic == 0xE2) {
+    emailConfig = stored;
+    storeLogEntry("Email config loaded from EEPROM");
+  } else {
+    saveEmailConfig();
+    storeLogEntry("Using default email config");
+  }
+}
+
+void saveEmailConfig() {
+  emailConfig.magic = 0xE2;
+  EEPROM.put(EMAIL_CONFIG_ADDR, emailConfig);
+  EEPROM.commit();
+  storeLogEntry("Email config saved to EEPROM");
+}
+
 void applyOledSchedule() {
   if (!validTimeSync) {
     if (oledPhysicalState) {
@@ -1249,10 +1285,52 @@ void applyOledSchedule() {
 }
 
 extern const char displayCtrlPage[] PROGMEM;
+extern const char emailConfigPage[] PROGMEM;
 
 void handleDisplayCtrlPage() {
   if (!checkAuthentication()) return;
   server.send_P(200, "text/html", displayCtrlPage);
+}
+
+void handleEmailConfigPage() {
+  if (!checkAuthentication()) return;
+  server.send_P(200, "text/html", emailConfigPage);
+}
+
+void handleGetEmailConfig() {
+  DynamicJsonDocument doc(512);
+  doc["enabled"] = emailConfig.enabled;
+  doc["senderAccount"] = emailConfig.senderAccount;
+  doc["senderPassword"] = emailConfig.senderPassword;
+  doc["recipient"] = emailConfig.recipient;
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleSaveEmailConfig() {
+  if (server.hasArg("plain") == false) {
+    server.send(400, "application/json", "{\"error\":\"Body not received\"}");
+    return;
+  }
+  
+  DynamicJsonDocument doc(512);
+  DeserializationError error = deserializeJson(doc, server.arg("plain"));
+  
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  
+  emailConfig.enabled = doc["enabled"] | true;
+  strlcpy(emailConfig.senderAccount, doc["senderAccount"] | "", sizeof(emailConfig.senderAccount));
+  strlcpy(emailConfig.senderPassword, doc["senderPassword"] | "", sizeof(emailConfig.senderPassword));
+  strlcpy(emailConfig.recipient, doc["recipient"] | "", sizeof(emailConfig.recipient));
+  
+  saveEmailConfig();
+  
+  server.send(200, "application/json", "{\"success\":true}");
 }
 
 void handleGetDisplaySchedule() {
@@ -1728,6 +1806,7 @@ const char mainPage[] PROGMEM = R"html(
                 <button class="button nav-button" onclick="showSchedules()">Main Schedules</button>
                 <button class="button nav-button" onclick="showTempControl()">Temperature Control</button>
                 <button class="button nav-button" onclick="showDisplayCtrl()">Display Control</button>
+                <button class="button nav-button" onclick="showEmailConfig()">Email Settings</button>
                 <button class="button nav-button nav-full" onclick="showLogs()">System Logs</button>
             </div>
         </div>
@@ -1923,6 +2002,9 @@ const char mainPage[] PROGMEM = R"html(
         function showLogs() {
             window.location.href = '/logs';
         }
+        function showEmailConfig() {
+            window.location.href = '/emailConfig';
+        }
         function showTempControl() {
             window.location.href = '/tempcontrol';
         }
@@ -1954,6 +2036,294 @@ const char mainPage[] PROGMEM = R"html(
         document.getElementById('btn1').textContent = `${relayNames[1]} (OFF)`;
         document.getElementById('btn2').textContent = `${relayNames[2]} (OFF)`;
         document.getElementById('btn3').textContent = `${relayNames[3]} (OFF)`;
+    </script>
+</body>
+</html>
+)html";
+
+const char emailConfigPage[] PROGMEM = R"html(
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="shortcut icon" type="image/png" href="/favicon.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Settings</title>
+    <style>
+        :root {
+            --primary-color: #1976D2;
+            --primary-dark: #0D47A1;
+            --primary-light: #BBDEFB;
+            --accent-color: #03A9F4;
+            --success-color: #4CAF50;
+            --warning-color: #FFC107;
+            --error-color: #F44336;
+            --text-color: #333;
+            --text-light: #757575;
+            --background-color: #f5f7fa;
+            --card-color: #ffffff;
+            --border-radius: 8px;
+            --shadow: 0 2px 10px rgba(0,0,0,0.1);
+            --transition: all 0.3s ease;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding-bottom: 40px;
+        }
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+            margin-bottom: 30px;
+        }
+        header h1 { margin: 0; font-size: 2rem; letter-spacing: 0.5px; }
+        header p { margin: 5px 0 0; opacity: 0.85; font-size: 0.95rem; }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: var(--border-radius);
+            margin: 5px 0 20px 0;
+            transition: var(--transition);
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+        .button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .header-actions {
+            margin-bottom: 20px;
+            overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        .card {
+            background: var(--card-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 25px;
+            margin-bottom: 25px;
+            transition: var(--transition);
+        }
+        .card:hover { box-shadow: 0 5px 15px rgba(0,0,0,0.15); }
+        .card h3 {
+            color: var(--primary-color);
+            font-size: 1.4rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 18px;
+            align-items: flex-end;
+        }
+        .form-group { display: flex; flex-direction: column; flex: 1; min-width: 120px; }
+        .form-group label {
+            font-size: 0.85rem;
+            color: var(--text-light);
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input[type=email],
+        .form-group input[type=text],
+        .form-group input[type=password] {
+            padding: 10px 12px;
+            border: 1.5px solid #ddd;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: var(--transition);
+            width: 100%;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(25,118,210,0.12);
+        }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .toggle-row label { font-size: 1rem; cursor: pointer; user-select: none; }
+        input[type=checkbox] {
+            width: 18px; height: 18px;
+            accent-color: var(--primary-color);
+            cursor: pointer;
+        }
+        .save-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: var(--shadow);
+            margin-top: 6px;
+        }
+        .save-btn:hover { background: var(--primary-dark); transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        .save-btn:active { transform: translateY(1px); }
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { background: var(--success-color); }
+        #toast.error   { background: var(--error-color); }
+        @media (max-width: 600px) {
+            .form-row { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Email Settings</h1>
+        <p>Manage system notifications and credentials</p>
+    </header>
+
+    <div class="container">
+        <div class="header-actions">
+            <button onclick="goBack()" class="button">Back to Dashboard</button>
+        </div>
+
+        <div class="card">
+            <h3>Configuration</h3>
+            <div class="toggle-row">
+                <input type="checkbox" id="emailEnabled">
+                <label for="emailEnabled">Enable Email Notifications</label>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group" style="flex: 1 1 100%;">
+                    <label for="senderAccount">Sender Email</label>
+                    <input type="email" id="senderAccount" placeholder="e.g. your_email@gmail.com">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group" style="flex: 1 1 100%;">
+                    <label for="senderPassword">Sender App Password</label>
+                    <input type="password" id="senderPassword" placeholder="e.g. abcd efgh ijkl mnop">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group" style="flex: 1 1 100%;">
+                    <label for="recipient">Receiver Email</label>
+                    <input type="email" id="recipient" placeholder="e.g. receiver_email@gmail.com">
+                </div>
+            </div>
+
+            <button class="save-btn" onclick="saveEmailConfig()">Save Settings</button>
+        </div>
+    </div>
+    
+    <div id="toast"></div>
+
+    <script>
+        function goBack() { window.location.href = '/'; }
+        
+        function showToast(msg, type='success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = type + ' show';
+            setTimeout(() => t.className = '', 3000);
+        }
+        
+        function loadConfig() {
+            fetch('/api/emailConfig')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('emailEnabled').checked = data.enabled;
+                    document.getElementById('senderAccount').value = data.senderAccount;
+                    document.getElementById('senderPassword').value = data.senderPassword;
+                    document.getElementById('recipient').value = data.recipient;
+                })
+                .catch(err => {
+                    console.error('Failed to load email config', err);
+                    showToast('Failed to load configuration', 'error');
+                });
+        }
+        
+        function saveEmailConfig() {
+            const data = {
+                enabled: document.getElementById('emailEnabled').checked,
+                senderAccount: document.getElementById('senderAccount').value,
+                senderPassword: document.getElementById('senderPassword').value,
+                recipient: document.getElementById('recipient').value
+            };
+            
+            const btn = document.querySelector('.save-btn');
+            btn.textContent = "Saving...";
+            btn.disabled = true;
+            
+            fetch('/api/emailConfig', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Configuration saved successfully!', 'success');
+                } else {
+                    showToast('Failed to save configuration', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Save error', err);
+                showToast('Error saving configuration', 'error');
+            })
+            .finally(() => {
+                btn.textContent = "Save Settings";
+                btn.disabled = false;
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', loadConfig);
     </script>
 </body>
 </html>
@@ -5323,6 +5693,10 @@ void overrideLEDState() {
 }
 
 void sendEmailWithLogs(const String& trigger) {
+  if (!emailConfig.enabled) {
+    return;
+  }
+
   if (!WiFi.isConnected()) {
     storeLogEntry("Failed to send email: No WiFi connection");
     return;
@@ -5389,8 +5763,8 @@ void sendEmailWithLogs(const String& trigger) {
   ssl_client.setInsecure();
 
   SMTPMessage message;
-  message.headers.add(rfc822_from, "Aquarium Control <" + String(emailSenderAccount) + ">");
-  message.headers.add(rfc822_to, "User <" + String(emailRecipient) + ">");
+  message.headers.add(rfc822_from, "Aquarium Control <" + String(emailConfig.senderAccount) + ">");
+  message.headers.add(rfc822_to, "User <" + String(emailConfig.recipient) + ">");
   message.headers.add(rfc822_subject, String(emailSubject) + " - " + trigger);
 
   struct tm timeinfo;
@@ -5449,7 +5823,7 @@ void sendEmailWithLogs(const String& trigger) {
   bool authenticated = false;
   resetWatchdog();
   try {
-    authenticated = smtp.authenticate(emailSenderAccount, emailSenderPassword, readymail_auth_password);
+    authenticated = smtp.authenticate(emailConfig.senderAccount, emailConfig.senderPassword, readymail_auth_password);
   } catch (...) {
     storeLogEntry("Exception during SMTP authentication");
     authenticated = false;
