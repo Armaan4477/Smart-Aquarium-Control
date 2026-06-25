@@ -11,8 +11,8 @@
 #include <TimeLib.h>
 #include <LittleFS.h>
 #include <WiFiClientSecure.h>
-//#define ENABLE_SMTP
-//#include <ReadyMail.h>
+#define ENABLE_SMTP
+#include <ReadyMail.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <time.h>
@@ -47,7 +47,7 @@ void handleOneClickLight();
 void handleTemperature();
 void networkLoop(void*);
 void mainLoop(void*);
-//void sendEmailWithLogs(const String&);
+void sendEmailWithLogs(const String&);
 void checkoverride1();
 void checkoverride2();
 void overrideLEDState();
@@ -158,11 +158,11 @@ unsigned long last90MinCheck = 0;
 const unsigned long CHECK_90MIN_INTERVAL = 5400;
 bool hasError = false;
 bool hasLaunchedSchedules = false;
-// bool startupemail = false;
-// bool pointemail = false;
+bool startupemail = false;
+bool pointemail = false;
 unsigned long logIdCounter = 0;
 SemaphoreHandle_t littleFsMutex = NULL;
-// volatile bool emailInProgress = false;
+volatile bool emailInProgress = false;
 std::vector<Schedule> schedules;
 std::vector<TemporarySchedule> temporarySchedules;
 int tempScheduleIdCounter = 0;
@@ -778,15 +778,15 @@ const unsigned char favicon_png[] PROGMEM = {
 
 const size_t favicon_png_len = sizeof(favicon_png);
 
-// #define SMTP_HOST "smtp.gmail.com"
-// #define SMTP_PORT 465
-// const char* emailSenderAccount = "your-email@gmail.com";
-// const char* emailSenderPassword = "your-app-specific-password";
-// const char* emailRecipient = "recipient@email.com";
-// const char* emailSubject = "Aquarium Control Logs";
+#define SMTP_HOST "smtp.gmail.com"
+#define SMTP_PORT 465
+const char* emailSenderAccount = "your-email@gmail.com";
+const char* emailSenderPassword = "your-app-specific-password";
+const char* emailRecipient = "recipient@email.com";
+const char* emailSubject = "Aquarium Control Logs";
 
 WiFiClientSecure ssl_client;
-//SMTPClient smtp(ssl_client);
+SMTPClient smtp(ssl_client);
 
 WebServer server(80);
 WebServer apiServer(82);  // Collector API — handled on Core 0 (networkLoop)
@@ -4636,17 +4636,17 @@ void loop() {
 
 void networkLoop(void* parameter) {
   esp_task_wdt_add(NULL);
-  // unsigned long lastEmailAttempt = 0;
-  // const unsigned long EMAIL_RETRY_INTERVAL = 30000;
+  unsigned long lastEmailAttempt = 0;
+  const unsigned long EMAIL_RETRY_INTERVAL = 30000;
   unsigned long lastOledBlink = 0;
   unsigned long lastOledScheduleCheck = 0;
   for (;;) {
     resetWatchdog();
     apiServer.handleClient();
     handleTemperature();
-    //resetWatchdog();
+    resetWatchdog();
     handleExternalTemperature();
-    //resetWatchdog();
+    resetWatchdog();
 
     if ((hasTempError || hasExternalTempError) && millis() - lastOledBlink >= 500) {
       oledBlinkState = !oledBlinkState;
@@ -4689,20 +4689,22 @@ void networkLoop(void* parameter) {
 
       unsigned long currentTime = millis();
 
-      // if (!startupemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
-      //   lastEmailAttempt = currentTime;
-      //   startupemail = true;
+      if (!startupemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
+        lastEmailAttempt = currentTime;
+        sendEmailWithLogs("Device is powered on");
+        startupemail = true;
 
-      //   struct tm timeinfo;
-      //   if (getLocalTime(&timeinfo)) {
-      //     last90MinCheck = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
-      //   }
-      // }
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo)) {
+          last90MinCheck = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
+        }
+      }
 
-      // if (pointemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
-      //   lastEmailAttempt = currentTime;
-      //   pointemail = false;
-      // }
+      if (pointemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
+        lastEmailAttempt = currentTime;
+        sendEmailWithLogs("Status Check");
+        pointemail = false;
+      }
     }
     delay(5);
   }
@@ -4738,9 +4740,9 @@ void mainLoop(void* parameter) {
             }
             last90MinCheck = currentSeconds;
 
-            // if (startupemail && !pointemail) {
-            //   pointemail = true;
-            // }
+            if (startupemail && !pointemail) {
+              pointemail = true;
+            }
           }
 
           static int prevDay = -1;
@@ -4759,7 +4761,7 @@ void mainLoop(void* parameter) {
       checkScheduleslaunch();
       storeLogEntry("Startup Schedule Check Success");
       hasLaunchedSchedules = true;
-      //startupemail = false;
+      startupemail = false;
 
       if (WiFi.status() == WL_CONNECTED) {
         delay(100);
@@ -5234,10 +5236,10 @@ void handleOneClickLight() {
     digitalWrite(relay2, LOW);
     relay2State = true;
     server.send(200, "application/json", "{\"status\":\"success\"}");
-    storeLogEntry("Relay 2 toggled off-on via One Click.");
+    storeLogEntry("Light Colour changed via button.");
   } else {
     server.send(403, "application/json", "{\"error\":\"Light is off\"}");
-    storeLogEntry("One Click failed: Light is off.");
+    storeLogEntry("Colour Change failed: Light is off.");
   }
 }
 
@@ -5320,172 +5322,172 @@ void overrideLEDState() {
   }
 }
 
-// void sendEmailWithLogs(const String& trigger) {
-//   if (!WiFi.isConnected()) {
-//     storeLogEntry("Failed to send email: No WiFi connection");
-//     return;
-//   }
+void sendEmailWithLogs(const String& trigger) {
+  if (!WiFi.isConnected()) {
+    storeLogEntry("Failed to send email: No WiFi connection");
+    return;
+  }
 
-//   if (emailInProgress) {
-//     //storeLogEntry("Email already in progress, skipping");
-//     return;
-//   }
+  if (emailInProgress) {
+    //storeLogEntry("Email already in progress, skipping");
+    return;
+  }
 
-//   if (littleFsMutex != NULL) {
-//     if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
-//       //storeLogEntry("Failed to send email: could not acquire FS mutex");
-//       return;
-//     }
-//   }
+  if (littleFsMutex != NULL) {
+    if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+      //storeLogEntry("Failed to send email: could not acquire FS mutex");
+      return;
+    }
+  }
 
-//   if (!LittleFS.exists("/logs.json")) {
-//     if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
-//    // storeLogEntry("Failed to send email: logs.json does not exist");
-//     return;
-//   }
+  if (!LittleFS.exists("/logs.json")) {
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+   // storeLogEntry("Failed to send email: logs.json does not exist");
+    return;
+  }
 
-//   if (emailInProgress) {
-//     if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
-//    // storeLogEntry("Email already in progress, skipping");
-//     return;
-//   }
-//   emailInProgress = true;
+  if (emailInProgress) {
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+   // storeLogEntry("Email already in progress, skipping");
+    return;
+  }
+  emailInProgress = true;
 
-//   const size_t MAX_LOG_BUFFER = 4096;
-//   static char fileBuffer[MAX_LOG_BUFFER];
-//   size_t bytesRead = 0;
+  const size_t MAX_LOG_BUFFER = 4096;
+  static char fileBuffer[MAX_LOG_BUFFER];
+  size_t bytesRead = 0;
 
-//   File logsFile = LittleFS.open("/logs.json", "r");
-//   if (!logsFile) {
-//     emailInProgress = false;
-//     if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
-//    // storeLogEntry("Failed to open logs file for email");
-//     return;
-//   }
+  File logsFile = LittleFS.open("/logs.json", "r");
+  if (!logsFile) {
+    emailInProgress = false;
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+   // storeLogEntry("Failed to open logs file for email");
+    return;
+  }
 
-//   size_t fileSize = logsFile.size();
-//   if (fileSize == 0) {
-//     logsFile.close();
-//     emailInProgress = false;
-//     if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
-//     //storeLogEntry("Logs file is empty");
-//     return;
-//   }
+  size_t fileSize = logsFile.size();
+  if (fileSize == 0) {
+    logsFile.close();
+    emailInProgress = false;
+    if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+    //storeLogEntry("Logs file is empty");
+    return;
+  }
 
-//   if (fileSize >= MAX_LOG_BUFFER) {
-//     fileSize = MAX_LOG_BUFFER - 1;
-//   }
-//   bytesRead = logsFile.readBytes(fileBuffer, fileSize);
-//   fileBuffer[bytesRead] = '\0';
-//   logsFile.close();
+  if (fileSize >= MAX_LOG_BUFFER) {
+    fileSize = MAX_LOG_BUFFER - 1;
+  }
+  bytesRead = logsFile.readBytes(fileBuffer, fileSize);
+  fileBuffer[bytesRead] = '\0';
+  logsFile.close();
 
-//   if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+  if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
 
-//   tempTemperature();
+  tempTemperature();
 
-//   ssl_client.stop();
-//   ssl_client.setInsecure();
+  ssl_client.stop();
+  ssl_client.setInsecure();
 
-//   SMTPMessage message;
-//   message.headers.add(rfc822_from, "Aquarium Control <" + String(emailSenderAccount) + ">");
-//   message.headers.add(rfc822_to, "User <" + String(emailRecipient) + ">");
-//   message.headers.add(rfc822_subject, String(emailSubject) + " - " + trigger);
+  SMTPMessage message;
+  message.headers.add(rfc822_from, "Aquarium Control <" + String(emailSenderAccount) + ">");
+  message.headers.add(rfc822_to, "User <" + String(emailRecipient) + ">");
+  message.headers.add(rfc822_subject, String(emailSubject) + " - " + trigger);
 
-//   struct tm timeinfo;
-//   String formattedTime = "Unknown";
-//   if (getLocalTime(&timeinfo)) {
-//     char timeStr[20];
-//     sprintf(timeStr, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-//     formattedTime = String(timeStr);
-//   }
+  struct tm timeinfo;
+  String formattedTime = "Unknown";
+  if (getLocalTime(&timeinfo)) {
+    char timeStr[20];
+    sprintf(timeStr, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+    formattedTime = String(timeStr);
+  }
 
-//   String textMsg;
-//   textMsg.reserve(512);
-//   textMsg = "Aquarium Control System Report\n";
-//   textMsg += "Event: " + trigger + "\n";
-//   textMsg += "Timestamp: " + formattedTime + "\n\n";
-//   textMsg += "System Status:\n";
-//   textMsg += "Internal Temperature: " + String(lastValidTemperature, 1) + " °C\n";
-//   textMsg += "External Temperature: " + String(lastValidExternalTemperature, 1) + " °C\n";
-//   textMsg += "Relay 1 (WaveMaker): " + String(relay1State ? "ON" : "OFF") + "\n";
-//   textMsg += "Relay 2 (Light): " + String(relay2State ? "ON" : "OFF") + "\n";
-//   textMsg += "Relay 3 (Air Pump): " + String(relay3State ? "ON" : "OFF") + "\n";
-//   textMsg += "Override 1: " + String(overrideRelay1 ? "Active" : "Inactive") + "\n";
-//   textMsg += "Override 2: " + String(overrideRelay2 ? "Active" : "Inactive") + "\n";
-//   textMsg += "Error Status: " + String(hasError ? "Error Present" : "No Errors") + "\n\n";
-//   textMsg += "Full logs are attached as logs.json";
+  String textMsg;
+  textMsg.reserve(512);
+  textMsg = "Aquarium Control System Report\n";
+  textMsg += "Event: " + trigger + "\n";
+  textMsg += "Timestamp: " + formattedTime + "\n\n";
+  textMsg += "System Status:\n";
+  textMsg += "Internal Temperature: " + String(lastValidTemperature, 1) + " °C\n";
+  textMsg += "External Temperature: " + String(lastValidExternalTemperature, 1) + " °C\n";
+  textMsg += "Relay 1 (WaveMaker): " + String(relay1State ? "ON" : "OFF") + "\n";
+  textMsg += "Relay 2 (Light): " + String(relay2State ? "ON" : "OFF") + "\n";
+  textMsg += "Relay 3 (Air Pump): " + String(relay3State ? "ON" : "OFF") + "\n";
+  textMsg += "Override 1: " + String(overrideRelay1 ? "Active" : "Inactive") + "\n";
+  textMsg += "Override 2: " + String(overrideRelay2 ? "Active" : "Inactive") + "\n";
+  textMsg += "Error Status: " + String(hasError ? "Error Present" : "No Errors") + "\n\n";
+  textMsg += "Full logs are attached as logs.json";
 
-//   message.text.body(textMsg);
-//   message.text.charset("utf-8");
-//   message.text.transferEncoding("quoted-printable");
-//   message.timestamp = time(nullptr);
+  message.text.body(textMsg);
+  message.text.charset("utf-8");
+  message.text.transferEncoding("quoted-printable");
+  message.timestamp = time(nullptr);
 
-//   Attachment attachment;
-//   attachment.filename = "logs.json";
-//   attachment.mime = "application/json";
-//   attachment.name = "logs";
-//   attachment.attach_file.blob = reinterpret_cast<const uint8_t*>(fileBuffer);
-//   attachment.attach_file.blob_size = bytesRead;
-//   message.attachments.add(attachment, attach_type_attachment);
+  Attachment attachment;
+  attachment.filename = "logs.json";
+  attachment.mime = "application/json";
+  attachment.name = "logs";
+  attachment.attach_file.blob = reinterpret_cast<const uint8_t*>(fileBuffer);
+  attachment.attach_file.blob_size = bytesRead;
+  message.attachments.add(attachment, attach_type_attachment);
 
-//   bool connected = false;
-//   resetWatchdog();
-//   try {
-//     connected = smtp.connect(SMTP_HOST, SMTP_PORT);
-//   } catch (...) {
-//     storeLogEntry("Exception during SMTP connection");
-//     connected = false;
-//   }
-//   resetWatchdog();
+  bool connected = false;
+  resetWatchdog();
+  try {
+    connected = smtp.connect(SMTP_HOST, SMTP_PORT);
+  } catch (...) {
+    storeLogEntry("Exception during SMTP connection");
+    connected = false;
+  }
+  resetWatchdog();
 
-//   if (!connected || !smtp.isConnected()) {
-//     storeLogEntry("Failed to connect to email server");
-//     emailInProgress = false;
-//     return;
-//   }
+  if (!connected || !smtp.isConnected()) {
+    storeLogEntry("Failed to connect to email server");
+    emailInProgress = false;
+    return;
+  }
 
-//   bool authenticated = false;
-//   resetWatchdog();
-//   try {
-//     authenticated = smtp.authenticate(emailSenderAccount, emailSenderPassword, readymail_auth_password);
-//   } catch (...) {
-//     storeLogEntry("Exception during SMTP authentication");
-//     authenticated = false;
-//   }
-//   resetWatchdog();
+  bool authenticated = false;
+  resetWatchdog();
+  try {
+    authenticated = smtp.authenticate(emailSenderAccount, emailSenderPassword, readymail_auth_password);
+  } catch (...) {
+    storeLogEntry("Exception during SMTP authentication");
+    authenticated = false;
+  }
+  resetWatchdog();
 
-//   if (!authenticated || !smtp.isAuthenticated()) {
-//     storeLogEntry("Failed to authenticate with email server");
-//     emailInProgress = false;
-//     return;
-//   }
+  if (!authenticated || !smtp.isAuthenticated()) {
+    storeLogEntry("Failed to authenticate with email server");
+    emailInProgress = false;
+    return;
+  }
 
-//   bool sendSuccess = false;
-//   resetWatchdog();
-//   try {
-//     sendSuccess = smtp.send(message);
-//   } catch (...) {
-//     storeLogEntry("Exception during email sending");
-//     sendSuccess = false;
-//   }
-//   resetWatchdog();
+  bool sendSuccess = false;
+  resetWatchdog();
+  try {
+    sendSuccess = smtp.send(message);
+  } catch (...) {
+    storeLogEntry("Exception during email sending");
+    sendSuccess = false;
+  }
+  resetWatchdog();
 
-//   if (!sendSuccess) {
-//     storeLogEntry("Failed to send email");
-//   } else {
-//     storeLogEntry("Email sent successfully with logs");
-//   }
+  if (!sendSuccess) {
+    storeLogEntry("Failed to send email");
+  } else {
+    storeLogEntry("Email sent successfully with logs");
+  }
 
-//   resetWatchdog();
-//   try {
-//     smtp.stop();
-//   } catch (...) {
-//     storeLogEntry("Exception during SMTP session close");
-//   }
-//   resetWatchdog();
+  resetWatchdog();
+  try {
+    smtp.stop();
+  } catch (...) {
+    storeLogEntry("Exception during SMTP session close");
+  }
+  resetWatchdog();
 
-//   emailInProgress = false;
-// }
+  emailInProgress = false;
+}
 
 void handleTemperature() {
   if (millis() - lastTemp >= 20000) {
@@ -5508,7 +5510,7 @@ void handleTemperature() {
         if (!tempErrorLogged) {
           storeLogEntry("Error: Internal Temperature sensor failed " + String(consecutiveTempFailures) + " times");
           tempErrorLogged = true;
-          //sendEmailWithLogs("Temperature Sensor Error");
+          sendEmailWithLogs("Temperature Sensor Error");
         }
         indicateError();
         hasTempError = true;
@@ -5760,7 +5762,7 @@ void handleExternalTemperature() {
       if (consecutiveExternalTempFailures >= MAX_EXTERNAL_TEMP_FAILURES) {
         if (!externalTempErrorLogged) {
           storeLogEntry("Error: External Temperature sensor failed " + String(consecutiveExternalTempFailures) + " times");
-          //sendEmailWithLogs("External Temperature Sensor Error");
+          sendEmailWithLogs("External Temperature Sensor Error");
           indicateError();
           externalTempErrorLogged = true;
         }
