@@ -20,11 +20,11 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define OLED_SDA      21
-#define OLED_SCL      22
-#define SCREEN_WIDTH  128
+#define OLED_SDA 21
+#define OLED_SCL 22
+#define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
-#define OLED_RESET    -1
+#define OLED_RESET -1
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 bool oledBlinkState = false;
 void updateOLED();
@@ -45,7 +45,7 @@ void handleClearError();
 void handleGetErrorStatus();
 void handleOneClickLight();
 void handleTemperature();
-void emailLoop(void*);
+void networkLoop(void*);
 void mainLoop(void*);
 //void sendEmailWithLogs(const String&);
 void checkoverride1();
@@ -117,12 +117,12 @@ struct CalibrationData {
 
 struct DisplaySchedule {
   uint8_t magic;
-  int     onHour;
-  int     onMinute;
-  int     offHour;
-  int     offMinute;
+  int onHour;
+  int onMinute;
+  int offHour;
+  int offMinute;
   uint8_t overrideMode;
-  bool    enabled;
+  bool enabled;
 };
 
 const int relay1 = 18;
@@ -175,14 +175,14 @@ const int SCHEDULE_START_ADDR = 0;
 const int TOGGLE_DELAY = 500;
 const int TOGGLE_COUNT = 3;
 const std::vector<String> allowedIPs = {
-  "192.168.29.3", //Rpi
-  "192.168.29.4", //A Mac
-  "192.168.29.5", //A Ipad
-  "192.168.29.6", //A Phone
-  "192.168.29.8", //Acer
-  "192.168.29.9", //N Phone
-  "192.168.29.10", //F moto
-  "192.168.29.11" //S moto
+  "192.168.29.3",   //Rpi
+  "192.168.29.4",   //A Mac
+  "192.168.29.5",   //A Ipad
+  "192.168.29.6",   //A Phone
+  "192.168.29.8",   //Acer
+  "192.168.29.9",   //N Phone
+  "192.168.29.10",  //F moto
+  "192.168.29.11"   //S moto
 };
 unsigned long lastSwitch1Debounce = 0;
 unsigned long lastSwitch2Debounce = 0;
@@ -220,12 +220,12 @@ int consecutiveExternalTempFailures = 0;
 bool hasExternalTempError = false;
 bool externalTempErrorLogged = false;
 
-CalibrationData sensorCalibration = {0.0, 0.0};
+CalibrationData sensorCalibration = { 0.0, 0.0 };
 const int CALIBRATION_START_ADDR = SCHEDULE_START_ADDR + (MAX_SCHEDULES * SCHEDULE_SIZE) + 1;
 const int CALIBRATION_SIZE = sizeof(CalibrationData);
 
 const int DISPLAY_SCHEDULE_ADDR = CALIBRATION_START_ADDR + CALIBRATION_SIZE + 1;
-DisplaySchedule displaySchedule = {0xDA, 8, 0, 22, 0, 0, true};
+DisplaySchedule displaySchedule = { 0xDA, 8, 0, 22, 0, 0, true };
 bool oledPhysicalState = false;
 
 WiFiEventId_t wifiConnectHandler;
@@ -791,7 +791,7 @@ WiFiClientSecure ssl_client;
 //SMTPClient smtp(ssl_client);
 
 WebServer server(80);
-WebServer apiServer(82); // Collector API — handled on Core 0 (emailLoop)
+WebServer apiServer(82);  // Collector API — handled on Core 0 (networkLoop)
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
@@ -1035,8 +1035,8 @@ void setup() {
   server.begin();
 
   apiServer.on("/api/status", HTTP_GET, handleApiStatus);
-  apiServer.on("/api/logs",   HTTP_GET, handleApiLogs);
-  apiServer.on("/api/ping",   HTTP_GET, handleApiPing);
+  apiServer.on("/api/logs", HTTP_GET, handleApiLogs);
+  apiServer.on("/api/ping", HTTP_GET, handleApiPing);
   apiServer.begin();
   EEPROM.begin(EEPROM_SIZE);
   loadSchedulesFromEEPROM();
@@ -1065,7 +1065,7 @@ void setup() {
 
   resetWatchdog();
   const esp_task_wdt_config_t wdt_config = {
-    .timeout_ms    = 15000,   // 15 second timeout
+    .timeout_ms = 15000,  // 15 second timeout
     .idle_core_mask = 0,
     .trigger_panic = true
   };
@@ -1075,9 +1075,9 @@ void setup() {
   littleFsMutex = xSemaphoreCreateMutex();
 
   xTaskCreatePinnedToCore(
-    emailLoop,
-    "emailTask",
-    32768,
+    networkLoop,
+    "networkTask",
+    12288,
     NULL,
     1,
     &networkTask,
@@ -1141,8 +1141,7 @@ void loadCalibrationSettings() {
   CalibrationData storedData;
   EEPROM.get(CALIBRATION_START_ADDR, storedData);
 
-  if (storedData.internalOffset >= -10.0 && storedData.internalOffset <= 10.0 && 
-      storedData.externalOffset >= -10.0 && storedData.externalOffset <= 10.0) {
+  if (storedData.internalOffset >= -10.0 && storedData.internalOffset <= 10.0 && storedData.externalOffset >= -10.0 && storedData.externalOffset <= 10.0) {
     sensorCalibration = storedData;
     storeLogEntry("Sensor calibration loaded from EEPROM");
   } else {
@@ -1177,14 +1176,13 @@ void handleSaveCalibrationSettings() {
       float internalOffset = doc["internalOffset"];
       float externalOffset = doc["externalOffset"];
 
-      if (internalOffset >= -10.0 && internalOffset <= 10.0 && 
-          externalOffset >= -10.0 && externalOffset <= 10.0) {
-        
+      if (internalOffset >= -10.0 && internalOffset <= 10.0 && externalOffset >= -10.0 && externalOffset <= 10.0) {
+
         sensorCalibration.internalOffset = internalOffset;
         sensorCalibration.externalOffset = externalOffset;
-        
+
         saveCalibrationSettings();
-        
+
         server.send(200, "application/json", "{\"status\":\"success\"}");
         storeLogEntry("Sensor calibration updated: Internal=" + String(internalOffset, 2) + "°C, External=" + String(externalOffset, 2) + "°C");
         return;
@@ -1200,12 +1198,7 @@ void handleSaveCalibrationSettings() {
 void loadDisplaySchedule() {
   DisplaySchedule stored;
   EEPROM.get(DISPLAY_SCHEDULE_ADDR, stored);
-  if (stored.magic == 0xDA &&
-      stored.onHour  >= 0 && stored.onHour  <= 23 &&
-      stored.onMinute>= 0 && stored.onMinute<= 59 &&
-      stored.offHour >= 0 && stored.offHour <= 23 &&
-      stored.offMinute>=0 && stored.offMinute<= 59 &&
-      stored.overrideMode <= 2) {
+  if (stored.magic == 0xDA && stored.onHour >= 0 && stored.onHour <= 23 && stored.onMinute >= 0 && stored.onMinute <= 59 && stored.offHour >= 0 && stored.offHour <= 23 && stored.offMinute >= 0 && stored.offMinute <= 59 && stored.overrideMode <= 2) {
     displaySchedule = stored;
     storeLogEntry("Display schedule loaded from EEPROM");
   } else {
@@ -1246,7 +1239,7 @@ void applyOledSchedule() {
         struct tm timeinfo;
         if (!getLocalTime(&timeinfo)) { return; }
         int nowMins = timeinfo.tm_hour * 60 + timeinfo.tm_min;
-        int onMins  = displaySchedule.onHour  * 60 + displaySchedule.onMinute;
+        int onMins = displaySchedule.onHour * 60 + displaySchedule.onMinute;
         int offMins = displaySchedule.offHour * 60 + displaySchedule.offMinute;
         if (onMins <= offMins) {
           newState = (nowMins >= onMins && nowMins < offMins);
@@ -1273,13 +1266,13 @@ void handleDisplayCtrlPage() {
 void handleGetDisplaySchedule() {
   if (!checkAuthentication()) return;
   String json = "{";
-  json += "\"onHour\":"      + String(displaySchedule.onHour)       + ",";
-  json += "\"onMinute\":"    + String(displaySchedule.onMinute)     + ",";
-  json += "\"offHour\":"     + String(displaySchedule.offHour)      + ",";
-  json += "\"offMinute\":"   + String(displaySchedule.offMinute)    + ",";
+  json += "\"onHour\":" + String(displaySchedule.onHour) + ",";
+  json += "\"onMinute\":" + String(displaySchedule.onMinute) + ",";
+  json += "\"offHour\":" + String(displaySchedule.offHour) + ",";
+  json += "\"offMinute\":" + String(displaySchedule.offMinute) + ",";
   json += "\"overrideMode\":" + String(displaySchedule.overrideMode) + ",";
-  json += "\"enabled\":"     + String(displaySchedule.enabled ? "true" : "false") + ",";
-  json += "\"displayOn\":"   + String(oledPhysicalState  ? "true" : "false");
+  json += "\"enabled\":" + String(displaySchedule.enabled ? "true" : "false") + ",";
+  json += "\"displayOn\":" + String(oledPhysicalState ? "true" : "false");
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -1312,28 +1305,26 @@ void handleSaveDisplaySchedule() {
     return;
   }
 
-  int onH  = doc["onHour"]  | displaySchedule.onHour;
-  int onM  = doc["onMinute"]| displaySchedule.onMinute;
+  int onH = doc["onHour"] | displaySchedule.onHour;
+  int onM = doc["onMinute"] | displaySchedule.onMinute;
   int offH = doc["offHour"] | displaySchedule.offHour;
-  int offM = doc["offMinute"]|displaySchedule.offMinute;
-  bool en  = doc.containsKey("enabled") ? doc["enabled"].as<bool>() : displaySchedule.enabled;
+  int offM = doc["offMinute"] | displaySchedule.offMinute;
+  bool en = doc.containsKey("enabled") ? doc["enabled"].as<bool>() : displaySchedule.enabled;
 
-  if (onH <0||onH >23||onM <0||onM >59||offH<0||offH>23||offM<0||offM>59) {
+  if (onH < 0 || onH > 23 || onM < 0 || onM > 59 || offH < 0 || offH > 23 || offM < 0 || offM > 59) {
     server.send(400, "application/json", "{\"error\":\"Time values out of range\"}");
     return;
   }
 
-  displaySchedule.onHour    = onH;
-  displaySchedule.onMinute  = onM;
-  displaySchedule.offHour   = offH;
+  displaySchedule.onHour = onH;
+  displaySchedule.onMinute = onM;
+  displaySchedule.offHour = offH;
   displaySchedule.offMinute = offM;
-  displaySchedule.enabled   = en;
+  displaySchedule.enabled = en;
   saveDisplaySchedule();
   applyOledSchedule();
   server.send(200, "application/json", "{\"status\":\"success\"}");
-  storeLogEntry("Display schedule updated: ON=" + String(onH) + ":" + String(onM) +
-                " OFF=" + String(offH) + ":" + String(offM) +
-                " enabled=" + String(en));
+  storeLogEntry("Display schedule updated: ON=" + String(onH) + ":" + String(onM) + " OFF=" + String(offH) + ":" + String(offM) + " enabled=" + String(en));
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
@@ -1348,13 +1339,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         IPAddress ip = webSocket.remoteIP(num);
         //storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString());
 
-        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + 
-                        ",\"relay2\":" + String(relay2State || overrideRelay2) + 
-                        ",\"relay3\":" + String(relay3State || overrideRelay1) + 
-                        ",\"temperature\":" + String(lastValidTemperature, 1) + 
-                        ",\"relay1Name\":\"WaveMaker\"" + 
-                        ",\"relay2Name\":\"Light\"" + 
-                        ",\"relay3Name\":\"Air Pump\"}";
+        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"relay1Name\":\"WaveMaker\"" + ",\"relay2Name\":\"Light\"" + ",\"relay3Name\":\"Air Pump\"}";
         webSocket.sendTXT(num, message);
       }
       break;
@@ -4650,11 +4635,11 @@ void loop() {
   vTaskDelete(NULL);
 }
 
-void emailLoop(void* parameter) {
+void networkLoop(void* parameter) {
   esp_task_wdt_add(NULL);
   unsigned long lastEmailAttempt = 0;
   const unsigned long EMAIL_RETRY_INTERVAL = 30000;
-  
+
   unsigned long lastOledBlink = 0;
   unsigned long lastOledScheduleCheck = 0;
   for (;;) {
@@ -4703,7 +4688,7 @@ void emailLoop(void* parameter) {
       }
 
       unsigned long currentTime = millis();
-      
+
       if (!startupemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
         lastEmailAttempt = currentTime;
         startupemail = true;
@@ -4879,20 +4864,20 @@ void checkScheduleslaunch() {
 
     if (relay3ShouldBeOn) {
       activateRelay(3, false);
-     // storeLogEntry("Relay 3 activated by startup schedule check");
+      // storeLogEntry("Relay 3 activated by startup schedule check");
     } else {
       deactivateRelay(3, false);
-     // storeLogEntry("Relay 3 deactivated by startup schedule check");
+      // storeLogEntry("Relay 3 deactivated by startup schedule check");
     }
   }
 
   if (!overrideRelay2) {
     if (relay2ShouldBeOn) {
       activateRelay(2, false);
-     // storeLogEntry("Relay 2 activated by startup schedule check");
+      // storeLogEntry("Relay 2 activated by startup schedule check");
     } else {
       deactivateRelay(2, false);
-     // storeLogEntry("Relay 2 deactivated by startup schedule check");
+      // storeLogEntry("Relay 2 deactivated by startup schedule check");
     }
   }
 }
@@ -5581,14 +5566,14 @@ void handleAddTemporarySchedule() {
       }
 
       int relayNumber = doc["relay"].as<int>();
-      
+
       int existingSchedulesCount = 0;
       for (const auto& schedule : temporarySchedules) {
         if (schedule.relayNumber == relayNumber) {
           existingSchedulesCount++;
         }
       }
-      
+
       if (existingSchedulesCount >= 2) {
         server.send(400, "application/json", "{\"error\":\"Each relay can have a maximum of 2 temporary schedules\"}");
         storeLogEntry("Add Temporary Schedule failed: Maximum schedules reached for relay " + String(relayNumber));
@@ -5814,7 +5799,7 @@ void updateOLED() {
   display.setCursor(74, 0);
   display.print("EXTERNAL");
 
-  display.drawFastHLine(0,  10, 63, SSD1306_WHITE);
+  display.drawFastHLine(0, 10, 63, SSD1306_WHITE);
   display.drawFastHLine(65, 10, 63, SSD1306_WHITE);
 
   if (hasTempError) {
@@ -5864,22 +5849,22 @@ void updateOLED() {
 }
 
 void tempTemperature() {
-    sensors.requestTemperatures();
-    float tempC = sensors.getTempC(sensorAddress);
+  sensors.requestTemperatures();
+  float tempC = sensors.getTempC(sensorAddress);
 
-    if (tempC != DEVICE_DISCONNECTED_C) {
-        lastValidTemperature = tempC + sensorCalibration.internalOffset;
-    }
+  if (tempC != DEVICE_DISCONNECTED_C) {
+    lastValidTemperature = tempC + sensorCalibration.internalOffset;
+  }
 
-    externalSensors.requestTemperatures();
-    float externalTempC = externalSensors.getTempC(externalSensorAddress);
+  externalSensors.requestTemperatures();
+  float externalTempC = externalSensors.getTempC(externalSensorAddress);
 
-    if (externalTempC != DEVICE_DISCONNECTED_C) {
-        lastValidExternalTemperature = externalTempC + sensorCalibration.externalOffset;
-    }
+  if (externalTempC != DEVICE_DISCONNECTED_C) {
+    lastValidExternalTemperature = externalTempC + sensorCalibration.externalOffset;
+  }
 }
 
-// Collector API handlers — served via apiServer (port 82) on Core 0 (emailLoop)
+// Collector API handlers — served via apiServer (port 82) on Core 0 (networkLoop)
 void handleApiPing() {
   apiServer.send(200, "application/json", "{\"status\":\"ok\"}");
 }
@@ -5897,19 +5882,19 @@ void handleApiStatus() {
   }
 
   String json = "{";
-  json += "\"internal_c\":"  + String(lastValidTemperature, 2)         + ",";
-  json += "\"external_c\":"  + String(lastValidExternalTemperature, 2) + ",";
-  json += "\"relay1\":"      + String((relay1State || overrideRelay1) ? "true" : "false") + ",";
-  json += "\"relay2\":"      + String((relay2State || overrideRelay2) ? "true" : "false") + ",";
-  json += "\"relay3\":"      + String((relay3State || overrideRelay1) ? "true" : "false") + ",";
-  json += "\"override1\":"   + String(overrideRelay1 ? "true" : "false") + ",";
-  json += "\"override2\":"   + String(overrideRelay2 ? "true" : "false") + ",";
-  json += "\"has_error\":"         + String(hasError             ? "true" : "false") + ",";
-  json += "\"temp_error\":"        + String(hasTempError         ? "true" : "false") + ",";
-  json += "\"ext_temp_error\":"    + String(hasExternalTempError ? "true" : "false") + ",";
+  json += "\"internal_c\":" + String(lastValidTemperature, 2) + ",";
+  json += "\"external_c\":" + String(lastValidExternalTemperature, 2) + ",";
+  json += "\"relay1\":" + String((relay1State || overrideRelay1) ? "true" : "false") + ",";
+  json += "\"relay2\":" + String((relay2State || overrideRelay2) ? "true" : "false") + ",";
+  json += "\"relay3\":" + String((relay3State || overrideRelay1) ? "true" : "false") + ",";
+  json += "\"override1\":" + String(overrideRelay1 ? "true" : "false") + ",";
+  json += "\"override2\":" + String(overrideRelay2 ? "true" : "false") + ",";
+  json += "\"has_error\":" + String(hasError ? "true" : "false") + ",";
+  json += "\"temp_error\":" + String(hasTempError ? "true" : "false") + ",";
+  json += "\"ext_temp_error\":" + String(hasExternalTempError ? "true" : "false") + ",";
 
-  json += "\"time_synced\":"       + String(validTimeSync ? "true" : "false") + ",";
-  json += "\"timestamp\":"         + ts;
+  json += "\"time_synced\":" + String(validTimeSync ? "true" : "false") + ",";
+  json += "\"timestamp\":" + ts;
   json += "}";
 
   apiServer.send(200, "application/json", json);
@@ -5950,21 +5935,21 @@ void handleApiLogs() {
 void handleGetRawTemperatureData() {
   sensors.requestTemperatures();
   externalSensors.requestTemperatures();
-  
+
   float internalRaw = sensors.getTempC(sensorAddress);
   float externalRaw = externalSensors.getTempC(externalSensorAddress);
-  
+
   if (internalRaw == DEVICE_DISCONNECTED_C) {
     internalRaw = lastValidTemperature - sensorCalibration.internalOffset;
   }
   if (externalRaw == DEVICE_DISCONNECTED_C) {
     externalRaw = lastValidExternalTemperature - sensorCalibration.externalOffset;
   }
-  
+
   String json = "{";
   json += "\"internalRaw\":" + String(internalRaw, 2) + ",";
   json += "\"externalRaw\":" + String(externalRaw, 2);
   json += "}";
-  
+
   server.send(200, "application/json", json);
 }
