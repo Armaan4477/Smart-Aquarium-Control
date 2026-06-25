@@ -213,7 +213,7 @@ unsigned long lastTemp = 0;
 unsigned long lastExternalTemp = 0;
 float lastValidTemperature = 0;
 float lastValidExternalTemperature = 0;
-const int MAX_EXTERNAL_TEMP_FAILURES = 8;
+const int MAX_EXTERNAL_TEMP_FAILURES = 3;
 int consecutiveExternalTempFailures = 0;
 bool hasExternalTempError = false;
 bool externalTempErrorLogged = false;
@@ -793,7 +793,7 @@ WebServer apiServer(82);  // Collector API — handled on Core 0 (networkLoop)
 
 WebSocketsServer webSocket = WebSocketsServer(81);
 
-const int MAX_TEMP_FAILURES = 8;
+const int MAX_TEMP_FAILURES = 5;
 int consecutiveTempFailures = 0;
 bool hasTempError = false;
 
@@ -918,51 +918,6 @@ bool validDateSync = false;
 TaskHandle_t networkTask;
 TaskHandle_t controlTask;
 
-
-
-void attemptTimeSync() {
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-
-  struct tm timeinfo;
-  bool synced = false;
-  unsigned long pollStart = millis();
-  while (millis() - pollStart < 3000) {
-    if (getLocalTime(&timeinfo, 0)) {
-      synced = true;
-      break;
-    }
-    delay(100);
-  }
-
-  if (synced) {
-    if (!validTimeSync || timeSyncErrorLogged) {
-      storeLogEntry("Time and Date sync successful");
-    }
-    validTimeSync = true;
-    validDateSync = true;
-    lastNTPSync = millis();
-    clearError();
-    timeSyncErrorLogged = false;
-
-    setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-            timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
-  } else {
-    if (!timeSyncErrorLogged) {
-      storeLogEntry("Time sync failed.");
-      timeSyncErrorLogged = true;
-    }
-    indicateError();
-  }
-}
-
-void onWifiConnected(WiFiEvent_t event, WiFiEventInfo_t info) {
-  if (!wifiConnectionErrorLogged) {
-    storeLogEntry("Connected to WiFi. IP: " + WiFi.localIP().toString());
-    wifiConnectionErrorLogged = false;
-  }
-  attemptTimeSync();
-}
-
 void setup() {
   pinMode(relay1, OUTPUT);
   pinMode(relay2, OUTPUT);
@@ -980,6 +935,11 @@ void setup() {
   // Serial.begin(115200);
   // delay(2000);
 
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  unsigned long wifiStartTime = millis();
+  const unsigned long wifiTimeout = 20000;
+
   sensors.begin();
   externalSensors.begin();
 
@@ -989,27 +949,21 @@ void setup() {
     spiffsInitialized = true;
   }
 
-  wifiConnectHandler = WiFi.onEvent(onWifiConnected, ARDUINO_EVENT_WIFI_STA_CONNECTED);
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  unsigned long wifiStartTime = millis();
-  const unsigned long wifiTimeout = 20000;
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+  while (true) {
+    if (WiFi.status() == WL_CONNECTED) {
+      storeLogEntry("Connected to WiFi");
+      //storeLogEntry("IP Address: " + WiFi.localIP().toString());
+      attemptTimeSync();
+      break;
+    }
 
     if (millis() - wifiStartTime > wifiTimeout) {
       storeLogEntry("WiFi connection failed.");
       indicateError();
       break;
     }
-  }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    storeLogEntry("Connected to WiFi");
-    storeLogEntry("IP Address: " + WiFi.localIP().toString());
-    clearError();
+    delay(1000);
   }
 
   server.on("/", HTTP_GET, handleRoot);
@@ -1100,6 +1054,35 @@ void setup() {
     1,
     &controlTask,
     1);
+}
+
+void attemptTimeSync() {
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  struct tm timeinfo;
+  bool synced = getLocalTime(&timeinfo, 10000);
+
+  if (synced) {
+    if (!validTimeSync || timeSyncErrorLogged) {
+      storeLogEntry("Time and Date sync successful");
+    }
+    validTimeSync = true;
+    validDateSync = true;
+    lastNTPSync = millis();
+    if(timeSyncErrorLogged) {
+      clearError();
+    }
+    timeSyncErrorLogged = false;
+
+    setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+            timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+  } else {
+    if (!timeSyncErrorLogged) {
+      storeLogEntry("Time sync failed.");
+      timeSyncErrorLogged = true;
+    }
+    indicateError();
+  }
 }
 
 void indicateError() {
@@ -4748,9 +4731,11 @@ void mainLoop(void* parameter) {
           unsigned long currentSeconds = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
 
           // 90 minute check
-          if (currentSeconds - last90MinCheck >= CHECK_90MIN_INTERVAL || (last90MinCheck > currentSeconds && currentSeconds >= 0)) {
-            String timeStr = String(timeinfo.tm_hour) + ":" + (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min);
-            storeLogEntry("Device is powered on at " + timeStr);
+          if (currentSeconds - last90MinCheck >= CHECK_90MIN_INTERVAL) {
+            if (hasLaunchedSchedules) {
+              String timeStr = String(timeinfo.tm_hour) + ":" + (timeinfo.tm_min < 10 ? "0" : "") + String(timeinfo.tm_min);
+              storeLogEntry("Device is powered on at " + timeStr);
+            }
             last90MinCheck = currentSeconds;
 
             // if (startupemail && !pointemail) {
@@ -4872,29 +4857,41 @@ void checkScheduleslaunch() {
 
   if (!overrideRelay1) {
     if (relay1ShouldBeOn) {
-      activateRelay(1, false);
-      //storeLogEntry("Relay 1 activated by startup schedule check");
+      if (!relay1State) {
+        activateRelay(1, false);
+        //storeLogEntry("Relay 1 activated by startup schedule check");
+      }
     } else {
-      deactivateRelay(1, false);
-      //storeLogEntry("Relay 1 deactivated by startup schedule check");
+      if (relay1State) {
+        deactivateRelay(1, false);
+        //storeLogEntry("Relay 1 deactivated by startup schedule check");
+      }
     }
 
     if (relay3ShouldBeOn) {
-      activateRelay(3, false);
-      // storeLogEntry("Relay 3 activated by startup schedule check");
+      if (!relay3State) {
+        activateRelay(3, false);
+        // storeLogEntry("Relay 3 activated by startup schedule check");
+      }
     } else {
-      deactivateRelay(3, false);
-      // storeLogEntry("Relay 3 deactivated by startup schedule check");
+      if (relay3State) {
+        deactivateRelay(3, false);
+        // storeLogEntry("Relay 3 deactivated by startup schedule check");
+      }
     }
   }
 
   if (!overrideRelay2) {
     if (relay2ShouldBeOn) {
-      activateRelay(2, false);
-      // storeLogEntry("Relay 2 activated by startup schedule check");
+      if (!relay2State) {
+        activateRelay(2, false);
+        // storeLogEntry("Relay 2 activated by startup schedule check");
+      }
     } else {
-      deactivateRelay(2, false);
-      // storeLogEntry("Relay 2 deactivated by startup schedule check");
+      if (relay2State) {
+        deactivateRelay(2, false);
+        // storeLogEntry("Relay 2 deactivated by startup schedule check");
+      }
     }
   }
 }
@@ -5509,7 +5506,7 @@ void handleTemperature() {
       consecutiveTempFailures++;
       if (consecutiveTempFailures >= MAX_TEMP_FAILURES) {
         if (!tempErrorLogged) {
-          storeLogEntry("Error: Temperature sensor failed " + String(consecutiveTempFailures) + " times");
+          storeLogEntry("Error: Internal Temperature sensor failed " + String(consecutiveTempFailures) + " times");
           tempErrorLogged = true;
           //sendEmailWithLogs("Temperature Sensor Error");
         }
@@ -5762,7 +5759,7 @@ void handleExternalTemperature() {
       consecutiveExternalTempFailures++;
       if (consecutiveExternalTempFailures >= MAX_EXTERNAL_TEMP_FAILURES) {
         if (!externalTempErrorLogged) {
-          storeLogEntry("Error: External temperature sensor failed " + String(consecutiveExternalTempFailures) + " times");
+          storeLogEntry("Error: External Temperature sensor failed " + String(consecutiveExternalTempFailures) + " times");
           //sendEmailWithLogs("External Temperature Sensor Error");
           indicateError();
           externalTempErrorLogged = true;
