@@ -355,6 +355,14 @@ def send_email_report(trigger: str, status_data: dict) -> None:
           <div class="cell-value">{error_pill}</div>
         </div>
         <div class="row">
+          <div class="cell-label">Total Active Errors</div>
+          <div class="cell-value">{bin(active_errs).count('1')}</div>
+        </div>
+        <div class="row">
+          <div class="cell-label">Total Acknowledged Errors</div>
+          <div class="cell-value">{bin(ack_errs).count('1')}</div>
+        </div>
+        <div class="row">
           <div class="cell-label">ESP32 Uptime</div>
           <div class="cell-value">{uptime_days}d {uptime_hours}h {uptime_mins}m</div>
         </div>

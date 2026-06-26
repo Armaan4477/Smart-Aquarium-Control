@@ -162,8 +162,8 @@ bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
 bool relay4State = false;
-const uint16_t ERR_WIFI     = 1 << 0;
-const uint16_t ERR_NTP      = 1 << 1;
+const uint16_t ERR_WIFI = 1 << 0;
+const uint16_t ERR_NTP = 1 << 1;
 const uint16_t ERR_TEMP_INT = 1 << 2;
 const uint16_t ERR_TEMP_EXT = 1 << 3;
 
@@ -1151,7 +1151,7 @@ void loadCalibrationSettings() {
 
   if (storedData.internalOffset >= -10.0 && storedData.internalOffset <= 10.0 && storedData.externalOffset >= -10.0 && storedData.externalOffset <= 10.0) {
     sensorCalibration = storedData;
-    storeLogEntry("Sensor calibration loaded from EEPROM");
+    //storeLogEntry("Sensor calibration loaded from EEPROM");
   } else {
     sensorCalibration.internalOffset = 0.0;
     sensorCalibration.externalOffset = 0.0;
@@ -1208,7 +1208,7 @@ void loadDisplaySchedule() {
   EEPROM.get(DISPLAY_SCHEDULE_ADDR, stored);
   if (stored.magic == 0xDA && stored.onHour >= 0 && stored.onHour <= 23 && stored.onMinute >= 0 && stored.onMinute <= 59 && stored.offHour >= 0 && stored.offHour <= 23 && stored.offMinute >= 0 && stored.offMinute <= 59 && stored.overrideMode <= 2) {
     displaySchedule = stored;
-    storeLogEntry("Display schedule loaded from EEPROM");
+    //storeLogEntry("Display schedule loaded from EEPROM");
   } else {
     saveDisplaySchedule();
     storeLogEntry("Using default display schedule");
@@ -1227,7 +1227,7 @@ void loadEmailConfig() {
   EEPROM.get(EMAIL_CONFIG_ADDR, stored);
   if (stored.magic == 0xE2) {
     emailConfig = stored;
-    storeLogEntry("Email config loaded from EEPROM");
+    // storeLogEntry("Email config loaded from EEPROM");
   } else {
     saveEmailConfig();
     storeLogEntry("Using default email config");
@@ -1246,7 +1246,7 @@ void loadDockerConfig() {
   EEPROM.get(DOCKER_CONFIG_ADDR, stored);
   if (stored.magic == 0xD1) {
     dockerConfig = stored;
-    storeLogEntry("Docker config loaded from EEPROM");
+    // storeLogEntry("Docker config loaded from EEPROM");
   } else {
     saveDockerConfig();
     storeLogEntry("Using default docker config");
@@ -1322,7 +1322,7 @@ void handleGetEmailConfig() {
   doc["senderAccount"] = emailConfig.senderAccount;
   doc["senderPassword"] = emailConfig.senderPassword;
   doc["recipient"] = emailConfig.recipient;
-  
+
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
@@ -1333,22 +1333,22 @@ void handleSaveEmailConfig() {
     server.send(400, "application/json", "{\"error\":\"Body not received\"}");
     return;
   }
-  
+
   DynamicJsonDocument doc(512);
   DeserializationError error = deserializeJson(doc, server.arg("plain"));
-  
+
   if (error) {
     server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
     return;
   }
-  
+
   emailConfig.enabled = doc["enabled"] | true;
   strlcpy(emailConfig.senderAccount, doc["senderAccount"] | "", sizeof(emailConfig.senderAccount));
   strlcpy(emailConfig.senderPassword, doc["senderPassword"] | "", sizeof(emailConfig.senderPassword));
   strlcpy(emailConfig.recipient, doc["recipient"] | "", sizeof(emailConfig.recipient));
-  
+
   saveEmailConfig();
-  
+
   server.send(200, "application/json", "{\"success\":true}");
 }
 
@@ -1360,7 +1360,7 @@ void handleDockerConfigPage() {
 void handleGetDockerConfig() {
   DynamicJsonDocument doc(256);
   doc["enabled"] = dockerConfig.enabled;
-  
+
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
@@ -1371,18 +1371,18 @@ void handleSaveDockerConfig() {
     server.send(400, "application/json", "{\"error\":\"Body not received\"}");
     return;
   }
-  
+
   DynamicJsonDocument doc(256);
   DeserializationError error = deserializeJson(doc, server.arg("plain"));
-  
+
   if (error) {
     server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
     return;
   }
-  
+
   dockerConfig.enabled = doc["enabled"] | true;
   saveDockerConfig();
-  
+
   server.send(200, "application/json", "{\"success\":true}");
 }
 
@@ -2078,12 +2078,12 @@ const char mainPage[] PROGMEM = R"html(
                     if (!errSec) return;
                     let activeErrors = data.activeErrors || 0;
                     if (activeErrors > 0) {
-                        let html = '<h3>System Errors Detected</h3>';
-                        if (activeErrors & 1) html += '<p>WiFi Disconnected <button onclick="clearError(1)">Dismiss</button></p>';
-                        if (activeErrors & 2) html += '<p>Time Sync Failed <button onclick="clearError(2)">Dismiss</button></p>';
-                        if (activeErrors & 4) html += '<p>Internal Temp Sensor Failed <button onclick="clearError(4)">Dismiss</button></p>';
-                        if (activeErrors & 8) html += '<p>External Temp Sensor Failed <button onclick="clearError(8)">Dismiss</button></p>';
-                        html += '<button onclick="clearError(\'all\')">Dismiss All</button>';
+                                                let html = '<h3>System Errors Detected</h3>';
+                        if (activeErrors & 1) html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
+                        if (activeErrors & 2) html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
+                        if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
+                        if (activeErrors & 8) html += '<p class="error-row"><span>External Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
+                        html += '<div style="margin-top: 15px;"><button class="button dismiss-btn dismiss-all" onclick="clearError(\'all\')">Dismiss All</button></div>';
                         errSec.innerHTML = html;
                         errSec.style.display = 'block';
                     } else {
@@ -5478,12 +5478,12 @@ const char mainSchedules[] PROGMEM = R"html(
                     if (!errSec) return;
                     let activeErrors = data.activeErrors || 0;
                     if (activeErrors > 0) {
-                        let html = '<h3>System Errors Detected</h3>';
-                        if (activeErrors & 1) html += '<p>WiFi Disconnected <button onclick="clearError(1)">Dismiss</button></p>';
-                        if (activeErrors & 2) html += '<p>Time Sync Failed <button onclick="clearError(2)">Dismiss</button></p>';
-                        if (activeErrors & 4) html += '<p>Internal Temp Sensor Failed <button onclick="clearError(4)">Dismiss</button></p>';
-                        if (activeErrors & 8) html += '<p>External Temp Sensor Failed <button onclick="clearError(8)">Dismiss</button></p>';
-                        html += '<button onclick="clearError(\'all\')">Dismiss All</button>';
+                                                let html = '<h3>System Errors Detected</h3>';
+                        if (activeErrors & 1) html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
+                        if (activeErrors & 2) html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
+                        if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
+                        if (activeErrors & 8) html += '<p class="error-row"><span>External Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
+                        html += '<div style="margin-top: 15px;"><button class="button dismiss-btn dismiss-all" onclick="clearError(\'all\')">Dismiss All</button></div>';
                         errSec.innerHTML = html;
                         errSec.style.display = 'block';
                     } else {
@@ -5645,9 +5645,7 @@ void networkLoop(void* parameter) {
     resetWatchdog();
     apiServer.handleClient();
     handleTemperature();
-    //resetWatchdog();
     handleExternalTemperature();
-    //resetWatchdog();
 
     if (((activeErrors & ERR_TEMP_INT) || (activeErrors & ERR_TEMP_EXT)) && millis() - lastOledBlink >= 500) {
       oledBlinkState = !oledBlinkState;
@@ -5673,34 +5671,33 @@ void networkLoop(void* parameter) {
       }
     }
 
-      if (!validTimeSync) {
-        unsigned long currentMillis = millis();
-        if (currentMillis - lastNtpRetry >= NTP_RETRY_INTERVAL) {
-          lastNtpRetry = currentMillis;
-          resetWatchdog();
-          attemptTimeSync();
-          resetWatchdog();
-        }
+    if (!validTimeSync) {
+      unsigned long currentMillis = millis();
+      if (currentMillis - lastNtpRetry >= NTP_RETRY_INTERVAL) {
+        lastNtpRetry = currentMillis;
+        attemptTimeSync();
+        resetWatchdog();
       }
+    }
 
-      unsigned long currentTime = millis();
+    unsigned long currentTime = millis();
 
-      if (!startupemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
-        lastEmailAttempt = currentTime;
-        sendEmailWithLogs("Device is powered on");
-        startupemail = true;
+    if (!startupemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
+      lastEmailAttempt = currentTime;
+      sendEmailWithLogs("Device is powered on");
+      startupemail = true;
 
-        struct tm timeinfo;
-        if (getLocalTime(&timeinfo)) {
-          last90MinCheck = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
-        }
+      struct tm timeinfo;
+      if (getLocalTime(&timeinfo)) {
+        last90MinCheck = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
       }
+    }
 
-      if (pointemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
-        lastEmailAttempt = currentTime;
-        sendEmailWithLogs("Status Check");
-        pointemail = false;
-      }
+    if (pointemail && (currentTime - lastEmailAttempt > EMAIL_RETRY_INTERVAL)) {
+      lastEmailAttempt = currentTime;
+      sendEmailWithLogs("Status Check");
+      pointemail = false;
+    }
     delay(5);
   }
 }
@@ -6074,11 +6071,9 @@ void handleAddSchedule() {
       schedules.push_back(newSchedule);
       saveSchedulesToEEPROM();
       server.send(200, "application/json", "{\"status\":\"success\"}");
-      //clearError();
       broadcastRelayStates();
       return;
     }
-    //indicateError();
   }
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
@@ -6093,11 +6088,9 @@ void handleDeleteSchedule() {
       saveSchedulesToEEPROM();
       storeLogEntry("Schedule deleted successfully");
       server.send(200, "application/json", "{\"status\":\"success\"}");
-     // clearError();
       broadcastRelayStates();
       return;
     }
-    //indicateError();
   }
   //storeLogEntry("Invalid delete request");
   server.send(400, "application/json", "{\"error\":\"Invalid schedule ID\"}");
@@ -6118,13 +6111,11 @@ void handleUpdateSchedule() {
         saveSchedulesToEEPROM();
         server.send(200, "application/json", "{\"status\":\"success\"}");
         storeLogEntry("Schedule ID " + String(id) + " " + String(enabled ? "activated." : "deactivated."));
-       // clearError();
         broadcastRelayStates();
         return;
       } else {
         server.send(400, "application/json", "{\"error\":\"Invalid schedule ID\"}");
         storeLogEntry("Invalid schedule update request for ID: " + String(id));
-        //indicateError();
         return;
       }
     }
@@ -6220,12 +6211,12 @@ void handleClearError() {
     DeserializationError error = deserializeJson(doc, body);
     if (!error && doc.containsKey("error_id")) {
       if (doc["error_id"].is<String>() && doc["error_id"].as<String>() == "all") {
-         acknowledgedErrors |= activeErrors;
-         activeErrors = 0;
+        acknowledgedErrors |= activeErrors;
+        activeErrors = 0;
       } else {
-         uint16_t err_id = doc["error_id"].as<uint16_t>();
-         acknowledgedErrors |= err_id;
-         activeErrors &= ~err_id;
+        uint16_t err_id = doc["error_id"].as<uint16_t>();
+        acknowledgedErrors |= err_id;
+        activeErrors &= ~err_id;
       }
       server.send(200, "application/json", "{\"status\":\"success\"}");
       return;
@@ -6241,12 +6232,12 @@ void handleApiClearError() {
     DeserializationError error = deserializeJson(doc, body);
     if (!error && doc.containsKey("error_id")) {
       if (doc["error_id"].is<String>() && doc["error_id"].as<String>() == "all") {
-         acknowledgedErrors |= activeErrors;
-         activeErrors = 0;
+        acknowledgedErrors |= activeErrors;
+        activeErrors = 0;
       } else {
-         uint16_t err_id = doc["error_id"].as<uint16_t>();
-         acknowledgedErrors |= err_id;
-         activeErrors &= ~err_id;
+        uint16_t err_id = doc["error_id"].as<uint16_t>();
+        acknowledgedErrors |= err_id;
+        activeErrors &= ~err_id;
       }
       apiServer.send(200, "application/json", "{\"status\":\"success\"}");
       return;
@@ -6349,11 +6340,11 @@ void overrideLEDState() {
     else if (activeErrors & ERR_TEMP_INT) priorityError = ERR_TEMP_INT;
     else if (activeErrors & ERR_TEMP_EXT) priorityError = ERR_TEMP_EXT;
     else if (activeErrors & ERR_NTP) priorityError = ERR_NTP;
-    
+
     static int blinkCount = 0;
     static unsigned long stateStart = 0;
     static bool isBlinking = false;
-    
+
     if (priorityError == ERR_WIFI) {
       if (now - lastBlinkTime >= 250) {
         lastBlinkTime = now;
@@ -6362,15 +6353,15 @@ void overrideLEDState() {
       }
       return;
     }
-    
+
     int targetBlinks = 0;
     if (priorityError == ERR_TEMP_INT) targetBlinks = 2;
     else if (priorityError == ERR_TEMP_EXT) targetBlinks = 3;
     else if (priorityError == ERR_NTP) targetBlinks = 4;
     else targetBlinks = 1;
-    
+
     if (isBlinking) {
-      if (now - stateStart >= 200) { 
+      if (now - stateStart >= 200) {
         stateStart = now;
         blinkState = !blinkState;
         digitalWrite(errorLEDPin, blinkState);
@@ -6428,13 +6419,13 @@ void sendEmailWithLogs(const String& trigger) {
 
   if (!LittleFS.exists("/logs.json")) {
     if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
-   // storeLogEntry("Failed to send email: logs.json does not exist");
+    // storeLogEntry("Failed to send email: logs.json does not exist");
     return;
   }
 
   if (emailInProgress) {
     if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
-   // storeLogEntry("Email already in progress, skipping");
+    // storeLogEntry("Email already in progress, skipping");
     return;
   }
   emailInProgress = true;
@@ -6447,7 +6438,7 @@ void sendEmailWithLogs(const String& trigger) {
   if (!logsFile) {
     emailInProgress = false;
     if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
-   // storeLogEntry("Failed to open logs file for email");
+    // storeLogEntry("Failed to open logs file for email");
     return;
   }
 
@@ -6594,11 +6585,11 @@ void handleTemperature() {
       consecutiveTempFailures++;
       if (consecutiveTempFailures >= MAX_TEMP_FAILURES) {
         if (!(activeErrors & ERR_TEMP_INT) && !(acknowledgedErrors & ERR_TEMP_INT)) {
+          activeErrors |= ERR_TEMP_INT;
           storeLogEntry("Error: Internal Temperature sensor failed " + String(consecutiveTempFailures) + " times");
           sendEmailWithLogs("Internal Temperature Sensor Error");
-          activeErrors |= ERR_TEMP_INT;
         } else if (!(acknowledgedErrors & ERR_TEMP_INT)) {
-          activeErrors |= ERR_TEMP_INT; // ensure it's set if not acknowledged
+          activeErrors |= ERR_TEMP_INT;
         }
       }
     }
@@ -6707,10 +6698,8 @@ void handleAddTemporarySchedule() {
         logMsg += " OFF at " + String(newSchedule.offHour) + ":" + (newSchedule.offMinute < 10 ? "0" : "") + String(newSchedule.offMinute);
       }
       storeLogEntry(logMsg);
-     // clearError();
       return;
     }
-   // indicateError();
   }
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
@@ -6725,11 +6714,9 @@ void handleDeleteTemporarySchedule() {
         temporarySchedules.erase(it);
         storeLogEntry("Temporary schedule deleted successfully");
         server.send(200, "application/json", "{\"status\":\"success\"}");
-       // clearError();
         return;
       }
     }
-    //indicateError();
   }
   //storeLogEntry("Invalid temporary schedule delete request");
   server.send(400, "application/json", "{\"error\":\"Invalid schedule ID\"}");
@@ -6758,17 +6745,17 @@ void checkTemporarySchedules() {
       if (schedule.relayNumber == 1) {
         if (!relay1State && !overrideRelay1) {
           activateRelay(1, false);
-         // storeLogEntry("Temporary schedule activated Wavemaker");
+          // storeLogEntry("Temporary schedule activated Wavemaker");
         }
       } else if (schedule.relayNumber == 2) {
         if (!relay2State && !overrideRelay2) {
           activateRelay(2, false);
-         // storeLogEntry("Temporary schedule activated Lights");
+          // storeLogEntry("Temporary schedule activated Lights");
         }
       } else if (schedule.relayNumber == 3) {
         if (!relay3State && !overrideRelay1) {
           activateRelay(3, false);
-        //  storeLogEntry("Temporary schedule activated Air Pump");
+          //  storeLogEntry("Temporary schedule activated Air Pump");
         }
       }
 
@@ -6781,17 +6768,17 @@ void checkTemporarySchedules() {
       if (schedule.relayNumber == 1) {
         if (relay1State && !overrideRelay1) {
           deactivateRelay(1, false);
-        // storeLogEntry("Temporary schedule deactivated Wavemaker");
+          // storeLogEntry("Temporary schedule deactivated Wavemaker");
         }
       } else if (schedule.relayNumber == 2) {
         if (relay2State && !overrideRelay2) {
           deactivateRelay(2, false);
-        //  storeLogEntry("Temporary schedule deactivated Lights");
+          //  storeLogEntry("Temporary schedule deactivated Lights");
         }
       } else if (schedule.relayNumber == 3) {
         if (relay3State && !overrideRelay1) {
           deactivateRelay(3, false);
-        //  storeLogEntry("Temporary schedule deactivated Air Pump");
+          //  storeLogEntry("Temporary schedule deactivated Air Pump");
         }
       }
 
@@ -6846,11 +6833,11 @@ void handleExternalTemperature() {
       consecutiveExternalTempFailures++;
       if (consecutiveExternalTempFailures >= MAX_EXTERNAL_TEMP_FAILURES) {
         if (!(activeErrors & ERR_TEMP_EXT) && !(acknowledgedErrors & ERR_TEMP_EXT)) {
+          activeErrors |= ERR_TEMP_EXT;
           storeLogEntry("Error: External Temperature sensor failed " + String(consecutiveExternalTempFailures) + " times");
           sendEmailWithLogs("External Temperature Sensor Error");
-          activeErrors |= ERR_TEMP_EXT;
         } else if (!(acknowledgedErrors & ERR_TEMP_EXT)) {
-          activeErrors |= ERR_TEMP_EXT; // ensure it's set if not acknowledged
+          activeErrors |= ERR_TEMP_EXT;
         }
       }
     }
@@ -6990,7 +6977,6 @@ void handleApiLogs() {
     apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
     return;
   }
-  // Re-serve the logs JSON via apiServer (Core 0)
   if (!spiffsInitialized) {
     apiServer.send(500, "application/json", "{\"error\":\"LittleFS not initialized!\"}");
     return;

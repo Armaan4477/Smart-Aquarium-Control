@@ -217,7 +217,7 @@ def get_relays_latest():
             """SELECT collected_at, esp32_time,
                       relay1, relay2, relay3,
                       override1, override2,
-                      has_error, temp_error, ext_temp_error,
+                      active_errors, acknowledged_errors,
                       uptime_seconds, uptime_days, time_synced
                FROM status_readings ORDER BY collected_at DESC LIMIT 1"""
         ).fetchone()

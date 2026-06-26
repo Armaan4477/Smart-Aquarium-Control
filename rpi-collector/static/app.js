@@ -205,15 +205,14 @@ async function fetchLatestStatus() {
         els.errorBanner.style.backgroundColor = '#ffc107';
         els.errorBanner.style.color = '#333';
         els.errorText.style.color = '#333';
-    } else if (data.has_error) {
-        let msg = "System Error Active";
-        if (data.temp_error && data.ext_temp_error) {
-            msg = "Critical: Both internal and external temperature sensors failed!";
-        } else if (data.temp_error) {
-            msg = "Critical: Internal temperature sensor failed!";
-        } else if (data.ext_temp_error) {
-            msg = "Critical: External temperature sensor failed!";
-        }
+    } else if (data.active_errors > 0) {
+        let errs = [];
+        if (data.active_errors & 1) errs.push("WiFi Disconnected");
+        if (data.active_errors & 2) errs.push("Time Sync Failed");
+        if (data.active_errors & 4) errs.push("Internal Temp Sensor Failed");
+        if (data.active_errors & 8) errs.push("External Temp Sensor Failed");
+        
+        let msg = errs.length > 0 ? "System Errors: " + errs.join(" | ") : "System Error Active";
         els.errorText.textContent = msg;
         els.errorBanner.classList.remove('hidden');
         // Reset styles to default error styling

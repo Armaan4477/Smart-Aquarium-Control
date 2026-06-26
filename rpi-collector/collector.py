@@ -94,9 +94,9 @@ def _poll_status():
                         internal_c, external_c,
                         relay1, relay2, relay3,
                         override1, override2,
-                        has_error, temp_error, ext_temp_error,
+                        active_errors, acknowledged_errors,
                         uptime_seconds, uptime_days, time_synced)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     data.get("timestamp"),
@@ -108,8 +108,7 @@ def _poll_status():
                     1 if data.get("override1")      else 0,
                     1 if data.get("override2")      else 0,
                     int(data.get("active_errors", 0)),
-                    0,
-                    0,
+                    int(data.get("acknowledged_errors", 0)),
                     uptime_sec,
                     uptime_days,
                     1 if data.get("time_synced")    else 0,
