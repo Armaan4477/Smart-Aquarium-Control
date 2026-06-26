@@ -250,10 +250,10 @@ const int DISPLAY_SCHEDULE_ADDR = CALIBRATION_START_ADDR + CALIBRATION_SIZE + 1;
 DisplaySchedule displaySchedule = { 0xDA, 8, 0, 22, 0, 0, true };
 
 const int EMAIL_CONFIG_ADDR = DISPLAY_SCHEDULE_ADDR + sizeof(DisplaySchedule) + 1;
-EmailConfig emailConfig = { 0xE2, true, "", "", "" };
+EmailConfig emailConfig = { 0xE2, false, "", "", "" };
 
 const int DOCKER_CONFIG_ADDR = EMAIL_CONFIG_ADDR + sizeof(EmailConfig) + 1;
-DockerConfig dockerConfig = { 0xD1, true };
+DockerConfig dockerConfig = { 0xD1, false };
 
 bool oledPhysicalState = false;
 
@@ -515,7 +515,7 @@ void setup() {
 
   const esp_task_wdt_config_t wdt_config = {
     .timeout_ms = 15000,  // 15 second timeout
-    .idle_core_mask = 0,
+    .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
     .trigger_panic = true
   };
   esp_err_t wdt_err = esp_task_wdt_reconfigure(&wdt_config);
