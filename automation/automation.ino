@@ -3505,8 +3505,10 @@ const char logsPage[] PROGMEM = R"html(
         </table>
     </div>
     <script>
-        function loadLogs() {
-            document.getElementById('loading').style.display = 'block';
+        function loadLogs(showSpinner = true) {
+            if (showSpinner) {
+                document.getElementById('loading').style.display = 'block';
+            }
             
             fetch('/logs/data')
                 .then(response => response.json())
@@ -3523,24 +3525,28 @@ const char logsPage[] PROGMEM = R"html(
                         });
                     }
                     
-                    document.getElementById('loading').style.display = 'none';
+                    if (showSpinner) {
+                        document.getElementById('loading').style.display = 'none';
+                    }
                 })
                 .catch(error => {
                     console.error('Error loading logs:', error);
-                    document.getElementById('loading').style.display = 'none';
+                    if (showSpinner) {
+                        document.getElementById('loading').style.display = 'none';
+                    }
                 });
         }
 
         function refreshLogs() {
-            loadLogs();
+            loadLogs(true);
         }
 
         function goBack() {
             window.history.back();
         }
 
-        loadLogs();
-        setInterval(loadLogs, 10000);
+        loadLogs(true);
+        setInterval(() => loadLogs(false), 10000);
     </script>
 </body>
 </html>
