@@ -6564,6 +6564,10 @@ void updateOLED() {
       display.setCursor(16, 20);
       display.print("E");
     }
+  } else if (acknowledgedErrors & ERR_TEMP_INT) {
+    display.setTextSize(4);
+    display.setCursor(8, 20);
+    display.print("--");
   } else {
     char intBuf[8];
     dtostrf(lastValidTemperature, 4, 1, intBuf);
@@ -6585,6 +6589,10 @@ void updateOLED() {
       display.setCursor(79, 20);
       display.print("E");
     }
+  } else if (acknowledgedErrors & ERR_TEMP_EXT) {
+    display.setTextSize(4);
+    display.setCursor(71, 20);
+    display.print("--");
   } else {
     char extBuf[8];
     dtostrf(lastValidExternalTemperature, 4, 1, extBuf);
