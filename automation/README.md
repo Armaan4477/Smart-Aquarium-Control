@@ -7,7 +7,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 
 ## Key Features
 
-- **Responsive Web Dashboard**: Manage your aquarium from any device with WebSocket-powered near real-time updates for relay states and sensor data.
+- **Responsive Web Dashboard**: Manage your aquarium from any device with WebSocket-powered near real-time updates for relay states and sensor data. Fully optimized for offline loading with no external dependencies, and features dynamic main page pop-ups for critical system alerts and errors.
 - **Advanced Scheduling System**:
   - **Regular Schedules**: Recurring day-of-week ON/OFF schedules with automatic conflict detection, safely stored in EEPROM.
   - **Temporary Schedules**: One-time, auto-expiring schedules (up to 2 per relay) for ad-hoc equipment control.
@@ -25,9 +25,10 @@ This directory contains the firmware for the ESP32-based hardware controller. It
   - **Switch 2**: Overrides Main Light (Relay 2 & 4)
 - **Comprehensive Logging & Alerts**:
   - Persistent event logging stored on LittleFS.
-  - Automated email notifications for system startups, periodic status checks and sensor errors.
-  - Dedicated hardware LED for immediate visual error indication.
+  - Automated email notifications for system startups, periodic status checks and sensor errors (Email functionality is disabled by default to prevent startup errors until safely configured via the UI).
+  - Dedicated hardware LED and WebUI pop-ups for immediate visual error indication.
 - **Robust Timekeeping**: Automatic NTP time synchronization with built-in retry logic.
+- **System Stability**: Optimized FreeRTOS task scheduling to prevent Watchdog Timer (WDT) resets, ensuring continuous and reliable long-term operation.
 
 ---
 
@@ -97,7 +98,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 
 ### Web Interface
 The intuitive web dashboard provides complete control over your aquarium. Navigate through dedicated pages to:
-- **Dashboard**: View live sensor readings and manually toggle equipment.
+- **Dashboard**: View live sensor readings and manually toggle equipment. Relay buttons automatically turn **yellow** to clearly indicate when a physical or manual override is active.
 - **Schedules**: Create and manage recurring weekly schedules.
 - **Temp Schedules**: Set up one-time, expiring temporary schedules.
 - **Temp Control**: Monitor raw temperature data and calibrate internal/external sensors.

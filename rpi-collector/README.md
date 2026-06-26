@@ -2,7 +2,7 @@
 
 ![Platform](https://img.shields.io/badge/platform-Docker-blue.svg)
 
-This directory contains a self-contained Docker service intended to run on a Raspberry Pi or similar local server. It routinely polls the ESP32 controller every 60 seconds and stores all readings in a local SQLite database. It also exposes a REST API on port **5050** for querying historical data from any device on your LAN.
+This directory contains a self-contained Docker service intended to run on a Raspberry Pi or similar local server. It routinely polls the ESP32 controller every 60 seconds and stores all readings in a local SQLite database. It also exposes a REST API on port **5050** for querying historical data from any device on your LAN, and acts as a secure reverse-proxy to serve the ESP32 WebUI without cross-origin issues.
 
 ---
 
@@ -119,14 +119,14 @@ The collector exposes a local API for data visualization and querying. All endpo
 | `GET` | `/api/config` | Frontend configuration (ESP32 IP, etc.) |
 | `GET` | `/api/email_config` | Returns whether RPi email notifications are enabled |
 | `POST`| `/api/email_config` | Enable or disable RPi email notifications |
-| `ANY` | `/proxy/<path>` | Forwards requests to the ESP32 main web server (port 80) |
+| `ANY` | `/proxy/<path>` | Proxies ESP32 WebUI, dynamically rewriting HTML/JS to bypass Chrome's Private Network Access (PNA) restrictions |
 
 ---
 
 ## ESP32 Integration
 
 The data collector interacts with two dedicated endpoints on the ESP32 firmware (`automation.ino`):
-- `GET /api/status`: Returns calibrated temps, relay states, override flags, error flags and uptime.
+- `GET /api/status`: Returns calibrated temps, relay states, override flags, error flags (synchronized seamlessly for dynamic UI pop-ups), and uptime.
 - `GET /api/logs`: Returns system logs.
 
 **Security**: Ensure your Raspberry Pi's IP address (e.g., `192.168.29.3`) is included in the `allowedIPs` whitelist within the ESP32 code so the collector can poll without authentication.
