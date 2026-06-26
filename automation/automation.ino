@@ -3613,9 +3613,14 @@ const char tempctrl[] PROGMEM = R"html(
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settings)
             })
-            .then(response => {
+            .then(async response => {
                 if (!response.ok) {
-                    return response.json().then(data => { throw new Error(data.error); });
+                    let errMsg = 'Server error';
+                    try {
+                        const data = await response.json();
+                        if (data.error) errMsg = data.error;
+                    } catch (e) {}
+                    throw new Error(errMsg);
                 }
                 return response.json();
             })
@@ -3941,6 +3946,7 @@ const char tempschedules[] PROGMEM = R"html(
             text-align: left;
             font-size: 1rem;
             color: var(--text-color);
+            flex: 1;
         }
 
         .schedule-table td:last-child {
@@ -3953,10 +3959,10 @@ const char tempschedules[] PROGMEM = R"html(
             min-width: 200px;
         }
 
-        .schedule-table td:nth-child(1)::before { content: "ID"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .schedule-table td:nth-child(2)::before { content: "Relay"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .schedule-table td:nth-child(3)::before { content: "Start Time"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .schedule-table td:nth-child(4)::before { content: "End Time"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .schedule-table td:nth-child(1)::before { content: "ID"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .schedule-table td:nth-child(2)::before { content: "Relay"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .schedule-table td:nth-child(3)::before { content: "Start Time"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .schedule-table td:nth-child(4)::before { content: "End Time"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
 
         .action-button {
             flex: 1;
@@ -4224,6 +4230,7 @@ const char tempschedules[] PROGMEM = R"html(
                 border-bottom: 1px solid #eee;
                 padding: 12px 0;
                 text-align: right;
+                flex: none;
             }
             .schedule-table td:last-child {
                 border-bottom: none;
@@ -4305,7 +4312,7 @@ const char tempschedules[] PROGMEM = R"html(
         }
         #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         #toast.success { background: var(--success-color); }
-        #toast.error   { background: var(--error-color); }
+        #toast.error   { background: var(--error-color); display: block !important; }
     </style>
 </head>
 <body>
@@ -4401,9 +4408,14 @@ const char tempschedules[] PROGMEM = R"html(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
         })
-        .then(response => {
+        .then(async response => {
             if (!response.ok) {
-                return response.json().then(data => { throw new Error(data.error); });
+                let errMsg = 'Server error';
+                try {
+                    const data = await response.json();
+                    if (data.error) errMsg = data.error;
+                } catch (e) {}
+                throw new Error(errMsg);
             }
             return response.json();
         })
@@ -4725,6 +4737,7 @@ const char mainSchedules[] PROGMEM = R"html(
             text-align: left;
             font-size: 1rem;
             color: var(--text-color);
+            flex: 1;
         }
 
         .schedule-table td:last-child {
@@ -4737,11 +4750,15 @@ const char mainSchedules[] PROGMEM = R"html(
             min-width: 200px;
         }
 
-        .schedule-table td:nth-child(1)::before { content: "Relay"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .schedule-table td:nth-child(2)::before { content: "On Time"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .schedule-table td:nth-child(3)::before { content: "Off Time"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .schedule-table td:nth-child(4)::before { content: "Days"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .schedule-table td:nth-child(5)::before { content: "Status"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .schedule-table td:nth-child(4) {
+            flex: 2.5;
+        }
+
+        .schedule-table td:nth-child(1)::before { content: "Relay"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .schedule-table td:nth-child(2)::before { content: "On Time"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .schedule-table td:nth-child(3)::before { content: "Off Time"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .schedule-table td:nth-child(4)::before { content: "Days"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        .schedule-table td:nth-child(5)::before { content: "Status"; font-weight: 600; color: var(--text-light); font-size: 0.85rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
 
         .action-button {
             flex: 1;
@@ -4997,6 +5014,7 @@ const char mainSchedules[] PROGMEM = R"html(
                 border-bottom: 1px solid #eee;
                 padding: 12px 0;
                 text-align: right;
+                flex: none;
             }
             .schedule-table td:last-child {
                 border-bottom: none;
@@ -5066,7 +5084,7 @@ const char mainSchedules[] PROGMEM = R"html(
         }
         #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         #toast.success { background: var(--success-color); }
-        #toast.error   { background: var(--error-color); }
+        #toast.error   { background: var(--error-color); display: block !important; }
     </style>
 </head>
 <body>
@@ -5206,7 +5224,17 @@ const char mainSchedules[] PROGMEM = R"html(
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ relay, onTime, offTime, days })
             })
-            .then(response => response.ok ? response.json() : response.json().then(data => { throw new Error(data.error); }))
+            .then(async response => {
+                if (!response.ok) {
+                    let errMsg = 'Server error';
+                    try {
+                        const data = await response.json();
+                        if (data.error) errMsg = data.error;
+                    } catch (e) {}
+                    throw new Error(errMsg);
+                }
+                return response.json();
+            })
             .then(() => { 
                 loadSchedules(); 
                 checkErrorStatus(); 
