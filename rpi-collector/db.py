@@ -57,15 +57,6 @@ def init_db():
             );
         """)
 
-    # Run migration if columns don't exist
-    try:
-        with get_conn() as conn:
-            conn.execute("ALTER TABLE status_readings ADD COLUMN active_errors INTEGER NOT NULL DEFAULT 0;")
-            conn.execute("ALTER TABLE status_readings ADD COLUMN acknowledged_errors INTEGER NOT NULL DEFAULT 0;")
-            log.info("Migrated DB: added active_errors and acknowledged_errors")
-    except sqlite3.OperationalError as e:
-        # Columns probably already exist
-        pass
 
     log.info("Database initialised at %s", DB_PATH)
 
