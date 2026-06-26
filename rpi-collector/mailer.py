@@ -268,9 +268,9 @@ def send_email_report(trigger: str, status_data: dict) -> None:
     relay3       = "ON"     if status_data.get("relay3")         else "OFF"
     override1    = "Active" if status_data.get("override1")      else "Inactive"
     override2    = "Active" if status_data.get("override2")      else "Inactive"
-    has_error    = bool(status_data.get("has_error"))
-    temp_error   = bool(status_data.get("temp_error"))
-    ext_err      = bool(status_data.get("ext_temp_error"))
+    active_errs  = int(status_data.get("active_errors", 0))
+    ack_errs     = int(status_data.get("acknowledged_errors", 0))
+    has_error    = active_errs > 0
     uptime_days  = status_data.get("uptime_days",    0)
     uptime_secs  = status_data.get("uptime_seconds", 0)
     uptime_hours = uptime_secs // 3600
@@ -292,8 +292,8 @@ def send_email_report(trigger: str, status_data: dict) -> None:
                   f'<span class="pill pill-ok">{error_label}</span>')
 
     temp_flags = []
-    if temp_error: temp_flags.append('<span class="pill pill-error">Temp Sensor Error</span>')
-    if ext_err:    temp_flags.append('<span class="pill pill-error">Ext Temp Sensor Error</span>')
+    if active_errs & (1 << 2): temp_flags.append('<span class="pill pill-error">Temp Sensor Error</span>')
+    if active_errs & (1 << 3): temp_flags.append('<span class="pill pill-error">Ext Temp Sensor Error</span>')
     temp_flags_html = " ".join(temp_flags) if temp_flags else '<span class="pill pill-ok">Sensors OK</span>'
 
     # ── HTML body ──
@@ -353,6 +353,14 @@ def send_email_report(trigger: str, status_data: dict) -> None:
         <div class="row">
           <div class="cell-label">Error Status</div>
           <div class="cell-value">{error_pill}</div>
+        </div>
+        <div class="row">
+          <div class="cell-label">Total Active Errors</div>
+          <div class="cell-value">{bin(active_errs).count('1')}</div>
+        </div>
+        <div class="row">
+          <div class="cell-label">Total Acknowledged Errors</div>
+          <div class="cell-value">{bin(ack_errs).count('1')}</div>
         </div>
         <div class="row">
           <div class="cell-label">ESP32 Uptime</div>

@@ -4,8 +4,9 @@ Runs on port 5050 (configurable in config.py).
 """
 import datetime
 import logging
+import re
 
-from flask import Flask, jsonify, request, abort
+from flask import Flask, jsonify, request, abort, Response
 import db
 import collector
 import config
@@ -25,9 +26,73 @@ def get_config():
     """Return frontend-needed configuration."""
     return jsonify({"esp32_ip": config.ESP32_IP})
 
+
+def _rewrite_esp32_html(html: str) -> str:
+    """
+    Rewrite relative URL references in ESP32-served HTML so that all
+    internal navigation and fetch() calls route through /proxy/ instead of
+    hitting the ESP32 directly from the browser.
+
+    This is necessary because the Docker WebUI is served over HTTPS via a
+    reverse proxy, and Chrome's Private Network Access (PNA) policy blocks
+    direct browser-to-ESP32 (192.168.x.x) connections from secure contexts.
+    By proxying page content and rewriting URLs, every request stays within
+    the Docker host's network — no PNA preflight issues.
+    """
+    esp32_base = f"http://{config.ESP32_IP}"
+
+    # 1. Inject <base> tag so any URLs we miss still resolve via proxy origin
+    #    (placed right after <head> as a safety net).
+    html = re.sub(
+        r'(<head[^>]*>)',
+        r'\1<base href="/proxy/">',
+        html, count=1, flags=re.IGNORECASE
+    )
+
+    # 2. Rewrite absolute ESP32 URLs (e.g. http://192.168.x.x/path) → /proxy/path
+    html = html.replace(esp32_base, '/proxy')
+
+    # 3. Rewrite JS navigation patterns:
+    #    window.location.href = '/path'  →  window.location.href = '/proxy/path'
+    html = re.sub(
+        r"(window\.location\.href\s*=\s*['\x22])/((?!proxy/)[^'\x22]*)",
+        r'\g<1>/proxy/\2',
+        html
+    )
+
+    # 4. Rewrite fetch('/path', ...) → fetch('/proxy/path', ...)
+    html = re.sub(
+        r"(fetch\(['\x22])/((?!proxy/)[^'\x22]*)",
+        r'\g<1>/proxy/\2',
+        html
+    )
+
+    # 5. Rewrite href="/path" attributes → href="/proxy/path"
+    html = re.sub(
+        r'(href=["\'])/((?!proxy/)[^"\'])',
+        r'\g<1>/proxy/\2',
+        html
+    )
+
+    # 6. Rewrite action="/path" form attributes → action="/proxy/path"
+    html = re.sub(
+        r'(action=["\'])/((?!proxy/)[^"\'])',
+        r'\g<1>/proxy/\2',
+        html
+    )
+
+    return html
+
+
 @app.route("/proxy/<path:subpath>", methods=["GET", "POST", "DELETE"])
 def proxy(subpath):
-    """Forward requests to the ESP32 main web server (port 80)."""
+    """Forward requests to the ESP32 main web server (port 80).
+
+    For HTML page responses the body is rewritten so that all relative
+    internal links and fetch() API calls are redirected back through this
+    proxy endpoint — preventing browser Private Network Access (PNA) blocks
+    that occur when the WebUI is served over HTTPS.
+    """
     esp32_url = f"http://{config.ESP32_IP}:80/{subpath}"
     try:
         if request.method == "GET":
@@ -48,8 +113,15 @@ def proxy(subpath):
                     log.error(f"Force poll failed: {e}")
         elif request.method == "DELETE":
             resp = requests.delete(esp32_url, params=request.args, timeout=10)
-        
-        # We try to return the JSON response if it's JSON, else raw text
+
+        content_type = resp.headers.get('Content-Type', '')
+
+        # For HTML responses rewrite URLs so all sub-requests stay in-proxy.
+        if 'text/html' in content_type:
+            rewritten = _rewrite_esp32_html(resp.text)
+            return Response(rewritten, status=resp.status_code, content_type='text/html')
+
+        # For JSON responses return a parsed jsonify.
         try:
             return jsonify(resp.json()), resp.status_code
         except ValueError:
@@ -217,7 +289,7 @@ def get_relays_latest():
             """SELECT collected_at, esp32_time,
                       relay1, relay2, relay3,
                       override1, override2,
-                      has_error, temp_error, ext_temp_error,
+                      active_errors, acknowledged_errors,
                       uptime_seconds, uptime_days, time_synced
                FROM status_readings ORDER BY collected_at DESC LIMIT 1"""
         ).fetchone()

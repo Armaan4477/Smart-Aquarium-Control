@@ -22,9 +22,7 @@ last_logs_poll:   dict = {"time": None, "ok": None, "error": None}
 
 # Email tracking state
 email_tracking_state = {
-    "last_has_error": False,
-    "last_temp_error": False,
-    "last_ext_temp_error": False,
+    "last_active_errors": 0,
     # Tracks which 90-minute slot index (since midnight) was last emailed.
     # Initialised to the *current* slot so we don't fire immediately on start.
     "last_periodic_email_slot": None,
@@ -96,9 +94,9 @@ def _poll_status():
                         internal_c, external_c,
                         relay1, relay2, relay3,
                         override1, override2,
-                        has_error, temp_error, ext_temp_error,
+                        active_errors, acknowledged_errors,
                         uptime_seconds, uptime_days, time_synced)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     data.get("timestamp"),
@@ -109,9 +107,8 @@ def _poll_status():
                     1 if data.get("relay3")         else 0,
                     1 if data.get("override1")      else 0,
                     1 if data.get("override2")      else 0,
-                    1 if data.get("has_error")      else 0,
-                    1 if data.get("temp_error")     else 0,
-                    1 if data.get("ext_temp_error") else 0,
+                    int(data.get("active_errors", 0)),
+                    int(data.get("acknowledged_errors", 0)),
                     uptime_sec,
                     uptime_days,
                     1 if data.get("time_synced")    else 0,
@@ -147,17 +144,11 @@ def _poll_errors():
         return
 
     # --- Error-transition email logic ---
-    current_has_error = bool(data.get("has_error"))
-    current_temp_error = bool(data.get("temp_error"))
-    current_ext_temp_error = bool(data.get("ext_temp_error"))
-
-    new_temp = current_temp_error and not email_tracking_state["last_temp_error"]
-    new_ext_temp = current_ext_temp_error and not email_tracking_state["last_ext_temp_error"]
-    new_general = current_has_error and not email_tracking_state["last_has_error"]
-
-    email_tracking_state["last_has_error"] = current_has_error
-    email_tracking_state["last_temp_error"] = current_temp_error
-    email_tracking_state["last_ext_temp_error"] = current_ext_temp_error
+    current_active_errors = int(data.get("active_errors", 0))
+    last_errors = email_tracking_state["last_active_errors"]
+    
+    new_errors = current_active_errors & ~last_errors
+    email_tracking_state["last_active_errors"] = current_active_errors
 
     # --- Fixed-schedule periodic email logic ---
     # Determine which 90-minute wall-clock slot we are currently in.
@@ -182,7 +173,7 @@ def _poll_errors():
         email_tracking_state["last_periodic_email_slot"] = current_slot
         periodic_due = False
 
-    needs_email = new_temp or new_ext_temp or new_general or periodic_due
+    needs_email = (new_errors > 0) or periodic_due
 
     if needs_email:
         # Re-fetch the latest status so the email contains the freshest data
@@ -198,15 +189,15 @@ def _poll_errors():
             "uptime_days": uptime_sec // 86400,
         }
 
-        if new_temp:
-            mailer.send_email_report("Temperature Sensor Error", email_data)
-        if new_ext_temp:
+        if new_errors & (1 << 0):
+            mailer.send_email_report("WiFi Disconnected Error", email_data)
+        if new_errors & (1 << 1):
+            mailer.send_email_report("Time Sync Error", email_data)
+        if new_errors & (1 << 2):
+            mailer.send_email_report("Internal Temperature Sensor Error", email_data)
+        if new_errors & (1 << 3):
             mailer.send_email_report("External Temperature Sensor Error", email_data)
-
-        # Only send general error if it's not accompanied by a specific error
-        if new_general and not (new_temp or new_ext_temp):
-            mailer.send_email_report("General Error Detected", email_data)
-
+        
         if periodic_due:
             mailer.send_email_report("Status Check", email_data)
             email_tracking_state["last_periodic_email_slot"] = current_slot

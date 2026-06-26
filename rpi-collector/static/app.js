@@ -85,11 +85,16 @@ async function initializeLinks() {
         const config = await res.json();
         
         window.ESP32_IP = config.esp32_ip;
-        const ip = config.esp32_ip;
-        document.getElementById('link-main-sched').href = `http://${ip}/mainSchedules`;
-        document.getElementById('link-temp-sched').href = `http://${ip}/tempschedules`;
-        document.getElementById('link-temp-ctrl').href = `http://${ip}/tempcontrol`;
-        document.getElementById('link-disp-ctrl').href = `http://${ip}/displayctrl`;
+        // Route control panel links through the server-side proxy instead of
+        // directly to the ESP32 IP. This prevents Chrome's Private Network
+        // Access (PNA) blocks that occur when the WebUI is accessed over HTTPS
+        // and the browser would otherwise open a direct link to 192.168.x.x.
+        document.getElementById('link-main-sched').href = '/proxy/mainSchedules';
+        document.getElementById('link-temp-sched').href = '/proxy/tempschedules';
+        document.getElementById('link-temp-ctrl').href  = '/proxy/tempcontrol';
+        document.getElementById('link-disp-ctrl').href  = '/proxy/displayctrl';
+        document.getElementById('link-email-cfg').href  = '/proxy/emailConfig';
+        document.getElementById('link-docker-cfg').href = '/proxy/dockerConfig';
     } catch (e) {
         console.error("Could not initialize links:", e);
     }
@@ -199,27 +204,55 @@ async function fetchLatestStatus() {
     
     // Error Banner
     if (data.docker_disabled) {
-        let link = window.ESP32_IP ? `http://${window.ESP32_IP}/dockerConfig` : '/proxy/dockerConfig';
-        els.errorText.innerHTML = `<strong>Docker Integration Disabled:</strong> The collector cannot fetch the latest status. Please enable it in the <a href="${link}" style="color: inherit; text-decoration: underline;" target="_blank">Docker Settings</a> on the ESP32.`;
+        let link = '/proxy/dockerConfig';
+        els.errorText.innerHTML = `<strong>Docker Integration Disabled:</strong> The collector cannot fetch the latest status. Please enable it in the <a href="${link}" style="color: inherit; text-decoration: underline;" target="_blank" rel="noopener noreferrer">Docker Settings</a> on the ESP32.`;
         els.errorBanner.classList.remove('hidden');
         els.errorBanner.style.backgroundColor = '#ffc107';
+        els.errorBanner.style.borderColor = 'transparent';
+        els.errorBanner.style.boxShadow = 'none';
         els.errorBanner.style.color = '#333';
         els.errorText.style.color = '#333';
-    } else if (data.has_error) {
-        let msg = "System Error Active";
-        if (data.temp_error && data.ext_temp_error) {
-            msg = "Critical: Both internal and external temperature sensors failed!";
-        } else if (data.temp_error) {
-            msg = "Critical: Internal temperature sensor failed!";
-        } else if (data.ext_temp_error) {
-            msg = "Critical: External temperature sensor failed!";
+    } else if ((data.active_errors && data.active_errors > 0) || (data.acknowledged_errors && data.acknowledged_errors > 0)) {
+        let errs = [];
+        let ackErrs = [];
+        if (data.active_errors > 0) {
+            if (data.active_errors & 1) errs.push("WiFi Disconnected");
+            if (data.active_errors & 2) errs.push("Time Sync Failed");
+            if (data.active_errors & 4) errs.push("Internal Temp Sensor Failed");
+            if (data.active_errors & 8) errs.push("External Temp Sensor Failed");
         }
-        els.errorText.textContent = msg;
+        if (data.acknowledged_errors > 0) {
+            if (data.acknowledged_errors & 1) ackErrs.push("WiFi Disconnected");
+            if (data.acknowledged_errors & 2) ackErrs.push("Time Sync Failed");
+            if (data.acknowledged_errors & 4) ackErrs.push("Internal Temp Sensor Failed");
+            if (data.acknowledged_errors & 8) ackErrs.push("External Temp Sensor Failed");
+        }
+        
+        let msgParts = [];
+        if (errs.length > 0) {
+            msgParts.push("System Errors: " + errs.join(" | "));
+        }
+        if (ackErrs.length > 0) {
+            msgParts.push("Acknowledged: " + ackErrs.join(" | "));
+        }
+        
+        els.errorText.innerHTML = msgParts.join("<br>");
         els.errorBanner.classList.remove('hidden');
-        // Reset styles to default error styling
-        els.errorBanner.style.backgroundColor = '';
-        els.errorBanner.style.color = '';
-        els.errorText.style.color = '';
+        
+        if (data.active_errors === 0 && data.acknowledged_errors > 0) {
+            els.errorBanner.style.backgroundColor = 'rgba(255, 152, 0, 0.1)';
+            els.errorBanner.style.borderColor = 'rgba(255, 152, 0, 0.2)';
+            els.errorBanner.style.boxShadow = '0 0 20px rgba(255, 152, 0, 0.2)';
+            els.errorBanner.style.color = '#ffb74d';
+            els.errorText.style.color = '#ffb74d';
+        } else {
+            // Reset styles to default error styling
+            els.errorBanner.style.backgroundColor = '';
+            els.errorBanner.style.borderColor = '';
+            els.errorBanner.style.boxShadow = '';
+            els.errorBanner.style.color = '';
+            els.errorText.style.color = '';
+        }
     } else {
         els.errorBanner.classList.add('hidden');
     }

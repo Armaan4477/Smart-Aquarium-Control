@@ -31,9 +31,8 @@ def init_db():
                 relay3         INTEGER NOT NULL DEFAULT 0,
                 override1      INTEGER NOT NULL DEFAULT 0,
                 override2      INTEGER NOT NULL DEFAULT 0,
-                has_error      INTEGER NOT NULL DEFAULT 0,
-                temp_error     INTEGER NOT NULL DEFAULT 0,
-                ext_temp_error INTEGER NOT NULL DEFAULT 0,
+                active_errors  INTEGER NOT NULL DEFAULT 0,
+                acknowledged_errors INTEGER NOT NULL DEFAULT 0,
                 uptime_seconds INTEGER,
                 uptime_days    INTEGER,
                 time_synced    INTEGER NOT NULL DEFAULT 0
@@ -57,6 +56,8 @@ def init_db():
                 value TEXT NOT NULL
             );
         """)
+
+
     log.info("Database initialised at %s", DB_PATH)
 
 
