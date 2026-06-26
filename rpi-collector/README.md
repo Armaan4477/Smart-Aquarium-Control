@@ -84,16 +84,18 @@ The collector exposes a local API for data visualization and querying. All endpo
   "relay3": 0,
   "override1": 0,
   "override2": 0,
-  "has_error": 0,
-  "temp_error": 0,
-  "ext_temp_error": 0,
+  "active_errors": 0,
+  "acknowledged_errors": 0,
   "uptime_seconds": 86400,
   "uptime_days": 1,
   "time_synced": 1,
   "is_offline": false,
-  "uptime_pending": false
+  "uptime_pending": false,
+  "docker_disabled": false
 }
 ```
+
+*Note: If a temperature sensor is in an active error state, `internal_c` or `external_c` will be returned as `null` to prevent displaying stale data.*
 
 ### Relays, Overrides & Errors
 
@@ -126,7 +128,7 @@ The collector exposes a local API for data visualization and querying. All endpo
 ## ESP32 Integration
 
 The data collector interacts with two dedicated endpoints on the ESP32 firmware (`automation.ino`):
-- `GET /api/status`: Returns calibrated temps, relay states, override flags, error flags (synchronized seamlessly for dynamic UI pop-ups), and uptime.
+- `GET /api/status`: Returns calibrated temps, relay states, override flags, error bitmasks (`active_errors`, `acknowledged_errors`), and time sync state.
 - `GET /api/logs`: Returns system logs.
 
 **Security**: Ensure your Raspberry Pi's IP address (e.g., `192.168.29.3`) is included in the `allowedIPs` whitelist within the ESP32 code so the collector can poll without authentication.
