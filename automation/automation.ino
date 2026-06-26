@@ -118,6 +118,8 @@ struct TemporarySchedule {
   bool hasOnTime;
   bool hasOffTime;
   bool enabled;
+  bool onFired;
+  bool offFired;
 };
 
 struct CalibrationData {
@@ -172,6 +174,8 @@ uint16_t acknowledgedErrors = 0;
 
 const char* ssid = "Your_WiFi_SSID";
 const char* password = "Your_WiFi_Password";
+const char* authUsername = "admin";
+const char* authPassword = "12345678";
 std::vector<LogEntry> logBuffer;
 bool spiffsInitialized = false;
 WiFiUDP ntpUDP;
@@ -224,8 +228,6 @@ extern const unsigned long HOLD_DURATION;
 unsigned long lastBlinkTime = 0;
 const unsigned long BLINK_INTERVAL = 1000;
 bool blinkState = false;
-const char* authUsername = "admin";
-const char* authPassword = "12345678";
 
 #define ONE_WIRE_BUS 26
 #define EXTERNAL_ONE_WIRE_BUS 27
@@ -6420,6 +6422,8 @@ void handleAddTemporarySchedule() {
       newSchedule.id = tempScheduleIdCounter++;
       newSchedule.relayNumber = relayNumber;
       newSchedule.enabled = true;
+      newSchedule.onFired = false;
+      newSchedule.offFired = false;
 
       if (doc.containsKey("onTime") && !doc["onTime"].isNull()) {
         String onTime = doc["onTime"].as<String>();
@@ -6499,7 +6503,7 @@ void checkTemporarySchedules() {
   int seconds = timeinfo.tm_sec;
 
   for (auto it = temporarySchedules.begin(); it != temporarySchedules.end();) {
-    const TemporarySchedule& schedule = *it;
+    TemporarySchedule& schedule = *it;
     bool shouldRemove = false;
 
     if (!schedule.enabled) {
@@ -6507,7 +6511,7 @@ void checkTemporarySchedules() {
       continue;
     }
 
-    if (schedule.hasOnTime && hours == schedule.onHour && minutes == schedule.onMinute && seconds <= 1) {
+    if (schedule.hasOnTime && !schedule.onFired && hours == schedule.onHour && minutes == schedule.onMinute && seconds <= 1) {
       if (schedule.relayNumber == 1) {
         if (!relay1State && !overrideRelay1) {
           activateRelay(1, false);
@@ -6524,13 +6528,10 @@ void checkTemporarySchedules() {
           //  storeLogEntry("Temporary schedule activated Air Pump");
         }
       }
-
-      if (!schedule.hasOffTime) {
-        shouldRemove = true;
-      }
+      schedule.onFired = true;
     }
 
-    if (schedule.hasOffTime && hours == schedule.offHour && minutes == schedule.offMinute && seconds <= 1) {
+    if (schedule.hasOffTime && !schedule.offFired && hours == schedule.offHour && minutes == schedule.offMinute && seconds <= 1) {
       if (schedule.relayNumber == 1) {
         if (relay1State && !overrideRelay1) {
           deactivateRelay(1, false);
@@ -6547,26 +6548,19 @@ void checkTemporarySchedules() {
           //  storeLogEntry("Temporary schedule deactivated Air Pump");
         }
       }
-
-      if (!schedule.hasOnTime) {
-        shouldRemove = true;
-      }
+      schedule.offFired = true;
     }
 
     if (schedule.hasOnTime && schedule.hasOffTime) {
-      bool onTimePassed = (hours > schedule.onHour) || (hours == schedule.onHour && minutes > schedule.onMinute);
-      bool offTimePassed = (hours > schedule.offHour) || (hours == schedule.offHour && minutes > schedule.offMinute);
-      if (onTimePassed && offTimePassed) {
+      if (schedule.onFired && schedule.offFired) {
         shouldRemove = true;
       }
     } else if (schedule.hasOnTime && !schedule.hasOffTime) {
-      bool onTimePassed = (hours > schedule.onHour) || (hours == schedule.onHour && minutes > schedule.onMinute);
-      if (onTimePassed) {
+      if (schedule.onFired) {
         shouldRemove = true;
       }
     } else if (!schedule.hasOnTime && schedule.hasOffTime) {
-      bool offTimePassed = (hours > schedule.offHour) || (hours == schedule.offHour && minutes > schedule.offMinute);
-      if (offTimePassed) {
+      if (schedule.offFired) {
         shouldRemove = true;
       }
     }
