@@ -116,10 +116,14 @@ def proxy(subpath):
 
         content_type = resp.headers.get('Content-Type', '')
 
+        # The ESP32 does not typically specify a charset, so requests defaults to ISO-8859-1.
+        # Force UTF-8 so characters like the degree symbol (°) render correctly.
+        resp.encoding = 'utf-8'
+
         # For HTML responses rewrite URLs so all sub-requests stay in-proxy.
         if 'text/html' in content_type:
             rewritten = _rewrite_esp32_html(resp.text)
-            return Response(rewritten, status=resp.status_code, content_type='text/html')
+            return Response(rewritten, status=resp.status_code, content_type='text/html; charset=utf-8')
 
         # For JSON responses return a parsed jsonify.
         try:
@@ -250,6 +254,14 @@ def get_temperature_latest():
         return jsonify({"error": "No data yet"}), 404
     
     result = _row_to_dict(row)
+    
+    # If sensors are in an error state, do not return the stale temperature
+    active_errs = result.get("active_errors") or 0
+    if active_errs & (1 << 2):
+        result["internal_c"] = None
+    if active_errs & (1 << 3):
+        result["external_c"] = None
+
     result["is_offline"]     = collector.uptime_state.get("is_offline", False)
     result["uptime_pending"] = collector.uptime_state.get("uptime_pending", False)
     result["docker_disabled"] = collector.uptime_state.get("docker_disabled", False)

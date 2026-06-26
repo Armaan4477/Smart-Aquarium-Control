@@ -261,14 +261,18 @@ def send_email_report(trigger: str, status_data: dict) -> None:
 
     # ── Extract fields ──
     now_str      = _now_str()
-    internal_c   = status_data.get("internal_c") or 0.0
-    external_c   = status_data.get("external_c") or 0.0
+    internal_c   = status_data.get("internal_c")
+    external_c   = status_data.get("external_c")
+    active_errs  = int(status_data.get("active_errors", 0))
+
+    int_temp_str = "--" if (active_errs & (1 << 2)) else (f"{internal_c:.1f}" if internal_c is not None else "--")
+    ext_temp_str = "--" if (active_errs & (1 << 3)) else (f"{external_c:.1f}" if external_c is not None else "--")
+
     relay1       = "ON"     if status_data.get("relay1")         else "OFF"
     relay2       = "ON"     if status_data.get("relay2")         else "OFF"
     relay3       = "ON"     if status_data.get("relay3")         else "OFF"
     override1    = "Active" if status_data.get("override1")      else "Inactive"
     override2    = "Active" if status_data.get("override2")      else "Inactive"
-    active_errs  = int(status_data.get("active_errors", 0))
     ack_errs     = int(status_data.get("acknowledged_errors", 0))
     has_error    = active_errs > 0
     uptime_days  = status_data.get("uptime_days",    0)
@@ -310,11 +314,11 @@ def send_email_report(trigger: str, status_data: dict) -> None:
       <div class="section-title">Temperature</div>
       <div style="text-align:center">
         <div class="temp-row">
-          <div class="temp-big">{internal_c:.1f}<span class="temp-unit"> °C</span></div>
+          <div class="temp-big">{int_temp_str}<span class="temp-unit"> °C</span></div>
           <div class="temp-label">Internal</div>
         </div>
         <div class="temp-row">
-          <div class="temp-big">{external_c:.1f}<span class="temp-unit"> °C</span></div>
+          <div class="temp-big">{ext_temp_str}<span class="temp-unit"> °C</span></div>
           <div class="temp-label">External</div>
         </div>
       </div>
@@ -388,8 +392,8 @@ def send_email_report(trigger: str, status_data: dict) -> None:
         f"Event: {trigger}\n"
         f"Timestamp: {now_str}\n\n"
         f"System Status:\n"
-        f"  Internal Temperature : {internal_c:.1f} °C\n"
-        f"  External Temperature : {external_c:.1f} °C\n"
+        f"  Internal Temperature : {int_temp_str} °C\n"
+        f"  External Temperature : {ext_temp_str} °C\n"
         f"  Relay 1 (WaveMaker)  : {relay1}\n"
         f"  Relay 2 (Light)      : {relay2}\n"
         f"  Relay 3 (Air Pump)   : {relay3}\n"
