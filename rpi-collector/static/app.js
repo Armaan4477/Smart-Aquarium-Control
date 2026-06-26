@@ -200,7 +200,7 @@ async function fetchLatestStatus() {
     // Error Banner
     if (data.docker_disabled) {
         let link = window.ESP32_IP ? `http://${window.ESP32_IP}/dockerConfig` : '/proxy/dockerConfig';
-        els.errorText.innerHTML = `<strong>Docker Integration Disabled:</strong> The collector cannot fetch the latest status. Please enable it in the <a href="${link}" style="color: inherit; text-decoration: underline;" target="_blank">Docker Settings</a> on the ESP32.`;
+        els.errorText.innerHTML = `<strong>Docker Integration Disabled:</strong> The collector cannot fetch the latest status. Please enable it in the <a href="${link}" style="color: inherit; text-decoration: underline;" target="_blank" rel="noopener noreferrer">Docker Settings</a> on the ESP32.`;
         els.errorBanner.classList.remove('hidden');
         els.errorBanner.style.backgroundColor = '#ffc107';
         els.errorBanner.style.borderColor = 'transparent';
