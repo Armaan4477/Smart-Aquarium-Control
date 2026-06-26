@@ -1640,16 +1640,16 @@ const char mainPage[] PROGMEM = R"html(
                             html += '<h3>System Errors Detected</h3>';
                             if (activeErrors & 1) html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
                             if (activeErrors & 2) html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
-                            if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
-                            if (activeErrors & 8) html += '<p class="error-row"><span>External Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
+                            if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
+                            if (activeErrors & 8) html += '<p class="error-row"><span>External Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
                             html += '<div style="margin-top: 15px;"><button class="button dismiss-btn dismiss-all" onclick="clearError(\'all\')">Dismiss All</button></div>';
                         }
                         if (ackErrors > 0) {
                             html += '<h3 style="margin-top: ' + (activeErrors > 0 ? '20px' : '0') + ';">Acknowledged Errors</h3>';
                             if (ackErrors & 1) html += '<p class="error-row" style="opacity: 0.7;"><span>WiFi Disconnected</span></p>';
                             if (ackErrors & 2) html += '<p class="error-row" style="opacity: 0.7;"><span>Time Sync Failed</span></p>';
-                            if (ackErrors & 4) html += '<p class="error-row" style="opacity: 0.7;"><span>Internal Temp Sensor Failed</span></p>';
-                            if (ackErrors & 8) html += '<p class="error-row" style="opacity: 0.7;"><span>External Temp Sensor Failed</span></p>';
+                            if (ackErrors & 4) html += '<p class="error-row" style="opacity: 0.7;"><span>Internal Temperature Sensor Failed</span></p>';
+                            if (ackErrors & 8) html += '<p class="error-row" style="opacity: 0.7;"><span>External Temperature Sensor Failed</span></p>';
                         }
                         errSec.innerHTML = html;
                         errSec.style.display = 'block';
@@ -4072,50 +4072,7 @@ const char tempschedules[] PROGMEM = R"html(
             cursor: pointer;
         }
 
-        #successDialog {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            background-color: var(--success-color);
-            color: white;
-            padding: 25px;
-            border-radius: var(--border-radius);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
-            text-align: center;
-            min-width: 300px;
-            animation: fadeIn 0.3s ease-out;
-        }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translate(-50%, -60%); }
-            to { opacity: 1; transform: translate(-50%, -50%); }
-        }
-
-        #successDialog p {
-            font-size: 1.2rem;
-            margin-bottom: 15px;
-        }
-
-        #successDialog button {
-            margin-top: 15px;
-            padding: 10px 25px;
-            background-color: white;
-            color: var(--success-color);
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 500;
-            transition: var(--transition);
-        }
-
-        #successDialog button:hover {
-            background-color: #f5f5f5;
-            transform: scale(1.05);
-        }
 
         .day-checkboxes {
             display: flex;
@@ -4868,50 +4825,7 @@ const char mainSchedules[] PROGMEM = R"html(
             cursor: pointer;
         }
 
-        #successDialog {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            background-color: var(--success-color);
-            color: white;
-            padding: 25px;
-            border-radius: var(--border-radius);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
-            text-align: center;
-            min-width: 300px;
-            animation: fadeIn 0.3s ease-out;
-        }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translate(-50%, -60%); }
-            to { opacity: 1; transform: translate(-50%, -50%); }
-        }
-
-        #successDialog p {
-            font-size: 1.2rem;
-            margin-bottom: 15px;
-        }
-
-        #successDialog button {
-            margin-top: 15px;
-            padding: 10px 25px;
-            background-color: white;
-            color: var(--success-color);
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 500;
-            transition: var(--transition);
-        }
-
-        #successDialog button:hover {
-            background-color: #f5f5f5;
-            transform: scale(1.05);
-        }
 
         .day-checkboxes {
             display: flex;
@@ -5162,10 +5076,6 @@ const char mainSchedules[] PROGMEM = R"html(
             </tr>
         </table>
 
-                <div id="successDialog">
-        <p>Schedule added successfully!</p>
-        <button onclick="closeSuccessDialog()">OK</button>
-    </div>
     </div>
     <div id="toast"></div>
     <script>
@@ -5238,7 +5148,7 @@ const char mainSchedules[] PROGMEM = R"html(
             .then(() => { 
                 loadSchedules(); 
                 checkErrorStatus(); 
-                showSuccessDialog(); // Show success dialog
+                showToast('Schedule added successfully!', 'success');
             })
             .catch(error => { 
                 showToast('Failed to add schedule: ' + error.message, 'error'); 
@@ -5257,8 +5167,8 @@ const char mainSchedules[] PROGMEM = R"html(
                                                 let html = '<h3>System Errors Detected</h3>';
                         if (activeErrors & 1) html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
                         if (activeErrors & 2) html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
-                        if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
-                        if (activeErrors & 8) html += '<p class="error-row"><span>External Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
+                        if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
+                        if (activeErrors & 8) html += '<p class="error-row"><span>External Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
                         html += '<div style="margin-top: 15px;"><button class="button dismiss-btn dismiss-all" onclick="clearError(\'all\')">Dismiss All</button></div>';
                         errSec.innerHTML = html;
                         errSec.style.display = 'block';
@@ -5293,13 +5203,6 @@ const char mainSchedules[] PROGMEM = R"html(
             .catch(error => { showToast('Failed to clear error: ' + error.message, 'error'); });
         }
 
-        function showSuccessDialog() {
-            document.getElementById('successDialog').style.display = 'block';
-        }
-
-        function closeSuccessDialog() {
-            document.getElementById('successDialog').style.display = 'none';
-        }
 
         function deleteSchedule(id) {
             fetch('/schedule/delete?id=' + id, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } })
