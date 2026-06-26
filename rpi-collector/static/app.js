@@ -85,11 +85,16 @@ async function initializeLinks() {
         const config = await res.json();
         
         window.ESP32_IP = config.esp32_ip;
-        const ip = config.esp32_ip;
-        document.getElementById('link-main-sched').href = `http://${ip}/mainSchedules`;
-        document.getElementById('link-temp-sched').href = `http://${ip}/tempschedules`;
-        document.getElementById('link-temp-ctrl').href = `http://${ip}/tempcontrol`;
-        document.getElementById('link-disp-ctrl').href = `http://${ip}/displayctrl`;
+        // Route control panel links through the server-side proxy instead of
+        // directly to the ESP32 IP. This prevents Chrome's Private Network
+        // Access (PNA) blocks that occur when the WebUI is accessed over HTTPS
+        // and the browser would otherwise open a direct link to 192.168.x.x.
+        document.getElementById('link-main-sched').href = '/proxy/mainSchedules';
+        document.getElementById('link-temp-sched').href = '/proxy/tempschedules';
+        document.getElementById('link-temp-ctrl').href  = '/proxy/tempcontrol';
+        document.getElementById('link-disp-ctrl').href  = '/proxy/displayctrl';
+        document.getElementById('link-email-cfg').href  = '/proxy/emailConfig';
+        document.getElementById('link-docker-cfg').href = '/proxy/dockerConfig';
     } catch (e) {
         console.error("Could not initialize links:", e);
     }
@@ -199,7 +204,7 @@ async function fetchLatestStatus() {
     
     // Error Banner
     if (data.docker_disabled) {
-        let link = window.ESP32_IP ? `http://${window.ESP32_IP}/dockerConfig` : '/proxy/dockerConfig';
+        let link = '/proxy/dockerConfig';
         els.errorText.innerHTML = `<strong>Docker Integration Disabled:</strong> The collector cannot fetch the latest status. Please enable it in the <a href="${link}" style="color: inherit; text-decoration: underline;" target="_blank" rel="noopener noreferrer">Docker Settings</a> on the ESP32.`;
         els.errorBanner.classList.remove('hidden');
         els.errorBanner.style.backgroundColor = '#ffc107';
