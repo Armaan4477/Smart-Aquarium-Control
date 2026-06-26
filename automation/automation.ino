@@ -2047,7 +2047,7 @@ const char emailConfigPage[] PROGMEM = R"html(
             });
         });
 
-        function goBack() { window.location.href = '/'; }
+        function goBack() { window.history.back(); }
         
         function showToast(msg, type='success') {
             const t = document.getElementById('toast');
@@ -2328,7 +2328,7 @@ const char dockerConfigPage[] PROGMEM = R"html(
     <div id="toast"></div>
 
     <script>
-        function goBack() { window.location.href = '/'; }
+        function goBack() { window.history.back(); }
         
         function showToast(msg, type='success') {
             const t = document.getElementById('toast');
