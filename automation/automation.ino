@@ -1714,6 +1714,16 @@ const char mainPage[] PROGMEM = R"html(
             background-color: var(--error-color);
         }
 
+        .button.override {
+            background-color: var(--warning-color);
+            color: #333;
+        }
+
+        .button.override:hover {
+            background-color: #e6ac00;
+            color: #333;
+        }
+
         .nav-button {
             background-color: var(--primary-color);
         }
@@ -1907,6 +1917,12 @@ const char mainPage[] PROGMEM = R"html(
             3: false
         };
 
+        let overrideStates = {
+            1: false,
+            2: false,
+            3: false
+        };
+
         let relayNames = {
             1: "WaveMaker",
             2: "Light",
@@ -1943,6 +1959,11 @@ const char mainPage[] PROGMEM = R"html(
                     if (data.relay2Name) relayNames[2] = data.relay2Name;
                     if (data.relay3Name) relayNames[3] = data.relay3Name;
                     
+                    if (data.override1 !== undefined) overrideStates[1] = data.override1;
+                    if (data.override2 !== undefined) overrideStates[2] = data.override2;
+                    // Relay 3 shares override1 (physical switch 1)
+                    if (data.override1 !== undefined) overrideStates[3] = data.override1;
+
                     if (data.relay1 !== undefined) {
                         relayStates[1] = data.relay1;
                         updateButtonStyle(1);
@@ -2037,9 +2058,17 @@ const char mainPage[] PROGMEM = R"html(
         function updateButtonStyle(relay) {
             const btn = document.getElementById('btn' + relay);
             if (btn) {
-                btn.className = 'button ' + (relayStates[relay] ? 'on' : 'off');
                 let relayLabel = relayNames[relay] || "Unknown";
-                btn.textContent = `${relayLabel} (${relayStates[relay] ? 'ON' : 'OFF'})`;
+                if (overrideStates[relay]) {
+                    btn.className = 'button override';
+                    btn.textContent = `${relayLabel} (Override)`;
+                } else if (relayStates[relay]) {
+                    btn.className = 'button on';
+                    btn.textContent = `${relayLabel} (ON)`;
+                } else {
+                    btn.className = 'button off';
+                    btn.textContent = `${relayLabel} (OFF)`;
+                }
             }
         }
 
@@ -2051,7 +2080,12 @@ const char mainPage[] PROGMEM = R"html(
             fetch('/relay/status')
                 .then(response => response.json())
                 .then(data => { 
-                    relayStates = data; 
+                    relayStates = data;
+                    if (data.override1 !== undefined) {
+                        overrideStates[1] = data.override1;
+                        overrideStates[3] = data.override1; // relay3 shares override1
+                    }
+                    if (data.override2 !== undefined) overrideStates[2] = data.override2;
                     for(let relay in relayStates) {
                         if (relay <= 3) {
                             updateButtonStyle(relay);
@@ -5980,7 +6014,8 @@ void broadcastRelayStates() {
   String message;
   message.reserve(300);
   message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
-
+  message += ",\"override1\":" + String(overrideRelay1 ? "true" : "false");
+  message += ",\"override2\":" + String(overrideRelay2 ? "true" : "false");
 
   message += ",\"relay1Name\":\"WaveMaker\"";
   message += ",\"relay2Name\":\"Light\"";
