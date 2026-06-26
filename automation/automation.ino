@@ -1859,6 +1859,26 @@ const char mainPage[] PROGMEM = R"html(
             background-color: #fff;
             color: var(--error-color);
         }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { background: var(--success-color); }
+        #toast.error   { background: var(--error-color); }
     </style>
 </head>
 <body>
@@ -1910,7 +1930,15 @@ const char mainPage[] PROGMEM = R"html(
             </div>
         </div>
     </div>
+    <div id="toast"></div>
     <script>
+        function showToast(msg, type) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'show ' + (type || '');
+            setTimeout(() => { t.className = ''; }, 3000);
+        }
+
         let relayStates = {
             1: false,
             2: false,
@@ -2051,8 +2079,11 @@ const char mainPage[] PROGMEM = R"html(
                 .then(data => {
                     relayStates[relay] = data.state;
                     updateButtonStyle(relay);
+                    let stateText = data.state ? "turned ON" : "turned OFF";
+                    let relayLabel = relayNames[relay] || ("Relay " + relay);
+                    showToast(relayLabel + " " + stateText, "success");
                 })
-                .catch(error => { alert(error.message); checkErrorStatus(); });
+                .catch(error => { showToast(error.message, 'error'); checkErrorStatus(); });
         }
 
         function updateButtonStyle(relay) {
@@ -2159,10 +2190,17 @@ const char mainPage[] PROGMEM = R"html(
             })
             .then(response => response.ok ? response.json() : { status: 'error' })
             .then(data => { 
-                if (data.status === 'success') { checkErrorStatus(); } 
+                if (data.status === 'success') { 
+                    checkErrorStatus(); 
+                    if (errId === 'all') {
+                        showToast('All errors dismissed', 'success');
+                    } else {
+                        showToast('Error dismissed', 'success');
+                    }
+                } 
                 else { throw new Error('Failed to clear error'); }
             })
-            .catch(error => { alert('Failed to clear error: ' + error.message); });
+            .catch(error => { showToast('Failed to clear error: ' + error.message, 'error'); });
         }
 
         function showLogs() {
@@ -2192,9 +2230,9 @@ const char mainPage[] PROGMEM = R"html(
             fetch('/relay/oneclick', { method: 'POST' })
             .then(response => response.json().then(data => {
                 if (!response.ok) throw new Error(data.error);
-                alert('Light colour changed successfully.');
+                showToast('Light colour changed successfully.', 'success');
             }))
-            .catch(error => alert(error.message));
+            .catch(error => showToast(error.message, 'error'));
         }
 
         setInterval(updateTime, 1000);
@@ -2481,18 +2519,26 @@ const char emailConfigPage[] PROGMEM = R"html(
             setTimeout(() => t.className = '', 3000);
         }
         
-        function loadConfig() {
-            fetch('/api/emailConfig')
-                .then(res => res.json())
+        function loadConfig(retryCount) {
+            retryCount = retryCount || 0;
+            fetch('/api/emailConfig', { credentials: 'include' })
+                .then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
                 .then(data => {
                     document.getElementById('emailEnabled').checked = data.enabled;
-                    document.getElementById('senderAccount').value = data.senderAccount;
-                    document.getElementById('senderPassword').value = data.senderPassword;
-                    document.getElementById('recipient').value = data.recipient;
+                    document.getElementById('senderAccount').value = data.senderAccount || '';
+                    document.getElementById('senderPassword').value = data.senderPassword || '';
+                    document.getElementById('recipient').value = data.recipient || '';
                 })
                 .catch(err => {
-                    console.error('Failed to load email config', err);
-                    showToast('Failed to load configuration', 'error');
+                    console.error('Failed to load email config (attempt ' + (retryCount + 1) + ')', err);
+                    if (retryCount < 2) {
+                        setTimeout(() => loadConfig(retryCount + 1), 1000);
+                    } else {
+                        showToast('Failed to load configuration', 'error');
+                    }
                 });
         }
         
@@ -2510,6 +2556,7 @@ const char emailConfigPage[] PROGMEM = R"html(
             
             fetch('/api/emailConfig', {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
             })
@@ -2531,7 +2578,7 @@ const char emailConfigPage[] PROGMEM = R"html(
             });
         }
         
-        document.addEventListener('DOMContentLoaded', loadConfig);
+        window.addEventListener('load', () => loadConfig(0));
     </script>
 </body>
 </html>
@@ -3370,20 +3417,6 @@ const char logsPage[] PROGMEM = R"html(
                 padding: 10px;
             }
             
-            .header-actions {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .button {
-                width: 100%;
-                margin: 5px 0;
-                text-align: center;
-            }
-            
-            .refresh-button {
-                float: none;
-            }
         }
 
         .loading {
@@ -3783,17 +3816,6 @@ const char tempctrl[] PROGMEM = R"html(
                 padding: 10px;
             }
             
-            .header-actions {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .button {
-                width: 100%;
-                margin: 5px 0;
-                text-align: center;
-            }
-            
             .calibration-grid {
                 grid-template-columns: 1fr;
                 gap: 15px;
@@ -3866,6 +3888,26 @@ const char tempctrl[] PROGMEM = R"html(
             background-color: #fff;
             color: var(--error-color);
         }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { background: var(--success-color); }
+        #toast.error   { background: var(--error-color); }
     </style>
 </head>
 <body>
@@ -3914,7 +3956,15 @@ const char tempctrl[] PROGMEM = R"html(
             </div>
         </div>
     </div>
+    <div id="toast"></div>
     <script>
+        function showToast(msg, type) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'show ' + (type || '');
+            setTimeout(() => { t.className = ''; }, 3000);
+        }
+
         let socket = new WebSocket('ws://' + window.location.hostname + ':81/');
         let userChangedCalibration = false;
         let lastSavedCalibration = {};
@@ -4004,7 +4054,7 @@ const char tempctrl[] PROGMEM = R"html(
             const externalOffset = parseFloat(document.getElementById('external-calibration').value);
             
             if (internalOffset < -10 || internalOffset > 10 || externalOffset < -10 || externalOffset > 10) {
-                alert('Calibration offsets must be between -10°C and +10°C!');
+                showToast('Calibration offsets must be between -10°C and +10°C!', 'error');
                 return;
             }
             
@@ -4025,7 +4075,7 @@ const char tempctrl[] PROGMEM = R"html(
                 return response.json();
             })
             .then(data => {
-                alert('Calibration settings saved successfully!');
+                showToast('Calibration settings saved successfully!', 'success');
                 // Update saved state and reset change tracking
                 lastSavedCalibration = { ...settings };
                 userChangedCalibration = false;
@@ -4033,7 +4083,7 @@ const char tempctrl[] PROGMEM = R"html(
                 loadCalibrationSettings();
             })
             .catch(error => {
-                alert('Failed to save calibration: ' + error.message);
+                showToast('Failed to save calibration: ' + error.message, 'error');
             });
         }
 
@@ -4612,17 +4662,6 @@ const char tempschedules[] PROGMEM = R"html(
             .container {
                 padding: 10px;
             }
-            
-            .header-actions {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .button {
-                width: 100%;
-                margin: 5px 0;
-                text-align: center;
-            }
         }
 
 
@@ -4663,6 +4702,26 @@ const char tempschedules[] PROGMEM = R"html(
             background-color: #fff;
             color: var(--error-color);
         }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { background: var(--success-color); }
+        #toast.error   { background: var(--error-color); }
     </style>
 </head>
 <body>
@@ -4711,7 +4770,15 @@ const char tempschedules[] PROGMEM = R"html(
             </table>
         </div>
     </div>
+    <div id="toast"></div>
     <script>
+    function showToast(msg, type) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'show ' + (type || '');
+        setTimeout(() => { t.className = ''; }, 3000);
+    }
+
     function goBack() {
         window.history.back();
     }
@@ -4761,10 +4828,10 @@ const char tempschedules[] PROGMEM = R"html(
             document.getElementById('tempRelaySelect').value = '';
             document.getElementById('tempOnTime').value = '';
             document.getElementById('tempOffTime').value = '';
-            alert('Temporary schedule added successfully!');
+            showToast('Temporary schedule added successfully!', 'success');
         })
         .catch(error => { 
-            alert('Failed to add temporary schedule: ' + error.message); 
+            showToast('Failed to add temporary schedule: ' + error.message, 'error'); 
             checkErrorStatus(); 
         });
     }
@@ -4776,12 +4843,13 @@ const char tempschedules[] PROGMEM = R"html(
                 if (data.status === 'success') { 
                     loadTemporarySchedules(); 
                     checkErrorStatus(); 
+                    showToast('Temporary schedule deleted', 'success');
                 } else { 
                     throw new Error('Failed to delete temporary schedule'); 
                 } 
             })
             .catch(error => { 
-                alert('Failed to delete temporary schedule: ' + error.message); 
+                showToast('Failed to delete temporary schedule: ' + error.message, 'error'); 
                 checkErrorStatus(); 
             });
     }
@@ -5305,17 +5373,6 @@ const char mainSchedules[] PROGMEM = R"html(
             .container {
                 padding: 10px;
             }
-            
-            .header-actions {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .button {
-                width: 100%;
-                margin: 5px 0;
-                text-align: center;
-            }
 
             .buttons {
                 grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -5383,6 +5440,26 @@ const char mainSchedules[] PROGMEM = R"html(
             background-color: #fff;
             color: var(--error-color);
         }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #323232;
+            color: white;
+            padding: 12px 28px;
+            border-radius: 24px;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { background: var(--success-color); }
+        #toast.error   { background: var(--error-color); }
     </style>
 </head>
 <body>
@@ -5464,7 +5541,15 @@ const char mainSchedules[] PROGMEM = R"html(
         <button onclick="closeSuccessDialog()">OK</button>
     </div>
     </div>
+    <div id="toast"></div>
     <script>
+        function showToast(msg, type) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = 'show ' + (type || '');
+            setTimeout(() => { t.className = ''; }, 3000);
+        }
+
         function goBack() {
             window.history.back();
         }
@@ -5520,7 +5605,7 @@ const char mainSchedules[] PROGMEM = R"html(
                 showSuccessDialog(); // Show success dialog
             })
             .catch(error => { 
-                alert('Failed to add schedule: ' + error.message); 
+                showToast('Failed to add schedule: ' + error.message, 'error'); 
                 checkErrorStatus(); 
             });
         }
@@ -5559,10 +5644,17 @@ const char mainSchedules[] PROGMEM = R"html(
             })
             .then(response => response.ok ? response.json() : { status: 'error' })
             .then(data => { 
-                if (data.status === 'success') { checkErrorStatus(); } 
+                if (data.status === 'success') { 
+                    checkErrorStatus(); 
+                    if (errId === 'all') {
+                        showToast('All errors dismissed', 'success');
+                    } else {
+                        showToast('Error dismissed', 'success');
+                    }
+                } 
                 else { throw new Error('Failed to clear error'); }
             })
-            .catch(error => { alert('Failed to clear error: ' + error.message); });
+            .catch(error => { showToast('Failed to clear error: ' + error.message, 'error'); });
         }
 
         function showSuccessDialog() {
@@ -5576,8 +5668,16 @@ const char mainSchedules[] PROGMEM = R"html(
         function deleteSchedule(id) {
             fetch('/schedule/delete?id=' + id, { method: 'DELETE', headers: { 'Content-Type': 'application/json' } })
                 .then(response => response.ok ? response.json() : { status: 'error' })
-                .then(data => { if (data.status === 'success') { loadSchedules(); checkErrorStatus(); } else { throw new Error('Failed to delete schedule'); } })
-                .catch(error => { alert('Failed to delete schedule: ' + error.message); checkErrorStatus(); });
+                .then(data => { 
+                    if (data.status === 'success') { 
+                        loadSchedules(); 
+                        checkErrorStatus(); 
+                        showToast('Schedule deleted successfully', 'success');
+                    } else { 
+                        throw new Error('Failed to delete schedule'); 
+                    } 
+                })
+                .catch(error => { showToast('Failed to delete schedule: ' + error.message, 'error'); checkErrorStatus(); });
         }
 
         function loadSchedules() {
@@ -5637,8 +5737,12 @@ const char mainSchedules[] PROGMEM = R"html(
                 body: JSON.stringify({ id, enabled })
             })
             .then(response => response.ok ? response.json() : response.json().then(data => { throw new Error(data.error); }))
-            .then(() => { loadSchedules(); checkErrorStatus(); })
-            .catch(error => { alert('Failed to update schedule: ' + error.message); checkErrorStatus(); });
+            .then(() => { 
+                loadSchedules(); 
+                checkErrorStatus(); 
+                showToast(enabled ? 'Schedule activated' : 'Schedule deactivated', 'success');
+            })
+            .catch(error => { showToast('Failed to update schedule: ' + error.message, 'error'); checkErrorStatus(); });
         }
 
         function checkFields() {
