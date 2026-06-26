@@ -2077,15 +2077,36 @@ const char mainPage[] PROGMEM = R"html(
                     const errSec = document.getElementById('errorSection');
                     if (!errSec) return;
                     let activeErrors = data.activeErrors || 0;
-                    if (activeErrors > 0) {
-                                                let html = '<h3>System Errors Detected</h3>';
-                        if (activeErrors & 1) html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
-                        if (activeErrors & 2) html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
-                        if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
-                        if (activeErrors & 8) html += '<p class="error-row"><span>External Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
-                        html += '<div style="margin-top: 15px;"><button class="button dismiss-btn dismiss-all" onclick="clearError(\'all\')">Dismiss All</button></div>';
+                    let ackErrors = data.acknowledgedErrors || 0;
+                    if (activeErrors > 0 || ackErrors > 0) {
+                        let html = '';
+                        if (activeErrors > 0) {
+                            html += '<h3>System Errors Detected</h3>';
+                            if (activeErrors & 1) html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
+                            if (activeErrors & 2) html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
+                            if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
+                            if (activeErrors & 8) html += '<p class="error-row"><span>External Temp Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
+                            html += '<div style="margin-top: 15px;"><button class="button dismiss-btn dismiss-all" onclick="clearError(\'all\')">Dismiss All</button></div>';
+                        }
+                        if (ackErrors > 0) {
+                            html += '<h3 style="margin-top: ' + (activeErrors > 0 ? '20px' : '0') + ';">Acknowledged Errors</h3>';
+                            if (ackErrors & 1) html += '<p class="error-row" style="opacity: 0.7;"><span>WiFi Disconnected</span></p>';
+                            if (ackErrors & 2) html += '<p class="error-row" style="opacity: 0.7;"><span>Time Sync Failed</span></p>';
+                            if (ackErrors & 4) html += '<p class="error-row" style="opacity: 0.7;"><span>Internal Temp Sensor Failed</span></p>';
+                            if (ackErrors & 8) html += '<p class="error-row" style="opacity: 0.7;"><span>External Temp Sensor Failed</span></p>';
+                        }
                         errSec.innerHTML = html;
                         errSec.style.display = 'block';
+                        
+                        if (activeErrors === 0 && ackErrors > 0) {
+                            errSec.style.backgroundColor = '#ff9800';
+                            errSec.style.animation = 'none';
+                            errSec.style.boxShadow = '0 4px 10px rgba(255, 152, 0, 0.3)';
+                        } else {
+                            errSec.style.backgroundColor = 'var(--error-color)';
+                            errSec.style.animation = 'pulse 2s infinite';
+                            errSec.style.boxShadow = '0 4px 10px rgba(244, 67, 54, 0.3)';
+                        }
                     } else {
                         errSec.style.display = 'none';
                     }
