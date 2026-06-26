@@ -157,6 +157,46 @@ def set_email_config():
     return jsonify({"status": "ok"})
 
 
+@app.get("/api/maintenance")
+def get_maintenance():
+    """Return maintenance mode status."""
+    until = db.get_state("maintenance_mode_until")
+    if until:
+        try:
+            until_dt = datetime.datetime.strptime(until, "%Y-%m-%dT%H:%M:%SZ")
+            if datetime.datetime.utcnow() < until_dt:
+                return jsonify({"active": True, "until": until})
+        except ValueError:
+            pass
+    return jsonify({"active": False, "until": None})
+
+@app.post("/api/maintenance")
+def set_maintenance():
+    """Update maintenance mode."""
+    data = request.json
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+    
+    action = data.get("action")
+    if action == "stop":
+        db.set_state("maintenance_mode_until", "")
+        return jsonify({"active": False, "until": None})
+    elif action == "start":
+        hours = _parse_int(data.get("hours"), default=0, min_v=0, max_v=72)
+        minutes = _parse_int(data.get("minutes"), default=0, min_v=0, max_v=59)
+        
+        if hours == 0 and minutes == 0:
+            return jsonify({"error": "Duration must be greater than 0"}), 400
+            
+        duration = datetime.timedelta(hours=hours, minutes=minutes)
+        until_dt = datetime.datetime.utcnow() + duration
+        until_str = until_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        db.set_state("maintenance_mode_until", until_str)
+        return jsonify({"active": True, "until": until_str})
+        
+    return jsonify({"error": "Invalid action"}), 400
+
+
 # ── helpers ────────────────────────────────────────────────────────────────
 
 def _row_to_dict(row) -> dict:

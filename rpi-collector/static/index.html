@@ -150,6 +150,29 @@
                 </div>
             </section>
 
+            <!-- System Logs -->
+            <section class="glass-panel logs-section">
+                <div class="section-header">
+                    <h2>System Logs</h2>
+                    <div class="controls">
+                        <input type="text" id="log-search" class="glass-input" placeholder="Search logs...">
+                    </div>
+                </div>
+                <div class="logs-container">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-body">
+                            <!-- Logs injected here via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- System Settings -->
             <section class="glass-panel settings-section">
                 <div class="section-header">
@@ -171,26 +194,25 @@
                 </div>
             </section>
 
-            <!-- System Logs -->
-            <section class="glass-panel logs-section">
+            <!-- Maintenance Mode -->
+            <section class="glass-panel settings-section">
                 <div class="section-header">
-                    <h2>System Logs</h2>
-                    <div class="controls">
-                        <input type="text" id="log-search" class="glass-input" placeholder="Search logs...">
-                    </div>
+                    <h2>Maintenance Mode</h2>
                 </div>
-                <div class="logs-container">
-                    <table class="logs-table">
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Message</th>
-                            </tr>
-                        </thead>
-                        <tbody id="logs-body">
-                            <!-- Logs injected here via JS -->
-                        </tbody>
-                    </table>
+                <div class="settings-container">
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Pause System</h3>
+                            <p>Pause ESP32 data collection and disable all alerts for a specified duration during maintenance.</p>
+                            <p id="maintenance-status-text" style="color: #ffaa00; font-weight: bold; margin-top: 5px; display: none;">Maintenance active until <span id="maintenance-until-time">--:--</span></p>
+                        </div>
+                        <div class="setting-control" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <input type="number" id="maint-hours" class="glass-input" placeholder="Hrs" min="0" max="72" style="width: 80px;">
+                            <input type="number" id="maint-minutes" class="glass-input" placeholder="Mins" min="0" max="59" style="width: 80px;">
+                            <button id="start-maint-btn" class="glass-button">Start</button>
+                            <button id="stop-maint-btn" class="glass-button" style="display: none; background: rgba(255, 50, 50, 0.2);">Stop</button>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>

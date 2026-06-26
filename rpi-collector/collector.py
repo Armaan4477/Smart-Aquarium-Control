@@ -54,6 +54,17 @@ def _now_iso() -> str:
     return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def is_maintenance_mode() -> bool:
+    until = db.get_state("maintenance_mode_until")
+    if not until:
+        return False
+    try:
+        until_dt = datetime.datetime.strptime(until, "%Y-%m-%dT%H:%M:%SZ")
+        return datetime.datetime.utcnow() < until_dt
+    except ValueError:
+        return False
+
+
 def _fetch(url: str) -> dict | None:
     """GET a JSON endpoint; returns parsed dict or None on any error."""
     try:
@@ -75,6 +86,8 @@ def _fetch(url: str) -> dict | None:
 
 def _poll_status():
     """Fetch /api/status and store in status_readings."""
+    if is_maintenance_mode():
+        return
     global last_status_poll
     data = _fetch(_ESP32_STATUS_URL)
     now  = _now_iso()
@@ -139,6 +152,8 @@ def _current_email_slot() -> int:
 
 def _poll_errors():
     """Fetch /api/status to check for errors and trigger emails."""
+    if is_maintenance_mode():
+        return
     data = _fetch(_ESP32_STATUS_URL)
     if data is None:
         return
@@ -205,6 +220,8 @@ def _poll_errors():
 
 def _poll_logs():
     """Fetch /api/logs and store any new entries in log_entries."""
+    if is_maintenance_mode():
+        return
     global last_logs_poll
     data = _fetch(_ESP32_LOGS_URL)
     now  = _now_iso()
@@ -249,6 +266,8 @@ def _poll_logs():
 
 def _health_ping():
     """Ping ESP32 every 10s to update uptime and check online status."""
+    if is_maintenance_mode():
+        return
     url = f"http://{config.ESP32_IP}:{config.ESP32_PORT}/api/ping"
     try:
         resp = requests.get(url, auth=_AUTH, timeout=3.0)

@@ -19,7 +19,13 @@ const els = {
     logSearch: document.getElementById('log-search'),
     errorBanner: document.getElementById('system-error-banner'),
     errorText: document.getElementById('system-error-text'),
-    emailToggle: document.getElementById('email-toggle')
+    emailToggle: document.getElementById('email-toggle'),
+    maintHours: document.getElementById('maint-hours'),
+    maintMinutes: document.getElementById('maint-minutes'),
+    startMaintBtn: document.getElementById('start-maint-btn'),
+    stopMaintBtn: document.getElementById('stop-maint-btn'),
+    maintStatusText: document.getElementById('maintenance-status-text'),
+    maintUntilTime: document.getElementById('maintenance-until-time')
 };
 
 // State
@@ -37,9 +43,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (els.emailToggle) {
         els.emailToggle.addEventListener('change', toggleEmailNotifications);
     }
+    if (els.startMaintBtn) {
+        els.startMaintBtn.addEventListener('click', startMaintenance);
+        els.stopMaintBtn.addEventListener('click', stopMaintenance);
+    }
     
     // Fetch email config
     fetchEmailConfig();
+    updateMaintenanceStatus();
     
     // Auto-refresh
     setInterval(fetchData, REFRESH_INTERVAL_MS);
@@ -78,6 +89,77 @@ async function toggleEmailNotifications(e) {
     }
 }
 
+async function startMaintenance() {
+    const hours = parseInt(els.maintHours.value) || 0;
+    const mins = parseInt(els.maintMinutes.value) || 0;
+    if (hours === 0 && mins === 0) {
+        alert("Please enter a duration greater than 0");
+        return;
+    }
+    
+    els.startMaintBtn.disabled = true;
+    try {
+        const res = await fetch('/api/maintenance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'start', hours: hours, minutes: mins })
+        });
+        if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Failed to start maintenance');
+        }
+        await updateMaintenanceStatus();
+        els.maintHours.value = '';
+        els.maintMinutes.value = '';
+    } catch (e) {
+        console.error(e);
+        alert(e.message);
+    } finally {
+        els.startMaintBtn.disabled = false;
+    }
+}
+
+async function stopMaintenance() {
+    els.stopMaintBtn.disabled = true;
+    try {
+        const res = await fetch('/api/maintenance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'stop' })
+        });
+        if (!res.ok) throw new Error('Failed to stop maintenance');
+        await updateMaintenanceStatus();
+    } catch (e) {
+        console.error(e);
+        alert(e.message);
+    } finally {
+        els.stopMaintBtn.disabled = false;
+    }
+}
+
+async function updateMaintenanceStatus() {
+    try {
+        const res = await fetch('/api/maintenance');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (data.active && data.until) {
+            els.startMaintBtn.style.display = 'none';
+            els.stopMaintBtn.style.display = 'block';
+            els.maintStatusText.style.display = 'block';
+            
+            // Format time
+            const untilDate = new Date(data.until);
+            els.maintUntilTime.textContent = untilDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        } else {
+            els.startMaintBtn.style.display = 'block';
+            els.stopMaintBtn.style.display = 'none';
+            els.maintStatusText.style.display = 'none';
+        }
+    } catch (e) {
+        console.error("Could not fetch maintenance status:", e);
+    }
+}
 async function initializeLinks() {
     try {
         const res = await fetch('/api/config');
