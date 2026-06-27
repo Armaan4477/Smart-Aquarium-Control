@@ -7,6 +7,7 @@ const char mainPage[] PROGMEM = R"html(
 <!DOCTYPE html>
 <html>
 <head>
+    <script src="/theme.js"></script>
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="shortcut icon" type="image/png" href="/favicon.png">
     <meta charset="UTF-8">
@@ -30,6 +31,114 @@ const char mainPage[] PROGMEM = R"html(
             --shadow: 0 2px 10px rgba(0,0,0,0.1);
             --transition: all 0.3s ease;
         }
+        [data-theme="dark"] {
+            --primary-color: #2196F3;
+            --primary-dark: #1976D2;
+            --primary-light: #0D47A1;
+            --accent-color: #03A9F4;
+            --success-color: #81C784;
+            --warning-color: #FFD54F;
+            --error-color: #E57373;
+            --text-color: #E0E0E0;
+            --text-light: #9E9E9E;
+            --background-color: #121212;
+            --card-color: #1E1E1E;
+            --shadow: 0 2px 10px rgba(0,0,0,0.5);
+            --lightbtn-color: #bfa13a;
+        }
+
+        /* Dark Mode Overrides for Hardcoded Colors */
+        [data-theme="dark"] .temperature-item {
+            background-color: #2C2C2C !important;
+        }
+
+        [data-theme="dark"] .temperature-item:hover {
+            background-color: #3C3C3C !important;
+        }
+        
+        /* Table overrides (logs and schedules) */
+        [data-theme="dark"] .logs-table tr:nth-child(even),
+        [data-theme="dark"] .logs-table tr:nth-child(odd),
+        [data-theme="dark"] .logs-table tr,
+        [data-theme="dark"] .schedule-table tr {
+            background-color: #2C2C2C !important;
+            color: var(--text-color) !important;
+        }
+        
+        [data-theme="dark"] .logs-table tr:nth-child(even) {
+            background-color: #242424 !important;
+        }
+
+        [data-theme="dark"] .logs-table tr:hover,
+        [data-theme="dark"] .schedule-table tr:hover {
+            background-color: #3C3C3C !important;
+        }
+
+        [data-theme="dark"] .schedule-table tr.disabled {
+            background-color: #222 !important;
+            opacity: 0.8 !important;
+        }
+        
+        [data-theme="dark"] .temporary-indicator {
+            background-color: #4A3B00 !important;
+            color: #FFD54F !important;
+        }
+
+        [data-theme="dark"] .status-badge.on,
+        [data-theme="dark"] .override-btn.active-on {
+            background-color: #1b4332 !important;
+            color: #74c69d !important;
+            border-color: #74c69d !important;
+        }
+
+        [data-theme="dark"] .status-badge.off,
+        [data-theme="dark"] .override-btn.active-off {
+            background-color: #641220 !important;
+            color: #ff8fa3 !important;
+            border-color: #ff8fa3 !important;
+        }
+
+        [data-theme="dark"] .override-btn {
+            background-color: #333 !important;
+            color: var(--text-color) !important;
+        }
+
+        [data-theme="dark"] .override-btn:hover {
+            background-color: #444 !important;
+        }
+
+        [data-theme="dark"] .override-btn.active-schedule {
+            background-color: var(--primary-dark) !important;
+            color: white !important;
+        }
+
+        [data-theme="dark"] #clearErrorBtn,
+        [data-theme="dark"] .dismiss-btn {
+            background-color: #333 !important;
+            color: var(--error-color) !important;
+        }
+
+        [data-theme="dark"] #clearErrorBtn:hover,
+        [data-theme="dark"] .dismiss-btn:hover {
+            background-color: #444 !important;
+        }
+
+        [data-theme="dark"] .dismiss-all:hover {
+            background-color: #333 !important;
+        }
+
+        [data-theme="dark"] input,
+        [data-theme="dark"] select,
+        [data-theme="dark"] textarea {
+            background-color: #333 !important;
+            color: white !important;
+            border-color: #555 !important;
+        }
+        
+        [data-theme="dark"] .modal-content {
+            background-color: var(--card-color) !important;
+        }
+
 
         * {
             box-sizing: border-box;
@@ -396,6 +505,11 @@ const char mainPage[] PROGMEM = R"html(
 <body>
     <header>
         <h1>Aquarium Control Panel</h1>
+        <div id="themeToggle" onclick="toggleTheme()" title="Toggle Dark Mode" style="position: absolute; right: 20px; top: 20px; cursor: pointer; color: white;">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+        </div>
     </header>
     <div class="container">
         <div class="time-container">
@@ -448,6 +562,18 @@ const char mainPage[] PROGMEM = R"html(
     </div>
     <div id="toast"></div>
     <script>
+        let currentThemeIsDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        
+        function toggleTheme() {
+            currentThemeIsDark = !currentThemeIsDark;
+            document.documentElement.setAttribute('data-theme', currentThemeIsDark ? 'dark' : 'light');
+            fetch('/api/themeConfig', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isDarkMode: currentThemeIsDark })
+            }).catch(console.error);
+        }
+
         function showToast(msg, type) {
             const t = document.getElementById('toast');
             t.textContent = msg;

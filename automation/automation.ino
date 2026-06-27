@@ -105,6 +105,11 @@ void handleGetDockerConfig();
 void handleSaveDockerConfig();
 void loadDockerConfig();
 void saveDockerConfig();
+void loadThemeConfig();
+void saveThemeConfig();
+void handleThemeJS();
+void handleGetThemeConfig();
+void handleSaveThemeConfig();
 
 struct Schedule {
   int id;
@@ -163,6 +168,11 @@ struct EmailConfig {
 struct DockerConfig {
   uint8_t magic;
   bool enabled;
+};
+
+struct ThemeConfig {
+  uint8_t magic;
+  bool isDarkMode;
 };
 
 const int relay1 = 18;
@@ -274,6 +284,9 @@ EmailConfig emailConfig = { 0xE2, false, "", "", "" };
 
 const int DOCKER_CONFIG_ADDR = EMAIL_CONFIG_ADDR + sizeof(EmailConfig) + 1;
 DockerConfig dockerConfig = { 0xD1, false };
+
+const int THEME_CONFIG_ADDR = DOCKER_CONFIG_ADDR + sizeof(DockerConfig) + 1;
+ThemeConfig themeConfig = { 0xDC, false };
 
 bool oledPhysicalState = false;
 
@@ -504,6 +517,9 @@ void setup() {
   server.on("/dockerConfig", HTTP_GET, handleDockerConfigPage);
   server.on("/api/dockerConfig", HTTP_GET, handleGetDockerConfig);
   server.on("/api/dockerConfig", HTTP_POST, handleSaveDockerConfig);
+  server.on("/theme.js", HTTP_GET, handleThemeJS);
+  server.on("/api/themeConfig", HTTP_GET, handleGetThemeConfig);
+  server.on("/api/themeConfig", HTTP_POST, handleSaveThemeConfig);
   server.begin();
 
   apiServer.on("/api/status", HTTP_GET, handleApiStatus);
@@ -517,6 +533,7 @@ void setup() {
   loadDisplaySchedule();
   loadEmailConfig();
   loadDockerConfig();
+  loadThemeConfig();
 
   schedules.reserve(MAX_SCHEDULES);
   temporarySchedules.reserve(6);
@@ -735,6 +752,55 @@ void saveDockerConfig() {
   EEPROM.put(DOCKER_CONFIG_ADDR, dockerConfig);
   EEPROM.commit();
   storeLogEntry("Docker config saved to EEPROM");
+}
+
+void loadThemeConfig() {
+  ThemeConfig stored;
+  EEPROM.get(THEME_CONFIG_ADDR, stored);
+  if (stored.magic == 0xDC) {
+    themeConfig = stored;
+  } else {
+    saveThemeConfig();
+    storeLogEntry("Using default theme config");
+  }
+}
+
+void saveThemeConfig() {
+  themeConfig.magic = 0xDC;
+  EEPROM.put(THEME_CONFIG_ADDR, themeConfig);
+  EEPROM.commit();
+}
+
+void handleThemeJS() {
+  String js = "document.documentElement.setAttribute('data-theme', '";
+  js += themeConfig.isDarkMode ? "dark" : "light";
+  js += "');";
+  server.send(200, "application/javascript", js);
+}
+
+void handleGetThemeConfig() {
+  DynamicJsonDocument doc(256);
+  doc["isDarkMode"] = themeConfig.isDarkMode;
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleSaveThemeConfig() {
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    DynamicJsonDocument doc(256);
+    DeserializationError error = deserializeJson(doc, body);
+    if (!error) {
+      if (doc.containsKey("isDarkMode")) {
+        themeConfig.isDarkMode = doc["isDarkMode"];
+        saveThemeConfig();
+        server.send(200, "application/json", "{\"status\":\"success\"}");
+        return;
+      }
+    }
+  }
+  server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
 
 void applyOledSchedule() {
@@ -1536,7 +1602,7 @@ void handleEditSchedule() {
 
       bool conflict = false;
       for (int i = 0; i < schedules.size(); i++) {
-        if (i == id) continue; // Skip the schedule being edited
+        if (i == id) continue;
         const Schedule& existing = schedules[i];
         if (existing.relayNumber == updatedSchedule.relayNumber && existing.enabled) {
           bool shareDay = false;
@@ -2517,8 +2583,6 @@ void handleApiLogs() {
   apiServer.send(200, "application/json", response);
 }
 
-// Syncs the physical hardware relays (GPIO) with the internal logical states (relayXState)
-// This is used to re-apply the logical state to the pins when Feeding Mode ends.
 void syncRelayHardware() {
   if (!overrideRelay1) {
     if (relay1State) {
@@ -2597,7 +2661,6 @@ void handleFeedingModeToggle() {
   }
 
   if (action == "start") {
-    // Reject if a physical override is active — it would conflict with feeding mode pausing relay 1 & 3
     if (overrideRelay1 || overrideRelay2) {
       server.send(409, "application/json", "{\"error\":\"Cannot start Feeding Mode while physical override is active\"}");
       storeLogEntry("Feeding Mode start rejected: physical override is active");
@@ -2611,11 +2674,8 @@ void handleFeedingModeToggle() {
     }
 
     feedingModeActive = true;
-    feedingModeEndTime = millis() + (5UL * 60UL * 1000UL);  // 5 minutes
+    feedingModeEndTime = millis() + (5UL * 60UL * 1000UL);
 
-    // Physically pause WaveMaker (relay1) and Air Pump (relay3) immediately.
-    // The logical states (relay1State / relay3State) are maintained by the system,
-    // and syncRelayHardware() will restore the physical states based on them when done.
     digitalWrite(relay1, HIGH);
     digitalWrite(relay3, HIGH);
 
@@ -2692,14 +2752,13 @@ void handleRestore() {
     return;
   }
   
-  // Restore schedules
   if (doc.containsKey("schedules")) {
     schedules.clear();
     JsonArray scheds = doc["schedules"].as<JsonArray>();
     for (JsonObject sched : scheds) {
       Schedule s;
-      // No magic in Schedule struct
-      s.id = sched["id"] | millis(); // fallback id
+
+      s.id = sched["id"] | millis();
       s.relayNumber = sched["relayNumber"];
       s.onHour = sched["onHour"];
       s.onMinute = sched["onMinute"];
@@ -2715,16 +2774,13 @@ void handleRestore() {
     saveSchedulesToEEPROM();
   }
   
-  // Restore calibration
   if (doc.containsKey("sensorCalibration")) {
-    // No magic in CalibrationData
     sensorCalibration.internalOffset = doc["sensorCalibration"]["internalOffset"];
     sensorCalibration.externalOffset = doc["sensorCalibration"]["externalOffset"];
     EEPROM.put(CALIBRATION_START_ADDR, sensorCalibration);
     EEPROM.commit();
   }
   
-  // Restore display config
   if (doc.containsKey("displaySchedule")) {
     displaySchedule.magic = 0xDA;
     displaySchedule.onHour = doc["displaySchedule"]["onHour"];
@@ -2736,7 +2792,6 @@ void handleRestore() {
     EEPROM.commit();
   }
   
-  // Restore email config
   if (doc.containsKey("emailConfig")) {
     emailConfig.magic = 0xEC;
     emailConfig.enabled = doc["emailConfig"]["enabled"];
@@ -2747,7 +2802,6 @@ void handleRestore() {
     EEPROM.commit();
   }
   
-  // Restore docker config
   if (doc.containsKey("dockerConfig")) {
     dockerConfig.magic = 0xDC;
     dockerConfig.enabled = doc["dockerConfig"]["enabled"];
