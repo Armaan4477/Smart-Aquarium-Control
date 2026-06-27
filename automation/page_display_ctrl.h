@@ -47,11 +47,13 @@ const char displayCtrlPage[] PROGMEM = R"html(
         }
 
         /* Dark Mode Overrides for Hardcoded Colors */
-        [data-theme="dark"] .temperature-item {
+        [data-theme="dark"] .temperature-item,
+        [data-theme="dark"] .raw-data-item {
             background-color: #2C2C2C !important;
         }
 
-        [data-theme="dark"] .temperature-item:hover {
+        [data-theme="dark"] .temperature-item:hover,
+        [data-theme="dark"] .raw-data-item:hover {
             background-color: #3C3C3C !important;
         }
         
