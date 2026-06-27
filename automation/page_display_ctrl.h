@@ -7,6 +7,7 @@ const char displayCtrlPage[] PROGMEM = R"html(
 <!DOCTYPE html>
 <html>
 <head>
+    <script src="/theme.js"></script>
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="shortcut icon" type="image/png" href="/favicon.png">
     <meta charset="UTF-8">
@@ -28,6 +29,115 @@ const char displayCtrlPage[] PROGMEM = R"html(
             --border-radius: 8px;
             --shadow: 0 2px 10px rgba(0,0,0,0.1);
             --transition: all 0.3s ease;
+        }
+        [data-theme="dark"] {
+            --primary-color: #2196F3;
+            --primary-dark: #1976D2;
+            --primary-light: #0D47A1;
+            --accent-color: #03A9F4;
+            --success-color: #4CAF50;
+            --warning-color: #FFD54F;
+            --error-color: #F44336;
+            --text-color: #E0E0E0;
+            --text-light: #9E9E9E;
+            --background-color: #121212;
+            --card-color: #1E1E1E;
+            --shadow: 0 2px 10px rgba(0,0,0,0.5);
+            --lightbtn-color: #bfa13a;
+        }
+
+        /* Dark Mode Overrides for Hardcoded Colors */
+        [data-theme="dark"] .temperature-item,
+        [data-theme="dark"] .raw-data-item {
+            background-color: #2C2C2C !important;
+        }
+
+        [data-theme="dark"] .temperature-item:hover,
+        [data-theme="dark"] .raw-data-item:hover {
+            background-color: #3C3C3C !important;
+        }
+        
+        /* Table overrides (logs and schedules) */
+        [data-theme="dark"] .logs-table tr:nth-child(even),
+        [data-theme="dark"] .logs-table tr:nth-child(odd),
+        [data-theme="dark"] .logs-table tr,
+        [data-theme="dark"] .schedule-table tr {
+            background-color: #2C2C2C !important;
+            color: var(--text-color) !important;
+        }
+        
+        [data-theme="dark"] .logs-table tr:nth-child(even) {
+            background-color: #242424 !important;
+        }
+
+        [data-theme="dark"] .logs-table tr:hover,
+        [data-theme="dark"] .schedule-table tr:hover {
+            background-color: #3C3C3C !important;
+        }
+
+        [data-theme="dark"] .schedule-table tr.disabled {
+            background-color: #222 !important;
+            opacity: 0.8 !important;
+        }
+        
+        [data-theme="dark"] .temporary-indicator {
+            background-color: #4A3B00 !important;
+            color: #FFD54F !important;
+        }
+
+        [data-theme="dark"] .status-badge.on,
+        [data-theme="dark"] .override-btn.active-on {
+            background-color: #1b4332 !important;
+            color: #4CAF50 !important;
+            border-color: #4CAF50 !important;
+        }
+
+        [data-theme="dark"] .status-badge.off,
+        [data-theme="dark"] .override-btn.active-off {
+            background-color: #641220 !important;
+            color: #F44336 !important;
+            border-color: #F44336 !important;
+        }
+
+        [data-theme="dark"] .override-btn {
+            background-color: #333 !important;
+            color: var(--text-color) !important;
+        }
+
+        [data-theme="dark"] .override-btn:hover {
+            background-color: #444 !important;
+        }
+
+        [data-theme="dark"] .override-btn.active-schedule {
+            background-color: var(--primary-dark) !important;
+            color: white !important;
+        }
+
+        [data-theme="dark"] #clearErrorBtn,
+        [data-theme="dark"] .dismiss-btn {
+            background-color: #333 !important;
+            color: var(--error-color) !important;
+        }
+
+        [data-theme="dark"] #clearErrorBtn:hover,
+        [data-theme="dark"] .dismiss-btn:hover {
+            background-color: #444 !important;
+        }
+
+        [data-theme="dark"] .dismiss-all:hover {
+            background-color: #333 !important;
+        }
+
+        [data-theme="dark"] input,
+        [data-theme="dark"] select,
+        [data-theme="dark"] textarea {
+            background-color: #333 !important;
+            color: white !important;
+            border-color: #555 !important;
+        }
+        
+        [data-theme="dark"] .modal-content {
+            background-color: var(--card-color) !important;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {

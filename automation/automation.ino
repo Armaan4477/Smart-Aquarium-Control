@@ -27,6 +27,7 @@
 #include "page_temp_ctrl.h"
 #include "page_temp_schedules.h"
 #include "page_main_schedules.h"
+#include "page_backup_restore.h"
 
 #define OLED_SDA 21
 #define OLED_SCL 22
@@ -44,6 +45,10 @@ void handleRelay1();
 void handleRelay2();
 void handleRelay3();
 void handleTime();
+void handleFeedingModeToggle();
+void handleBackup();
+void handleRestore();
+void handleBackupRestorePage();
 void handleGetSchedules();
 void handleAddSchedule();
 void handleDeleteSchedule();
@@ -66,6 +71,7 @@ void checkScheduleslaunch();
 void activateRelay(int, bool);
 void deactivateRelay(int, bool);
 void broadcastRelayStates();
+void syncRelayHardware();
 void handleGetTemporarySchedules();
 void handleAddTemporarySchedule();
 void handleDeleteTemporarySchedule();
@@ -99,6 +105,11 @@ void handleGetDockerConfig();
 void handleSaveDockerConfig();
 void loadDockerConfig();
 void saveDockerConfig();
+void loadThemeConfig();
+void saveThemeConfig();
+void handleThemeJS();
+void handleGetThemeConfig();
+void handleSaveThemeConfig();
 
 struct Schedule {
   int id;
@@ -159,6 +170,11 @@ struct DockerConfig {
   bool enabled;
 };
 
+struct ThemeConfig {
+  uint8_t magic;
+  bool isDarkMode;
+};
+
 const int relay1 = 18;
 const int relay2 = 19;
 const int relay3 = 23;
@@ -173,6 +189,9 @@ bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
 bool relay4State = false;
+
+bool feedingModeActive = false;
+unsigned long feedingModeEndTime = 0;
 const uint16_t ERR_WIFI = 1 << 0;
 const uint16_t ERR_NTP = 1 << 1;
 const uint16_t ERR_TEMP_INT = 1 << 2;
@@ -265,6 +284,9 @@ EmailConfig emailConfig = { 0xE2, false, "", "", "" };
 
 const int DOCKER_CONFIG_ADDR = EMAIL_CONFIG_ADDR + sizeof(EmailConfig) + 1;
 DockerConfig dockerConfig = { 0xD1, false };
+
+const int THEME_CONFIG_ADDR = DOCKER_CONFIG_ADDR + sizeof(DockerConfig) + 1;
+ThemeConfig themeConfig = { 0xDC, false };
 
 bool oledPhysicalState = false;
 
@@ -466,6 +488,10 @@ void setup() {
   server.on("/relay/1", HTTP_ANY, handleRelay1);
   server.on("/relay/2", HTTP_ANY, handleRelay2);
   server.on("/relay/3", HTTP_ANY, handleRelay3);
+  server.on("/api/feeding_mode", HTTP_POST, handleFeedingModeToggle);
+  server.on("/backuprestore", HTTP_GET, handleBackupRestorePage);
+  server.on("/api/backup", HTTP_GET, handleBackup);
+  server.on("/api/restore", HTTP_POST, handleRestore);
   server.on("/time", HTTP_GET, handleTime);
   server.on("/schedules", HTTP_GET, handleGetSchedules);
   server.on("/schedule/add", HTTP_POST, handleAddSchedule);
@@ -491,6 +517,9 @@ void setup() {
   server.on("/dockerConfig", HTTP_GET, handleDockerConfigPage);
   server.on("/api/dockerConfig", HTTP_GET, handleGetDockerConfig);
   server.on("/api/dockerConfig", HTTP_POST, handleSaveDockerConfig);
+  server.on("/theme.js", HTTP_GET, handleThemeJS);
+  server.on("/api/themeConfig", HTTP_GET, handleGetThemeConfig);
+  server.on("/api/themeConfig", HTTP_POST, handleSaveThemeConfig);
   server.begin();
 
   apiServer.on("/api/status", HTTP_GET, handleApiStatus);
@@ -504,6 +533,7 @@ void setup() {
   loadDisplaySchedule();
   loadEmailConfig();
   loadDockerConfig();
+  loadThemeConfig();
 
   schedules.reserve(MAX_SCHEDULES);
   temporarySchedules.reserve(6);
@@ -724,6 +754,55 @@ void saveDockerConfig() {
   storeLogEntry("Docker config saved to EEPROM");
 }
 
+void loadThemeConfig() {
+  ThemeConfig stored;
+  EEPROM.get(THEME_CONFIG_ADDR, stored);
+  if (stored.magic == 0xDC) {
+    themeConfig = stored;
+  } else {
+    saveThemeConfig();
+    storeLogEntry("Using default theme config");
+  }
+}
+
+void saveThemeConfig() {
+  themeConfig.magic = 0xDC;
+  EEPROM.put(THEME_CONFIG_ADDR, themeConfig);
+  EEPROM.commit();
+}
+
+void handleThemeJS() {
+  String js = "document.documentElement.setAttribute('data-theme', '";
+  js += themeConfig.isDarkMode ? "dark" : "light";
+  js += "');";
+  server.send(200, "application/javascript", js);
+}
+
+void handleGetThemeConfig() {
+  DynamicJsonDocument doc(256);
+  doc["isDarkMode"] = themeConfig.isDarkMode;
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleSaveThemeConfig() {
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    DynamicJsonDocument doc(256);
+    DeserializationError error = deserializeJson(doc, body);
+    if (!error) {
+      if (doc.containsKey("isDarkMode")) {
+        themeConfig.isDarkMode = doc["isDarkMode"];
+        saveThemeConfig();
+        server.send(200, "application/json", "{\"status\":\"success\"}");
+        return;
+      }
+    }
+  }
+  server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+}
+
 void applyOledSchedule() {
   if (!validTimeSync) {
     if (oledPhysicalState) {
@@ -926,7 +1005,21 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         IPAddress ip = webSocket.remoteIP(num);
         //storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString());
 
-        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"relay1Name\":\"WaveMaker\"" + ",\"relay2Name\":\"Light\"" + ",\"relay3Name\":\"Air Pump\"}";
+        float internalRaw = lastValidTemperature - sensorCalibration.internalOffset;
+        float externalRaw = lastValidExternalTemperature - sensorCalibration.externalOffset;
+        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
+        message += ",\"override1\":" + String(overrideRelay1 ? "true" : "false");
+        message += ",\"override2\":" + String(overrideRelay2 ? "true" : "false");
+        long timeRemaining = 0;
+        if (feedingModeActive) {
+          unsigned long now = millis();
+          if (feedingModeEndTime > now) {
+            timeRemaining = (long)((feedingModeEndTime - now) / 1000UL);
+          }
+        }
+        message += ",\"feedingModeActive\":" + String(feedingModeActive ? "true" : "false");
+        message += ",\"feedingModeTimeRemaining\":" + String(timeRemaining);
+        message += ",\"relay1Name\":\"WaveMaker\",\"relay2Name\":\"Light\",\"relay3Name\":\"Air Pump\"}";
         webSocket.sendTXT(num, message);
       }
       break;
@@ -1058,6 +1151,13 @@ void mainLoop(void* parameter) {
     checkoverride1();
     checkoverride2();
     overrideLEDState();
+
+    if (feedingModeActive && millis() >= feedingModeEndTime) {
+      feedingModeActive = false;
+      storeLogEntry("Feeding Mode ended automatically");
+      syncRelayHardware();
+      broadcastRelayStates();
+    }
 
     static unsigned long lastSecondCheck = 0;
     if (millis() - lastSecondCheck >= 1000) {
@@ -1245,9 +1345,13 @@ void activateRelay(int relayNum, bool manual) {
 
   switch (relayNum) {
     case 1:
-      digitalWrite(relay1, LOW);
       relay1State = true;
-      storeLogEntry("Wavemaker activated.");
+      if (feedingModeActive) {
+        storeLogEntry("Wavemaker turned ON logically (paused due to Feeding Mode).");
+      } else {
+        digitalWrite(relay1, LOW);
+        storeLogEntry("Wavemaker activated.");
+      }
       break;
     case 2:
       digitalWrite(relay4, LOW);
@@ -1263,9 +1367,13 @@ void activateRelay(int relayNum, bool manual) {
       storeLogEntry("Lights activated.");
       break;
     case 3:
-      digitalWrite(relay3, LOW);
       relay3State = true;
-      storeLogEntry("Air Pump activated.");
+      if (feedingModeActive) {
+        storeLogEntry("Air Pump turned ON logically (paused due to Feeding Mode).");
+      } else {
+        digitalWrite(relay3, LOW);
+        storeLogEntry("Air Pump activated.");
+      }
       break;
   }
   broadcastRelayStates();
@@ -1279,9 +1387,13 @@ void deactivateRelay(int relayNum, bool manual) {
 
   switch (relayNum) {
     case 1:
-      digitalWrite(relay1, HIGH);
       relay1State = false;
-      storeLogEntry("Wavemaker deactivated.");
+      if (feedingModeActive) {
+        storeLogEntry("Wavemaker turned OFF logically (paused due to Feeding Mode).");
+      } else {
+        digitalWrite(relay1, HIGH);
+        storeLogEntry("Wavemaker deactivated.");
+      }
       break;
     case 2:
       digitalWrite(relay2, HIGH);
@@ -1291,9 +1403,13 @@ void deactivateRelay(int relayNum, bool manual) {
       storeLogEntry("Lights deactivated.");
       break;
     case 3:
-      digitalWrite(relay3, HIGH);
       relay3State = false;
-      storeLogEntry("Air Pump deactivated.");
+      if (feedingModeActive) {
+        storeLogEntry("Air Pump turned OFF logically (paused due to Feeding Mode).");
+      } else {
+        digitalWrite(relay3, HIGH);
+        storeLogEntry("Air Pump deactivated.");
+      }
       break;
   }
   broadcastRelayStates();
@@ -1308,6 +1424,16 @@ void broadcastRelayStates() {
   message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
   message += ",\"override1\":" + String(overrideRelay1 ? "true" : "false");
   message += ",\"override2\":" + String(overrideRelay2 ? "true" : "false");
+
+  long timeRemaining = 0;
+  if (feedingModeActive) {
+    unsigned long now = millis();
+    if (feedingModeEndTime > now) {
+      timeRemaining = (long)((feedingModeEndTime - now) / 1000UL);
+    }
+  }
+  message += ",\"feedingModeActive\":" + String(feedingModeActive ? "true" : "false");
+  message += ",\"feedingModeTimeRemaining\":" + String(timeRemaining);
 
   message += ",\"relay1Name\":\"WaveMaker\"";
   message += ",\"relay2Name\":\"Light\"";
@@ -1476,7 +1602,7 @@ void handleEditSchedule() {
 
       bool conflict = false;
       for (int i = 0; i < schedules.size(); i++) {
-        if (i == id) continue; // Skip the schedule being edited
+        if (i == id) continue;
         const Schedule& existing = schedules[i];
         if (existing.relayNumber == updatedSchedule.relayNumber && existing.enabled) {
           bool shareDay = false;
@@ -1641,6 +1767,15 @@ void handleRelayStatus() {
   json += "\"2\":" + String(relay2State || overrideRelay2) + ",";
   json += "\"3\":" + String(relay3State || overrideRelay1) + ",";
   json += "\"temperature\":" + String(lastValidTemperature, 1) + ",";
+  long timeRemaining = 0;
+  if (feedingModeActive) {
+    unsigned long now = millis();
+    if (feedingModeEndTime > now) {
+      timeRemaining = (long)((feedingModeEndTime - now) / 1000UL);
+    }
+  }
+  json += "\"feedingModeActive\":" + String(feedingModeActive ? "true" : "false") + ",";
+  json += "\"feedingModeTimeRemaining\":" + String(timeRemaining) + ",";
   json += "\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + "}";
   server.send(200, "application/json", json);
 }
@@ -2448,6 +2583,26 @@ void handleApiLogs() {
   apiServer.send(200, "application/json", response);
 }
 
+void syncRelayHardware() {
+  if (!overrideRelay1) {
+    if (relay1State) {
+      digitalWrite(relay1, LOW);
+      storeLogEntry("Wavemaker resumed ON after Feeding Mode.");
+    } else {
+      digitalWrite(relay1, HIGH);
+      storeLogEntry("Wavemaker remained OFF after Feeding Mode.");
+    }
+    
+    if (relay3State) {
+      digitalWrite(relay3, LOW);
+      storeLogEntry("Air Pump resumed ON after Feeding Mode.");
+    } else {
+      digitalWrite(relay3, HIGH);
+      storeLogEntry("Air Pump remained OFF after Feeding Mode.");
+    }
+  }
+}
+
 void handleGetRawTemperatureData() {
   sensors.requestTemperatures();
   externalSensors.requestTemperatures();
@@ -2468,4 +2623,192 @@ void handleGetRawTemperatureData() {
   json += "}";
 
   server.send(200, "application/json", json);
+}
+
+void handleFeedingModeToggle() {
+  if (server.method() != HTTP_POST) {
+    server.send(405, "text/plain", "Method Not Allowed");
+    return;
+  }
+
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Missing request body\"}");
+    return;
+  }
+
+  String body = server.arg("plain");
+  DynamicJsonDocument doc(256);
+  DeserializationError error = deserializeJson(doc, body);
+
+  if (error || !doc.containsKey("action")) {
+    server.send(400, "application/json", "{\"error\":\"Missing or invalid action field\"}");
+    return;
+  }
+
+  String action = doc["action"].as<String>();
+
+  if (action == "stop") {
+    if (!feedingModeActive) {
+      server.send(200, "application/json", "{\"status\":\"already_stopped\"}");
+      return;
+    }
+    feedingModeActive = false;
+    storeLogEntry("Feeding Mode ended manually");
+    syncRelayHardware();
+    broadcastRelayStates();
+    server.send(200, "application/json", "{\"status\":\"stopped\"}");
+    return;
+  }
+
+  if (action == "start") {
+    if (overrideRelay1 || overrideRelay2) {
+      server.send(409, "application/json", "{\"error\":\"Cannot start Feeding Mode while physical override is active\"}");
+      storeLogEntry("Feeding Mode start rejected: physical override is active");
+      return;
+    }
+
+    if (feedingModeActive) {
+      storeLogEntry("Feeding Mode reset while already active");
+    } else {
+      storeLogEntry("Feeding Mode activated for 5 minutes");
+    }
+
+    feedingModeActive = true;
+    feedingModeEndTime = millis() + (5UL * 60UL * 1000UL);
+
+    digitalWrite(relay1, HIGH);
+    digitalWrite(relay3, HIGH);
+
+    broadcastRelayStates();
+    server.send(200, "application/json", "{\"status\":\"started\",\"duration\":5}");
+    return;
+  }
+
+  server.send(400, "application/json", "{\"error\":\"Unknown action. Use start or stop\"}");
+}
+
+void handleBackupRestorePage() {
+  server.send_P(200, "text/html", page_backup_restore);
+}
+
+void handleBackup() {
+  DynamicJsonDocument doc(4096);
+  
+  JsonArray scheds = doc.createNestedArray("schedules");
+  for (const Schedule& schedule : schedules) {
+    JsonObject sched = scheds.createNestedObject();
+    sched["relayNumber"] = schedule.relayNumber;
+    sched["onHour"] = schedule.onHour;
+    sched["onMinute"] = schedule.onMinute;
+    sched["offHour"] = schedule.offHour;
+    sched["offMinute"] = schedule.offMinute;
+    JsonArray days = sched.createNestedArray("daysOfWeek");
+    for (int i = 0; i < 7; i++) {
+      days.add(schedule.daysOfWeek[i]);
+    }
+    sched["enabled"] = schedule.enabled;
+  }
+  
+  JsonObject calib = doc.createNestedObject("sensorCalibration");
+  calib["internalOffset"] = sensorCalibration.internalOffset;
+  calib["externalOffset"] = sensorCalibration.externalOffset;
+  
+  JsonObject disp = doc.createNestedObject("displaySchedule");
+  disp["onHour"] = displaySchedule.onHour;
+  disp["onMinute"] = displaySchedule.onMinute;
+  disp["offHour"] = displaySchedule.offHour;
+  disp["offMinute"] = displaySchedule.offMinute;
+  disp["overrideMode"] = displaySchedule.overrideMode;
+  
+  JsonObject email = doc.createNestedObject("emailConfig");
+  email["enabled"] = emailConfig.enabled;
+  email["senderAccount"] = emailConfig.senderAccount;
+  email["senderPassword"] = emailConfig.senderPassword;
+  email["recipient"] = emailConfig.recipient;
+  
+  JsonObject docker = doc.createNestedObject("dockerConfig");
+  docker["enabled"] = dockerConfig.enabled;
+  
+  String output;
+  serializeJson(doc, output);
+  server.send(200, "application/json", output);
+}
+
+void handleRestore() {
+  if (server.method() != HTTP_POST) {
+    server.send(405, "text/plain", "Method Not Allowed");
+    return;
+  }
+  if (!server.hasArg("plain")) {
+    server.send(400, "text/plain", "Bad Request");
+    return;
+  }
+  
+  DynamicJsonDocument doc(4096);
+  DeserializationError error = deserializeJson(doc, server.arg("plain"));
+  
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Failed to parse JSON\"}");
+    return;
+  }
+  
+  if (doc.containsKey("schedules")) {
+    schedules.clear();
+    JsonArray scheds = doc["schedules"].as<JsonArray>();
+    for (JsonObject sched : scheds) {
+      Schedule s;
+
+      s.id = sched["id"] | millis();
+      s.relayNumber = sched["relayNumber"];
+      s.onHour = sched["onHour"];
+      s.onMinute = sched["onMinute"];
+      s.offHour = sched["offHour"];
+      s.offMinute = sched["offMinute"];
+      JsonArray days = sched["daysOfWeek"].as<JsonArray>();
+      for (int i = 0; i < 7 && i < days.size(); i++) {
+        s.daysOfWeek[i] = days[i];
+      }
+      s.enabled = sched["enabled"];
+      schedules.push_back(s);
+    }
+    saveSchedulesToEEPROM();
+  }
+  
+  if (doc.containsKey("sensorCalibration")) {
+    sensorCalibration.internalOffset = doc["sensorCalibration"]["internalOffset"];
+    sensorCalibration.externalOffset = doc["sensorCalibration"]["externalOffset"];
+    EEPROM.put(CALIBRATION_START_ADDR, sensorCalibration);
+    EEPROM.commit();
+  }
+  
+  if (doc.containsKey("displaySchedule")) {
+    displaySchedule.magic = 0xDA;
+    displaySchedule.onHour = doc["displaySchedule"]["onHour"];
+    displaySchedule.onMinute = doc["displaySchedule"]["onMinute"];
+    displaySchedule.offHour = doc["displaySchedule"]["offHour"];
+    displaySchedule.offMinute = doc["displaySchedule"]["offMinute"];
+    displaySchedule.overrideMode = doc["displaySchedule"]["overrideMode"];
+    EEPROM.put(DISPLAY_SCHEDULE_ADDR, displaySchedule);
+    EEPROM.commit();
+  }
+  
+  if (doc.containsKey("emailConfig")) {
+    emailConfig.magic = 0xEC;
+    emailConfig.enabled = doc["emailConfig"]["enabled"];
+    strlcpy(emailConfig.senderAccount, doc["emailConfig"]["senderAccount"] | "", sizeof(emailConfig.senderAccount));
+    strlcpy(emailConfig.senderPassword, doc["emailConfig"]["senderPassword"] | "", sizeof(emailConfig.senderPassword));
+    strlcpy(emailConfig.recipient, doc["emailConfig"]["recipient"] | "", sizeof(emailConfig.recipient));
+    EEPROM.put(EMAIL_CONFIG_ADDR, emailConfig);
+    EEPROM.commit();
+  }
+  
+  if (doc.containsKey("dockerConfig")) {
+    dockerConfig.magic = 0xDC;
+    dockerConfig.enabled = doc["dockerConfig"]["enabled"];
+    EEPROM.put(DOCKER_CONFIG_ADDR, dockerConfig);
+    EEPROM.commit();
+  }
+  
+  storeLogEntry("Configuration completely restored from backup");
+  server.send(200, "application/json", "{\"status\":\"success\"}");
 }
