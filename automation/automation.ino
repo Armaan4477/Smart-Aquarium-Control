@@ -71,6 +71,7 @@ void checkScheduleslaunch();
 void activateRelay(int, bool);
 void deactivateRelay(int, bool);
 void broadcastRelayStates();
+void syncRelayHardware();
 void handleGetTemporarySchedules();
 void handleAddTemporarySchedule();
 void handleDeleteTemporarySchedule();
@@ -938,7 +939,21 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
         IPAddress ip = webSocket.remoteIP(num);
         //storeLogEntry("WebSocket " + String(num) + " Connected from " + ip.toString());
 
-        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"relay1Name\":\"WaveMaker\"" + ",\"relay2Name\":\"Light\"" + ",\"relay3Name\":\"Air Pump\"}";
+        float internalRaw = lastValidTemperature - sensorCalibration.internalOffset;
+        float externalRaw = lastValidExternalTemperature - sensorCalibration.externalOffset;
+        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
+        message += ",\"override1\":" + String(overrideRelay1 ? "true" : "false");
+        message += ",\"override2\":" + String(overrideRelay2 ? "true" : "false");
+        long timeRemaining = 0;
+        if (feedingModeActive) {
+          unsigned long now = millis();
+          if (feedingModeEndTime > now) {
+            timeRemaining = (long)((feedingModeEndTime - now) / 1000UL);
+          }
+        }
+        message += ",\"feedingModeActive\":" + String(feedingModeActive ? "true" : "false");
+        message += ",\"feedingModeTimeRemaining\":" + String(timeRemaining);
+        message += ",\"relay1Name\":\"WaveMaker\",\"relay2Name\":\"Light\",\"relay3Name\":\"Air Pump\"}";
         webSocket.sendTXT(num, message);
       }
       break;
@@ -1074,7 +1089,7 @@ void mainLoop(void* parameter) {
     if (feedingModeActive && millis() >= feedingModeEndTime) {
       feedingModeActive = false;
       storeLogEntry("Feeding Mode ended automatically");
-      checkScheduleslaunch(); // Restore relays to their scheduled states
+      syncRelayHardware();
       broadcastRelayStates();
     }
 
@@ -1257,10 +1272,6 @@ void checkScheduleslaunch() {
 }
 
 void activateRelay(int relayNum, bool manual) {
-  if (feedingModeActive && (relayNum == 1 || relayNum == 3)) {
-    storeLogEntry("Feeding Mode active. Relay " + String(relayNum) + " activation skipped.");
-    return;
-  }
   if (!manual && ((relayNum == 1 && overrideRelay1) || (relayNum == 2 && overrideRelay2) || (relayNum == 3 && overrideRelay1))) {
     storeLogEntry("Relay " + String(relayNum) + " is overridden. Activation skipped.");
     return;
@@ -1268,9 +1279,13 @@ void activateRelay(int relayNum, bool manual) {
 
   switch (relayNum) {
     case 1:
-      digitalWrite(relay1, LOW);
       relay1State = true;
-      storeLogEntry("Wavemaker activated.");
+      if (feedingModeActive) {
+        storeLogEntry("Wavemaker turned ON logically (paused due to Feeding Mode).");
+      } else {
+        digitalWrite(relay1, LOW);
+        storeLogEntry("Wavemaker activated.");
+      }
       break;
     case 2:
       digitalWrite(relay4, LOW);
@@ -1286,9 +1301,13 @@ void activateRelay(int relayNum, bool manual) {
       storeLogEntry("Lights activated.");
       break;
     case 3:
-      digitalWrite(relay3, LOW);
       relay3State = true;
-      storeLogEntry("Air Pump activated.");
+      if (feedingModeActive) {
+        storeLogEntry("Air Pump turned ON logically (paused due to Feeding Mode).");
+      } else {
+        digitalWrite(relay3, LOW);
+        storeLogEntry("Air Pump activated.");
+      }
       break;
   }
   broadcastRelayStates();
@@ -1302,9 +1321,13 @@ void deactivateRelay(int relayNum, bool manual) {
 
   switch (relayNum) {
     case 1:
-      digitalWrite(relay1, HIGH);
       relay1State = false;
-      storeLogEntry("Wavemaker deactivated.");
+      if (feedingModeActive) {
+        storeLogEntry("Wavemaker turned OFF logically (paused due to Feeding Mode).");
+      } else {
+        digitalWrite(relay1, HIGH);
+        storeLogEntry("Wavemaker deactivated.");
+      }
       break;
     case 2:
       digitalWrite(relay2, HIGH);
@@ -1314,9 +1337,13 @@ void deactivateRelay(int relayNum, bool manual) {
       storeLogEntry("Lights deactivated.");
       break;
     case 3:
-      digitalWrite(relay3, HIGH);
       relay3State = false;
-      storeLogEntry("Air Pump deactivated.");
+      if (feedingModeActive) {
+        storeLogEntry("Air Pump turned OFF logically (paused due to Feeding Mode).");
+      } else {
+        digitalWrite(relay3, HIGH);
+        storeLogEntry("Air Pump deactivated.");
+      }
       break;
   }
   broadcastRelayStates();
@@ -1334,8 +1361,10 @@ void broadcastRelayStates() {
 
   long timeRemaining = 0;
   if (feedingModeActive) {
-    timeRemaining = (feedingModeEndTime - millis()) / 1000;
-    if (timeRemaining < 0) timeRemaining = 0;
+    unsigned long now = millis();
+    if (feedingModeEndTime > now) {
+      timeRemaining = (long)((feedingModeEndTime - now) / 1000UL);
+    }
   }
   message += ",\"feedingModeActive\":" + String(feedingModeActive ? "true" : "false");
   message += ",\"feedingModeTimeRemaining\":" + String(timeRemaining);
@@ -1672,6 +1701,15 @@ void handleRelayStatus() {
   json += "\"2\":" + String(relay2State || overrideRelay2) + ",";
   json += "\"3\":" + String(relay3State || overrideRelay1) + ",";
   json += "\"temperature\":" + String(lastValidTemperature, 1) + ",";
+  long timeRemaining = 0;
+  if (feedingModeActive) {
+    unsigned long now = millis();
+    if (feedingModeEndTime > now) {
+      timeRemaining = (long)((feedingModeEndTime - now) / 1000UL);
+    }
+  }
+  json += "\"feedingModeActive\":" + String(feedingModeActive ? "true" : "false") + ",";
+  json += "\"feedingModeTimeRemaining\":" + String(timeRemaining) + ",";
   json += "\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + "}";
   server.send(200, "application/json", json);
 }
@@ -2479,6 +2517,28 @@ void handleApiLogs() {
   apiServer.send(200, "application/json", response);
 }
 
+// Syncs the physical hardware relays (GPIO) with the internal logical states (relayXState)
+// This is used to re-apply the logical state to the pins when Feeding Mode ends.
+void syncRelayHardware() {
+  if (!overrideRelay1) {
+    if (relay1State) {
+      digitalWrite(relay1, LOW);
+      storeLogEntry("Wavemaker resumed ON after Feeding Mode.");
+    } else {
+      digitalWrite(relay1, HIGH);
+      storeLogEntry("Wavemaker remained OFF after Feeding Mode.");
+    }
+    
+    if (relay3State) {
+      digitalWrite(relay3, LOW);
+      storeLogEntry("Air Pump resumed ON after Feeding Mode.");
+    } else {
+      digitalWrite(relay3, HIGH);
+      storeLogEntry("Air Pump remained OFF after Feeding Mode.");
+    }
+  }
+}
+
 void handleGetRawTemperatureData() {
   sensors.requestTemperatures();
   externalSensors.requestTemperatures();
@@ -2506,37 +2566,65 @@ void handleFeedingModeToggle() {
     server.send(405, "text/plain", "Method Not Allowed");
     return;
   }
-  
-  if (server.hasArg("plain")) {
-    String body = server.arg("plain");
-    DynamicJsonDocument doc(512);
-    DeserializationError error = deserializeJson(doc, body);
-    
-    if (!error && doc.containsKey("action")) {
-      String action = doc["action"].as<String>();
-      if (action == "stop") {
-        feedingModeActive = false;
-        storeLogEntry("Feeding Mode ended manually");
-        checkScheduleslaunch();
-        broadcastRelayStates();
-        server.send(200, "application/json", "{\"status\":\"stopped\"}");
-        return;
-      }
-    }
+
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Missing request body\"}");
+    return;
   }
-  
-  // Default action is to start for 5 minutes
-  feedingModeActive = true;
-  feedingModeEndTime = millis() + (5 * 60 * 1000); // 5 minutes
-  
-  // Force WaveMaker and AirPump off immediately
-  if (relay1State) deactivateRelay(1, true);
-  if (relay3State) deactivateRelay(3, true);
-  
-  storeLogEntry("Feeding Mode activated for 5 minutes");
-  broadcastRelayStates();
-  
-  server.send(200, "application/json", "{\"status\":\"started\", \"duration\":5}");
+
+  String body = server.arg("plain");
+  DynamicJsonDocument doc(256);
+  DeserializationError error = deserializeJson(doc, body);
+
+  if (error || !doc.containsKey("action")) {
+    server.send(400, "application/json", "{\"error\":\"Missing or invalid action field\"}");
+    return;
+  }
+
+  String action = doc["action"].as<String>();
+
+  if (action == "stop") {
+    if (!feedingModeActive) {
+      server.send(200, "application/json", "{\"status\":\"already_stopped\"}");
+      return;
+    }
+    feedingModeActive = false;
+    storeLogEntry("Feeding Mode ended manually");
+    syncRelayHardware();
+    broadcastRelayStates();
+    server.send(200, "application/json", "{\"status\":\"stopped\"}");
+    return;
+  }
+
+  if (action == "start") {
+    // Reject if a physical override is active — it would conflict with feeding mode pausing relay 1 & 3
+    if (overrideRelay1 || overrideRelay2) {
+      server.send(409, "application/json", "{\"error\":\"Cannot start Feeding Mode while physical override is active\"}");
+      storeLogEntry("Feeding Mode start rejected: physical override is active");
+      return;
+    }
+
+    if (feedingModeActive) {
+      storeLogEntry("Feeding Mode reset while already active");
+    } else {
+      storeLogEntry("Feeding Mode activated for 5 minutes");
+    }
+
+    feedingModeActive = true;
+    feedingModeEndTime = millis() + (5UL * 60UL * 1000UL);  // 5 minutes
+
+    // Physically pause WaveMaker (relay1) and Air Pump (relay3) immediately.
+    // The logical states (relay1State / relay3State) are maintained by the system,
+    // and syncRelayHardware() will restore the physical states based on them when done.
+    digitalWrite(relay1, HIGH);
+    digitalWrite(relay3, HIGH);
+
+    broadcastRelayStates();
+    server.send(200, "application/json", "{\"status\":\"started\",\"duration\":5}");
+    return;
+  }
+
+  server.send(400, "application/json", "{\"error\":\"Unknown action. Use start or stop\"}");
 }
 
 void handleBackupRestorePage() {

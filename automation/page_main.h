@@ -231,6 +231,11 @@ const char mainPage[] PROGMEM = R"html(
             color: #333;
         }
 
+        .button.paused {
+            background-color: #FF9800;
+            color: #fff;
+        }
+
         .nav-button {
             background-color: var(--primary-color);
         }
@@ -504,8 +509,31 @@ const char mainPage[] PROGMEM = R"html(
         let socket = null;
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
-        let reconnectInterval = 1000; // Start with 1 second
-        const maxReconnectInterval = 30000; // Max 30 seconds
+        let reconnectInterval = 1000;
+        const maxReconnectInterval = 30000;
+        let feedingModeActive = false;
+        let feedingModeTimeRemaining = 0;
+
+        setInterval(() => {
+            if (feedingModeActive && feedingModeTimeRemaining > 0) {
+                feedingModeTimeRemaining--;
+                updateFeedingModeUI();
+            }
+        }, 1000);
+
+        function updateFeedingModeUI() {
+            let btn = document.getElementById('btnFeedingMode');
+            if (!btn) return;
+            if (feedingModeActive) {
+                btn.className = 'button paused';
+                btn.textContent = 'Feeding Mode (' + Math.floor(feedingModeTimeRemaining / 60) + 'm ' + (feedingModeTimeRemaining % 60) + 's)';
+            } else {
+                btn.className = 'button special-button';
+                btn.textContent = 'Feeding Mode (5m)';
+            }
+            updateButtonStyle(1);
+            updateButtonStyle(3);
+        }
 
         function connectWebSocket() {
             if (socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) {
@@ -545,18 +573,11 @@ const char mainPage[] PROGMEM = R"html(
                         updateButtonStyle(2);
                     }
                     if (data.feedingModeActive !== undefined) {
-                        let btn = document.getElementById('btnFeedingMode');
-                        if (data.feedingModeActive) {
-                            btn.className = 'button override';
-                            btn.textContent = 'Feeding Mode (' + Math.floor(data.feedingModeTimeRemaining / 60) + 'm ' + (data.feedingModeTimeRemaining % 60) + 's)';
-                            document.getElementById('btn1').disabled = true;
-                            document.getElementById('btn3').disabled = true;
-                        } else {
-                            btn.className = 'button special-button';
-                            btn.textContent = 'Feeding Mode (5m)';
-                            document.getElementById('btn1').disabled = false;
-                            document.getElementById('btn3').disabled = false;
+                        feedingModeActive = data.feedingModeActive;
+                        if (data.feedingModeTimeRemaining !== undefined) {
+                            feedingModeTimeRemaining = data.feedingModeTimeRemaining;
                         }
+                        updateFeedingModeUI();
                     }
                     if (data.relay3 !== undefined) {
                         relayStates[3] = data.relay3;
@@ -647,7 +668,7 @@ const char mainPage[] PROGMEM = R"html(
 
         function toggleFeedingMode() {
             let btn = document.getElementById('btnFeedingMode');
-            let action = btn.classList.contains('override') ? 'stop' : 'start';
+            let action = btn.classList.contains('paused') ? 'stop' : 'start';
             fetch('/api/feeding_mode', { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' },
@@ -672,8 +693,13 @@ const char mainPage[] PROGMEM = R"html(
                     btn.className = 'button override';
                     btn.textContent = `${relayLabel} (Override)`;
                 } else if (relayStates[relay]) {
-                    btn.className = 'button on';
-                    btn.textContent = `${relayLabel} (ON)`;
+                    if (feedingModeActive && (relay === 1 || relay === 3)) {
+                        btn.className = 'button paused';
+                        btn.textContent = `${relayLabel} (Paused)`;
+                    } else {
+                        btn.className = 'button on';
+                        btn.textContent = `${relayLabel} (ON)`;
+                    }
                 } else {
                     btn.className = 'button off';
                     btn.textContent = `${relayLabel} (OFF)`;
@@ -695,6 +721,13 @@ const char mainPage[] PROGMEM = R"html(
                         overrideStates[3] = data.override1; // relay3 shares override1
                     }
                     if (data.override2 !== undefined) overrideStates[2] = data.override2;
+                    if (data.feedingModeActive !== undefined) {
+                        feedingModeActive = data.feedingModeActive;
+                        if (data.feedingModeTimeRemaining !== undefined) {
+                            feedingModeTimeRemaining = data.feedingModeTimeRemaining;
+                        }
+                        updateFeedingModeUI();
+                    }
                     for(let relay in relayStates) {
                         if (relay <= 3) {
                             updateButtonStyle(relay);
