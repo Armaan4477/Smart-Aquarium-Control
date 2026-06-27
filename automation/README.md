@@ -19,7 +19,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
   - **Relay 2**: Main Light (supports startup color-cycle sequences)
   - **Relay 3**: Air Pump
   - **Relay 4**: Secondary Light Control (synchronized with Relay 2)
-- **Local OLED Display**: 128x64 I2C OLED screen for at-a-glance status monitoring, complete with customizable display schedules and physical override modes to prevent light pollution at night.
+- **Local OLED Display**: 128x64 I2C OLED screen for at-a-glance status monitoring. Features customizable display schedules, physical override modes to prevent light pollution, and dynamic error state visualization (displays blinking "E" for active errors, and "--" for acknowledged errors).
 - **Physical Manual Overrides**: Hardware switches to temporarily bypass automation:
   - **Switch 1**: Overrides Wave Maker (Relay 1) & Air Pump (Relay 3)
   - **Switch 2**: Overrides Main Light (Relay 2 & 4)
@@ -27,6 +27,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
   - Persistent event logging stored on LittleFS.
   - Automated email notifications for system startups, periodic status checks and sensor errors (Email functionality is disabled by default to prevent startup errors until safely configured via the UI).
   - Dedicated hardware LED and WebUI pop-ups for immediate visual error indication.
+- **Modular Web Interface**: Web pages are compartmentalized into separate header files (`page_*.h`) for clean code organization and maintainability.
 - **Robust Timekeeping**: Automatic NTP time synchronization with built-in retry logic.
 - **System Stability**: Optimized FreeRTOS task scheduling to prevent Watchdog Timer (WDT) resets, ensuring continuous and reliable long-term operation.
 
