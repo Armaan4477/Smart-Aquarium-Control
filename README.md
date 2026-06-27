@@ -12,7 +12,7 @@ This repository is split into two primary components:
    The core hardware controller built on the ESP32 platform. It handles all real-time sensor monitoring (temperature), equipment scheduling (wave makers, lights, air pumps), physical overrides and serves the local web-based control dashboard.
 
 2. **[Raspberry Pi Collector (`/rpi-collector`)](./rpi-collector/README.md)**
-   A complementary data logging service running on a Raspberry Pi via Docker. It acts as a secure reverse-proxy for the ESP32 WebUI (bypassing browser cross-origin restrictions), routinely polls the ESP32 for sensor readings and system states, stores them in a local SQLite database, and provides a RESTful API for historical data querying.
+   A complementary data logging service running on a Raspberry Pi via Docker. It acts as a secure reverse-proxy for the ESP32 WebUI (bypassing browser cross-origin restrictions), routinely polls the ESP32 for sensor readings and system states, stores them in a local SQLite database and provides a RESTful API for historical data querying.
 
 ## Key System Features
 
@@ -21,7 +21,7 @@ This repository is split into two primary components:
 - **Precision Temperature Monitoring:** Dual-sensor setup for tracking both water and ambient temperatures.
 - **Robust Hardware Controls:** Local OLED status display and physical override switches for immediate, web-free access.
 - **Historical Data Logging:** Automated data collection every 60 seconds, stored in an SQLite database for trend analysis.
-- **Reliable Alerting & Error Tracking:** Features dynamic UI pop-ups for immediate visual feedback, alongside automated email notifications for system startups, sensor failures, and periodic health checks.
+- **Reliable Alerting & Error Tracking:** Features dynamic UI pop-ups for immediate visual feedback, alongside automated email notifications for system startups, sensor failures and periodic health checks.
 - **High Stability:** Optimized FreeRTOS task scheduling ensures reliable long-term execution and prevents Watchdog Timer (WDT) resets.
 - **Local Network Independence:** Fully offline-optimized web interface that operates entirely over your LAN without reliance on external cloud services or CDNs.
 

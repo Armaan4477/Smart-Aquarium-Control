@@ -2,7 +2,7 @@
 
 ![Platform](https://img.shields.io/badge/platform-Docker-blue.svg)
 
-This directory contains a self-contained Docker service intended to run on a Raspberry Pi or similar local server. It routinely polls the ESP32 controller every 60 seconds and stores all readings in a local SQLite database. It also exposes a REST API on port **5050** for querying historical data from any device on your LAN, and acts as a secure reverse-proxy to serve the ESP32 WebUI without cross-origin issues.
+This directory contains a self-contained Docker service intended to run on a Raspberry Pi or similar local server. It routinely polls the ESP32 controller every 60 seconds and stores all readings in a local SQLite database. It also exposes a REST API on port **5050** for querying historical data from any device on your LAN and acts as a secure reverse-proxy to serve the ESP32 WebUI without cross-origin issues.
 
 ---
 
@@ -128,7 +128,7 @@ The collector exposes a local API for data visualization and querying. All endpo
 ## ESP32 Integration
 
 The data collector interacts with two dedicated endpoints on the ESP32 firmware (`automation.ino`):
-- `GET /api/status`: Returns calibrated temps, relay states, override flags, error bitmasks (`active_errors`, `acknowledged_errors`), and time sync state.
+- `GET /api/status`: Returns calibrated temps, relay states, override flags, error bitmasks (`active_errors`, `acknowledged_errors`) and time sync state.
 - `GET /api/logs`: Returns system logs.
 
 **Security**: Ensure your Raspberry Pi's IP address (e.g., `192.168.29.3`) is included in the `allowedIPs` whitelist within the ESP32 code so the collector can poll without authentication.

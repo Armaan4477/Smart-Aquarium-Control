@@ -7,7 +7,8 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 
 ## Key Features
 
-- **Responsive Web Dashboard**: Manage your aquarium from any device with WebSocket-powered near real-time updates for relay states and sensor data. Fully optimized for offline loading with no external dependencies, and features dynamic main page pop-ups for critical system alerts and errors.
+- **Responsive Web Dashboard**: Manage your aquarium from any device with WebSocket-powered near real-time updates for relay states and sensor data. Fully optimized for offline loading with no external dependencies, features dynamic main page pop-ups for critical system alerts and errors and includes a **Persistent Dark Mode** saved directly to EEPROM.
+- **Feeding Mode**: A dedicated 5-minute one-click pause for the wave maker and air pump to allow for calm water during feeding, complete with a live countdown timer on the dashboard.
 - **Advanced Scheduling System**:
   - **Regular Schedules**: Recurring day-of-week ON/OFF schedules with automatic conflict detection, safely stored in EEPROM.
   - **Temporary Schedules**: One-time, auto-expiring schedules (up to 2 per relay) for ad-hoc equipment control.
@@ -19,7 +20,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
   - **Relay 2**: Main Light (supports startup color-cycle sequences)
   - **Relay 3**: Air Pump
   - **Relay 4**: Secondary Light Control (synchronized with Relay 2)
-- **Local OLED Display**: 128x64 I2C OLED screen for at-a-glance status monitoring. Features customizable display schedules, physical override modes to prevent light pollution, and dynamic error state visualization (displays blinking "E" for active errors, and "--" for acknowledged errors).
+- **Local OLED Display**: 128x64 I2C OLED screen for at-a-glance status monitoring. Features customizable display schedules, physical override modes to prevent light pollution and dynamic error state visualization (displays blinking "E" for active errors and "--" for acknowledged errors).
 - **Physical Manual Overrides**: Hardware switches to temporarily bypass automation:
   - **Switch 1**: Overrides Wave Maker (Relay 1) & Air Pump (Relay 3)
   - **Switch 2**: Overrides Main Light (Relay 2 & 4)
@@ -98,8 +99,8 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 ## Usage Guide
 
 ### Web Interface
-The intuitive web dashboard provides complete control over your aquarium. Navigate through dedicated pages to:
-- **Dashboard**: View live sensor readings and manually toggle equipment. Relay buttons automatically turn **yellow** to clearly indicate when a physical or manual override is active.
+The intuitive web dashboard provides complete control over your aquarium (including a built-in Dark Mode toggle). Navigate through dedicated pages to:
+- **Dashboard**: View live sensor readings and manually toggle equipment. Relay buttons automatically turn **yellow** to clearly indicate when a physical or manual override is active. Also features a **Feeding Mode** button to temporarily pause water circulation for 5 minutes.
 - **Schedules**: Create and manage recurring weekly schedules.
 - **Temp Schedules**: Set up one-time, expiring temporary schedules.
 - **Temp Control**: Monitor raw temperature data and calibrate internal/external sensors.
