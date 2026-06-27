@@ -47,6 +47,7 @@ void handleTime();
 void handleGetSchedules();
 void handleAddSchedule();
 void handleDeleteSchedule();
+void handleEditSchedule();
 void handleUpdateSchedule();
 void handleRelayStatus();
 void handleClearError();
@@ -468,6 +469,7 @@ void setup() {
   server.on("/time", HTTP_GET, handleTime);
   server.on("/schedules", HTTP_GET, handleGetSchedules);
   server.on("/schedule/add", HTTP_POST, handleAddSchedule);
+  server.on("/schedule/edit", HTTP_POST, handleEditSchedule);
   server.on("/schedule/delete", HTTP_DELETE, handleDeleteSchedule);
   server.on("/schedule/update", HTTP_POST, handleUpdateSchedule);
   server.on("/relay/status", HTTP_GET, handleRelayStatus);
@@ -1415,6 +1417,99 @@ void handleAddSchedule() {
       }
 
       schedules.push_back(newSchedule);
+      saveSchedulesToEEPROM();
+      server.send(200, "application/json", "{\"status\":\"success\"}");
+      broadcastRelayStates();
+      return;
+    }
+  }
+  server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+}
+
+void handleEditSchedule() {
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    StaticJsonDocument<300> doc;
+    DeserializationError error = deserializeJson(doc, body);
+
+    if (!error) {
+      if (!doc.containsKey("id") || !doc.containsKey("relay") || !doc.containsKey("onTime") || !doc.containsKey("offTime") || doc["relay"].isNull() || doc["onTime"].isNull() || doc["offTime"].isNull()) {
+        server.send(400, "application/json", "{\"error\":\"Missing fields\"}");
+        storeLogEntry("Edit Schedule failed: Missing fields.");
+        return;
+      }
+
+      int id = doc["id"].as<int>();
+      if (id < 0 || id >= schedules.size()) {
+        server.send(400, "application/json", "{\"error\":\"Invalid schedule ID\"}");
+        storeLogEntry("Edit Schedule failed: Invalid ID.");
+        return;
+      }
+
+      Schedule updatedSchedule;
+      updatedSchedule.id = id;
+      updatedSchedule.relayNumber = doc["relay"].as<int>();
+      String onTime = doc["onTime"].as<String>();
+      String offTime = doc["offTime"].as<String>();
+
+      if (onTime.length() < 5 || offTime.length() < 5) {
+        server.send(400, "application/json", "{\"error\":\"Invalid time format\"}");
+        storeLogEntry("Edit Schedule failed: Invalid time format.");
+        return;
+      }
+
+      updatedSchedule.onHour = onTime.substring(0, 2).toInt();
+      updatedSchedule.onMinute = onTime.substring(3).toInt();
+      updatedSchedule.offHour = offTime.substring(0, 2).toInt();
+      updatedSchedule.offMinute = offTime.substring(3).toInt();
+      updatedSchedule.enabled = schedules[id].enabled;
+
+      for (int i = 0; i < 7; i++) {
+        updatedSchedule.daysOfWeek[i] = doc["days"][i] | false;
+      }
+
+      String dayConfig = "Edit Schedule days: ";
+      for (int i = 0; i < 7; i++) {
+        dayConfig += String(updatedSchedule.daysOfWeek[i] ? "1" : "0");
+      }
+      storeLogEntry(dayConfig + " (Sun,Mon,Tue,Wed,Thu,Fri,Sat)");
+
+      bool conflict = false;
+      for (int i = 0; i < schedules.size(); i++) {
+        if (i == id) continue; // Skip the schedule being edited
+        const Schedule& existing = schedules[i];
+        if (existing.relayNumber == updatedSchedule.relayNumber && existing.enabled) {
+          bool shareDay = false;
+          for (int j = 0; j < 7; j++) {
+            if (updatedSchedule.daysOfWeek[j] && existing.daysOfWeek[j]) {
+              shareDay = true;
+              break;
+            }
+          }
+          if (!shareDay) continue;
+
+          int existingStart = existing.onHour * 60 + existing.onMinute;
+          int existingEnd = existing.offHour * 60 + existing.offMinute;
+          int newStart = updatedSchedule.onHour * 60 + updatedSchedule.onMinute;
+          int newEnd = updatedSchedule.offHour * 60 + updatedSchedule.offMinute;
+
+          if (existingEnd <= existingStart) existingEnd += 1440;
+          if (newEnd <= newStart) newEnd += 1440;
+
+          if ((newStart < existingEnd) && (existingStart < newEnd)) {
+            conflict = true;
+            break;
+          }
+        }
+      }
+
+      if (conflict) {
+        server.send(409, "application/json", "{\"error\":\"Schedule conflict detected\"}");
+        storeLogEntry("Edit Schedule conflict detected for relay " + String(updatedSchedule.relayNumber));
+        return;
+      }
+
+      schedules[id] = updatedSchedule;
       saveSchedulesToEEPROM();
       server.send(200, "application/json", "{\"status\":\"success\"}");
       broadcastRelayStates();

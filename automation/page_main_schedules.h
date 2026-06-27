@@ -284,6 +284,9 @@ const char mainSchedules[] PROGMEM = R"html(
         .action-button.delete { background-color: var(--error-color); color: white; }
         .action-button.delete:hover { background-color: #D32F2F; }
 
+        .action-button.edit { background-color: var(--accent-color); color: white; }
+        .action-button.edit:hover { background-color: #0288D1; }
+
         #errorSection {
             text-align: center;
             margin: 20px 0;
@@ -623,7 +626,10 @@ const char mainSchedules[] PROGMEM = R"html(
             window.history.back();
         }
 
-                function addSchedule() {
+        let editingScheduleId = null;
+        let allSchedules = [];
+
+        function addSchedule() {
             document.getElementById('relayError').style.display = 'none';
             document.getElementById('onTimeError').style.display = 'none';
             document.getElementById('offTimeError').style.display = 'none';
@@ -662,10 +668,16 @@ const char mainSchedules[] PROGMEM = R"html(
                 return;
             }
 
-            fetch('/schedule/add', {
+            const url = editingScheduleId !== null ? '/schedule/edit' : '/schedule/add';
+            const bodyData = { relay, onTime, offTime, days };
+            if (editingScheduleId !== null) {
+                bodyData.id = editingScheduleId;
+            }
+
+            fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ relay, onTime, offTime, days })
+                body: JSON.stringify(bodyData)
             })
             .then(async response => {
                 if (!response.ok) {
@@ -681,12 +693,62 @@ const char mainSchedules[] PROGMEM = R"html(
             .then(() => { 
                 loadSchedules(); 
                 checkErrorStatus(); 
-                showToast('Schedule added successfully!', 'success');
+                showToast(editingScheduleId !== null ? 'Schedule updated successfully!' : 'Schedule added successfully!', 'success');
+                if (editingScheduleId !== null) cancelEdit();
             })
             .catch(error => { 
-                showToast('Failed to add schedule: ' + error.message, 'error'); 
+                showToast('Failed to save schedule: ' + error.message, 'error'); 
                 checkErrorStatus(); 
             });
+        }
+
+        function editSchedulePrompt(index) {
+            const schedule = allSchedules[index];
+            if (!schedule) return;
+            
+            editingScheduleId = index;
+            document.getElementById('relaySelect').value = schedule.relay || schedule.relayNumber;
+            document.getElementById('onTime').value = String(schedule.onHour).padStart(2, '0') + ':' + String(schedule.onMinute).padStart(2, '0');
+            document.getElementById('offTime').value = String(schedule.offHour).padStart(2, '0') + ':' + String(schedule.offMinute).padStart(2, '0');
+            
+            const dayCheckboxes = document.querySelectorAll('.dayCheckbox');
+            schedule.daysOfWeek.forEach((active, i) => {
+                dayCheckboxes[i].checked = active;
+            });
+            
+            document.getElementById('addScheduleBtn').textContent = 'Save Changes';
+            document.querySelector('.schedule-form h3').textContent = 'Edit Schedule';
+            
+            let cancelBtn = document.getElementById('cancelEditBtn');
+            if (!cancelBtn) {
+                cancelBtn = document.createElement('button');
+                cancelBtn.id = 'cancelEditBtn';
+                cancelBtn.textContent = 'Cancel Edit';
+                cancelBtn.style.backgroundColor = '#757575';
+                cancelBtn.onclick = cancelEdit;
+                cancelBtn.style.marginTop = '10px';
+                document.getElementById('addScheduleBtn').parentNode.appendChild(cancelBtn);
+            }
+            cancelBtn.style.display = 'block';
+            
+            checkFields();
+            window.scrollTo(0, 0);
+        }
+        
+        function cancelEdit() {
+            editingScheduleId = null;
+            document.getElementById('relaySelect').value = '';
+            document.getElementById('onTime').value = '';
+            document.getElementById('offTime').value = '';
+            document.querySelectorAll('.dayCheckbox').forEach(cb => cb.checked = false);
+            
+            document.getElementById('addScheduleBtn').textContent = 'Add Schedule';
+            document.querySelector('.schedule-form h3').textContent = 'Add Schedule';
+            
+            const cancelBtn = document.getElementById('cancelEditBtn');
+            if (cancelBtn) cancelBtn.style.display = 'none';
+            
+            checkFields();
         }
 
         function checkErrorStatus() {
@@ -756,6 +818,7 @@ const char mainSchedules[] PROGMEM = R"html(
             fetch('/schedules')
                 .then(response => response.json())
                 .then(schedules => {
+                    allSchedules = schedules;
                     const table = document.getElementById('scheduleTable');
                     table.innerHTML = `<tr>
                         <th>Relay</th>
@@ -768,10 +831,12 @@ const char mainSchedules[] PROGMEM = R"html(
                     let dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
                     schedules.forEach((schedule, index) => {
                         const row = table.insertRow();
+                        // Support both schedule.relay and schedule.relayNumber depending on API response
+                        let relayVal = schedule.relay !== undefined ? schedule.relay : schedule.relayNumber;
                         let relayName = "Unknown";
-                        if (schedule.relay == 1) relayName = "WaveMaker";
-                        else if (schedule.relay == 2) relayName = "Light";
-                        else if (schedule.relay == 3) relayName = "Air Pump";
+                        if (relayVal == 1) relayName = "WaveMaker";
+                        else if (relayVal == 2) relayName = "Light";
+                        else if (relayVal == 3) relayName = "Air Pump";
                         
                         row.insertCell(0).textContent = relayName;
                         row.insertCell(1).textContent = `${String(schedule.onHour).padStart(2, '0')}:${String(schedule.onMinute).padStart(2, '0')}`;
@@ -790,12 +855,18 @@ const char mainSchedules[] PROGMEM = R"html(
                         toggleBtn.className = 'action-button ' + (schedule.enabled ? 'deactivate' : 'activate');
                         toggleBtn.onclick = () => toggleSchedule(index, !schedule.enabled);
                         
+                        const editBtn = document.createElement('button');
+                        editBtn.textContent = 'Edit';
+                        editBtn.className = 'action-button edit';
+                        editBtn.onclick = () => editSchedulePrompt(index);
+                        
                         const deleteBtn = document.createElement('button');
                         deleteBtn.textContent = 'Delete';
                         deleteBtn.className = 'action-button delete';
                         deleteBtn.onclick = () => deleteSchedule(index);
                         
                         actionCell.appendChild(toggleBtn);
+                        actionCell.appendChild(editBtn);
                         actionCell.appendChild(deleteBtn);
                     });
                 })
