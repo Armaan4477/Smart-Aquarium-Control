@@ -35,9 +35,9 @@ const char tempschedules[] PROGMEM = R"html(
             --primary-dark: #1976D2;
             --primary-light: #0D47A1;
             --accent-color: #03A9F4;
-            --success-color: #81C784;
+            --success-color: #4CAF50;
             --warning-color: #FFD54F;
-            --error-color: #E57373;
+            --error-color: #F44336;
             --text-color: #E0E0E0;
             --text-light: #9E9E9E;
             --background-color: #121212;
@@ -88,15 +88,15 @@ const char tempschedules[] PROGMEM = R"html(
         [data-theme="dark"] .status-badge.on,
         [data-theme="dark"] .override-btn.active-on {
             background-color: #1b4332 !important;
-            color: #74c69d !important;
-            border-color: #74c69d !important;
+            color: #4CAF50 !important;
+            border-color: #4CAF50 !important;
         }
 
         [data-theme="dark"] .status-badge.off,
         [data-theme="dark"] .override-btn.active-off {
             background-color: #641220 !important;
-            color: #ff8fa3 !important;
-            border-color: #ff8fa3 !important;
+            color: #F44336 !important;
+            border-color: #F44336 !important;
         }
 
         [data-theme="dark"] .override-btn {
