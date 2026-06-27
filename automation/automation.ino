@@ -27,6 +27,7 @@
 #include "page_temp_ctrl.h"
 #include "page_temp_schedules.h"
 #include "page_main_schedules.h"
+#include "page_backup_restore.h"
 
 #define OLED_SDA 21
 #define OLED_SCL 22
@@ -44,6 +45,10 @@ void handleRelay1();
 void handleRelay2();
 void handleRelay3();
 void handleTime();
+void handleFeedingModeToggle();
+void handleBackup();
+void handleRestore();
+void handleBackupRestorePage();
 void handleGetSchedules();
 void handleAddSchedule();
 void handleDeleteSchedule();
@@ -173,6 +178,9 @@ bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
 bool relay4State = false;
+
+bool feedingModeActive = false;
+unsigned long feedingModeEndTime = 0;
 const uint16_t ERR_WIFI = 1 << 0;
 const uint16_t ERR_NTP = 1 << 1;
 const uint16_t ERR_TEMP_INT = 1 << 2;
@@ -466,6 +474,10 @@ void setup() {
   server.on("/relay/1", HTTP_ANY, handleRelay1);
   server.on("/relay/2", HTTP_ANY, handleRelay2);
   server.on("/relay/3", HTTP_ANY, handleRelay3);
+  server.on("/api/feeding_mode", HTTP_POST, handleFeedingModeToggle);
+  server.on("/backuprestore", HTTP_GET, handleBackupRestorePage);
+  server.on("/api/backup", HTTP_GET, handleBackup);
+  server.on("/api/restore", HTTP_POST, handleRestore);
   server.on("/time", HTTP_GET, handleTime);
   server.on("/schedules", HTTP_GET, handleGetSchedules);
   server.on("/schedule/add", HTTP_POST, handleAddSchedule);
@@ -1059,6 +1071,13 @@ void mainLoop(void* parameter) {
     checkoverride2();
     overrideLEDState();
 
+    if (feedingModeActive && millis() >= feedingModeEndTime) {
+      feedingModeActive = false;
+      storeLogEntry("Feeding Mode ended automatically");
+      checkScheduleslaunch(); // Restore relays to their scheduled states
+      broadcastRelayStates();
+    }
+
     static unsigned long lastSecondCheck = 0;
     if (millis() - lastSecondCheck >= 1000) {
       lastSecondCheck = millis();
@@ -1238,6 +1257,10 @@ void checkScheduleslaunch() {
 }
 
 void activateRelay(int relayNum, bool manual) {
+  if (feedingModeActive && (relayNum == 1 || relayNum == 3)) {
+    storeLogEntry("Feeding Mode active. Relay " + String(relayNum) + " activation skipped.");
+    return;
+  }
   if (!manual && ((relayNum == 1 && overrideRelay1) || (relayNum == 2 && overrideRelay2) || (relayNum == 3 && overrideRelay1))) {
     storeLogEntry("Relay " + String(relayNum) + " is overridden. Activation skipped.");
     return;
@@ -1308,6 +1331,14 @@ void broadcastRelayStates() {
   message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
   message += ",\"override1\":" + String(overrideRelay1 ? "true" : "false");
   message += ",\"override2\":" + String(overrideRelay2 ? "true" : "false");
+
+  long timeRemaining = 0;
+  if (feedingModeActive) {
+    timeRemaining = (feedingModeEndTime - millis()) / 1000;
+    if (timeRemaining < 0) timeRemaining = 0;
+  }
+  message += ",\"feedingModeActive\":" + String(feedingModeActive ? "true" : "false");
+  message += ",\"feedingModeTimeRemaining\":" + String(timeRemaining);
 
   message += ",\"relay1Name\":\"WaveMaker\"";
   message += ",\"relay2Name\":\"Light\"";
@@ -2468,4 +2499,174 @@ void handleGetRawTemperatureData() {
   json += "}";
 
   server.send(200, "application/json", json);
+}
+
+void handleFeedingModeToggle() {
+  if (server.method() != HTTP_POST) {
+    server.send(405, "text/plain", "Method Not Allowed");
+    return;
+  }
+  
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    DynamicJsonDocument doc(512);
+    DeserializationError error = deserializeJson(doc, body);
+    
+    if (!error && doc.containsKey("action")) {
+      String action = doc["action"].as<String>();
+      if (action == "stop") {
+        feedingModeActive = false;
+        storeLogEntry("Feeding Mode ended manually");
+        checkScheduleslaunch();
+        broadcastRelayStates();
+        server.send(200, "application/json", "{\"status\":\"stopped\"}");
+        return;
+      }
+    }
+  }
+  
+  // Default action is to start for 5 minutes
+  feedingModeActive = true;
+  feedingModeEndTime = millis() + (5 * 60 * 1000); // 5 minutes
+  
+  // Force WaveMaker and AirPump off immediately
+  if (relay1State) deactivateRelay(1, true);
+  if (relay3State) deactivateRelay(3, true);
+  
+  storeLogEntry("Feeding Mode activated for 5 minutes");
+  broadcastRelayStates();
+  
+  server.send(200, "application/json", "{\"status\":\"started\", \"duration\":5}");
+}
+
+void handleBackupRestorePage() {
+  server.send_P(200, "text/html", page_backup_restore);
+}
+
+void handleBackup() {
+  DynamicJsonDocument doc(4096);
+  
+  JsonArray scheds = doc.createNestedArray("schedules");
+  for (const Schedule& schedule : schedules) {
+    JsonObject sched = scheds.createNestedObject();
+    sched["relayNumber"] = schedule.relayNumber;
+    sched["onHour"] = schedule.onHour;
+    sched["onMinute"] = schedule.onMinute;
+    sched["offHour"] = schedule.offHour;
+    sched["offMinute"] = schedule.offMinute;
+    JsonArray days = sched.createNestedArray("daysOfWeek");
+    for (int i = 0; i < 7; i++) {
+      days.add(schedule.daysOfWeek[i]);
+    }
+    sched["enabled"] = schedule.enabled;
+  }
+  
+  JsonObject calib = doc.createNestedObject("sensorCalibration");
+  calib["internalOffset"] = sensorCalibration.internalOffset;
+  calib["externalOffset"] = sensorCalibration.externalOffset;
+  
+  JsonObject disp = doc.createNestedObject("displaySchedule");
+  disp["onHour"] = displaySchedule.onHour;
+  disp["onMinute"] = displaySchedule.onMinute;
+  disp["offHour"] = displaySchedule.offHour;
+  disp["offMinute"] = displaySchedule.offMinute;
+  disp["overrideMode"] = displaySchedule.overrideMode;
+  
+  JsonObject email = doc.createNestedObject("emailConfig");
+  email["enabled"] = emailConfig.enabled;
+  email["senderAccount"] = emailConfig.senderAccount;
+  email["senderPassword"] = emailConfig.senderPassword;
+  email["recipient"] = emailConfig.recipient;
+  
+  JsonObject docker = doc.createNestedObject("dockerConfig");
+  docker["enabled"] = dockerConfig.enabled;
+  
+  String output;
+  serializeJson(doc, output);
+  server.send(200, "application/json", output);
+}
+
+void handleRestore() {
+  if (server.method() != HTTP_POST) {
+    server.send(405, "text/plain", "Method Not Allowed");
+    return;
+  }
+  if (!server.hasArg("plain")) {
+    server.send(400, "text/plain", "Bad Request");
+    return;
+  }
+  
+  DynamicJsonDocument doc(4096);
+  DeserializationError error = deserializeJson(doc, server.arg("plain"));
+  
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Failed to parse JSON\"}");
+    return;
+  }
+  
+  // Restore schedules
+  if (doc.containsKey("schedules")) {
+    schedules.clear();
+    JsonArray scheds = doc["schedules"].as<JsonArray>();
+    for (JsonObject sched : scheds) {
+      Schedule s;
+      // No magic in Schedule struct
+      s.id = sched["id"] | millis(); // fallback id
+      s.relayNumber = sched["relayNumber"];
+      s.onHour = sched["onHour"];
+      s.onMinute = sched["onMinute"];
+      s.offHour = sched["offHour"];
+      s.offMinute = sched["offMinute"];
+      JsonArray days = sched["daysOfWeek"].as<JsonArray>();
+      for (int i = 0; i < 7 && i < days.size(); i++) {
+        s.daysOfWeek[i] = days[i];
+      }
+      s.enabled = sched["enabled"];
+      schedules.push_back(s);
+    }
+    saveSchedulesToEEPROM();
+  }
+  
+  // Restore calibration
+  if (doc.containsKey("sensorCalibration")) {
+    // No magic in CalibrationData
+    sensorCalibration.internalOffset = doc["sensorCalibration"]["internalOffset"];
+    sensorCalibration.externalOffset = doc["sensorCalibration"]["externalOffset"];
+    EEPROM.put(CALIBRATION_START_ADDR, sensorCalibration);
+    EEPROM.commit();
+  }
+  
+  // Restore display config
+  if (doc.containsKey("displaySchedule")) {
+    displaySchedule.magic = 0xDA;
+    displaySchedule.onHour = doc["displaySchedule"]["onHour"];
+    displaySchedule.onMinute = doc["displaySchedule"]["onMinute"];
+    displaySchedule.offHour = doc["displaySchedule"]["offHour"];
+    displaySchedule.offMinute = doc["displaySchedule"]["offMinute"];
+    displaySchedule.overrideMode = doc["displaySchedule"]["overrideMode"];
+    EEPROM.put(DISPLAY_SCHEDULE_ADDR, displaySchedule);
+    EEPROM.commit();
+  }
+  
+  // Restore email config
+  if (doc.containsKey("emailConfig")) {
+    emailConfig.magic = 0xEC;
+    emailConfig.enabled = doc["emailConfig"]["enabled"];
+    strlcpy(emailConfig.senderAccount, doc["emailConfig"]["senderAccount"] | "", sizeof(emailConfig.senderAccount));
+    strlcpy(emailConfig.senderPassword, doc["emailConfig"]["senderPassword"] | "", sizeof(emailConfig.senderPassword));
+    strlcpy(emailConfig.recipient, doc["emailConfig"]["recipient"] | "", sizeof(emailConfig.recipient));
+    EEPROM.put(EMAIL_CONFIG_ADDR, emailConfig);
+    EEPROM.commit();
+  }
+  
+  // Restore docker config
+  if (doc.containsKey("dockerConfig")) {
+    dockerConfig.magic = 0xDC;
+    dockerConfig.enabled = doc["dockerConfig"]["enabled"];
+    EEPROM.put(DOCKER_CONFIG_ADDR, dockerConfig);
+    EEPROM.commit();
+  }
+  
+  storeLogEntry("Configuration completely restored from backup");
+  server.send(200, "application/json", "{\"status\":\"success\"}");
 }

@@ -418,6 +418,9 @@ const char mainPage[] PROGMEM = R"html(
                 <button class="button" onclick="toggleRelay(1)" id="btn1">WaveMaker</button>
                 <button class="button" onclick="toggleRelay(3)" id="btn3">Air Pump</button>
                 <button class="button" onclick="toggleRelay(2)" id="btn2">Light</button>
+            </div>
+            <div class="relay-buttons" style="margin-top: 15px;">
+                <button class="button special-button" onclick="toggleFeedingMode()" id="btnFeedingMode">Feeding Mode (5m)</button>
                 <button class="button special-button" onclick="oneClickLight()" id="btnOneClick">Change Light Color</button>
             </div>
         </div>
@@ -433,6 +436,7 @@ const char mainPage[] PROGMEM = R"html(
                 <button class="button nav-button" onclick="showDisplayCtrl()">Display Control</button>
                 <button class="button nav-button" onclick="showEmailConfig()">Email Settings</button>
                 <button class="button nav-button" onclick="showDockerConfig()">Docker Settings</button>
+                <button class="button nav-button" onclick="showBackupRestore()">Backup / Restore</button>
                 <button class="button nav-button nav-full" onclick="showLogs()">System Logs</button>
             </div>
         </div>
@@ -540,6 +544,20 @@ const char mainPage[] PROGMEM = R"html(
                         relayStates[2] = data.relay2;
                         updateButtonStyle(2);
                     }
+                    if (data.feedingModeActive !== undefined) {
+                        let btn = document.getElementById('btnFeedingMode');
+                        if (data.feedingModeActive) {
+                            btn.className = 'button override';
+                            btn.textContent = 'Feeding Mode (' + Math.floor(data.feedingModeTimeRemaining / 60) + 'm ' + (data.feedingModeTimeRemaining % 60) + 's)';
+                            document.getElementById('btn1').disabled = true;
+                            document.getElementById('btn3').disabled = true;
+                        } else {
+                            btn.className = 'button special-button';
+                            btn.textContent = 'Feeding Mode (5m)';
+                            document.getElementById('btn1').disabled = false;
+                            document.getElementById('btn3').disabled = false;
+                        }
+                    }
                     if (data.relay3 !== undefined) {
                         relayStates[3] = data.relay3;
                         updateButtonStyle(3);
@@ -625,6 +643,25 @@ const char mainPage[] PROGMEM = R"html(
                     showToast(relayLabel + " " + stateText, "success");
                 })
                 .catch(error => { showToast(error.message, 'error'); checkErrorStatus(); });
+        }
+
+        function toggleFeedingMode() {
+            let btn = document.getElementById('btnFeedingMode');
+            let action = btn.classList.contains('override') ? 'stop' : 'start';
+            fetch('/api/feeding_mode', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: action })
+            })
+            .then(response => response.ok ? response.json() : response.json().then(data => { throw new Error(data.error); }))
+            .then(data => {
+                showToast(action === 'start' ? "Feeding Mode Started" : "Feeding Mode Stopped", "success");
+            })
+            .catch(error => showToast(error.message, 'error'));
+        }
+
+        function showBackupRestore() {
+            window.location.href = '/backuprestore';
         }
 
         function updateButtonStyle(relay) {
