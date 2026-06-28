@@ -81,6 +81,18 @@
                                     <button class="relay-toggle" id="relay-toggle-3" onclick="toggleRelay(3)">OFF</button>
                                     <span class="override-badge hidden" id="override-3">OVERRIDE</span>
                                 </div>
+                            </div> 
+                            <div class="relay-row">
+                                <span class="relay-name">Change Light</span>
+                                <div class="relay-status-group">
+                                    <button class="relay-toggle" id="btn-light-mode" onclick="changeLight()">TOGGLE</button>
+                                </div>
+                            </div>
+                            <div class="relay-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+                                <span class="relay-name">Feeding Mode</span>
+                                <div class="relay-status-group">
+                                    <button class="relay-toggle" id="btn-feeding" onclick="toggleFeedingMode()">ACTIVATE</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -145,6 +157,14 @@
                     </a>
                     <a href="#" target="_blank" rel="noopener noreferrer" class="glass-link-btn" id="link-docker-cfg">
                         <span class="link-title">Docker Config</span>
+                        <span class="link-icon">↗</span>
+                    </a>
+                    <a href="#" target="_blank" rel="noopener noreferrer" class="glass-link-btn" id="link-backup-restore">
+                        <span class="link-title">Backup/Restore</span>
+                        <span class="link-icon">↗</span>
+                    </a>
+                    <a href="#" target="_blank" rel="noopener noreferrer" class="glass-link-btn" id="link-ota-update">
+                        <span class="link-title">OTA Update</span>
                         <span class="link-icon">↗</span>
                     </a>
                 </div>

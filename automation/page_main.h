@@ -558,6 +558,7 @@ const char mainPage[] PROGMEM = R"html(
                 <button class="button nav-button" onclick="showEmailConfig()">Email Settings</button>
                 <button class="button nav-button" onclick="showDockerConfig()">Docker Settings</button>
                 <button class="button nav-button" onclick="showBackupRestore()">Backup / Restore</button>
+                <button class="button nav-button" onclick="showOTAUpdate()">OTA Update</button>
                 <button class="button nav-button nav-full" onclick="showLogs()">System Logs</button>
             </div>
         </div>
@@ -967,6 +968,9 @@ const char mainPage[] PROGMEM = R"html(
         }
         function showDisplayCtrl() {
             window.location.href = '/displayctrl';
+        }
+        function showOTAUpdate() {
+            window.location.href = '/ota';
         }
 
         function oneClickLight() {

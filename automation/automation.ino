@@ -28,6 +28,8 @@
 #include "page_temp_schedules.h"
 #include "page_main_schedules.h"
 #include "page_backup_restore.h"
+#include "page_ota.h"
+#include <Update.h>
 
 #define OLED_SDA 21
 #define OLED_SCL 22
@@ -110,6 +112,7 @@ void saveThemeConfig();
 void handleThemeJS();
 void handleGetThemeConfig();
 void handleSaveThemeConfig();
+void handleOtaPage();
 
 struct Schedule {
   int id;
@@ -520,6 +523,36 @@ void setup() {
   server.on("/theme.js", HTTP_GET, handleThemeJS);
   server.on("/api/themeConfig", HTTP_GET, handleGetThemeConfig);
   server.on("/api/themeConfig", HTTP_POST, handleSaveThemeConfig);
+
+  server.on("/ota", HTTP_GET, handleOtaPage);
+  server.on("/update", HTTP_POST, []() {
+    server.sendHeader("Connection", "close");
+    server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+    if (!Update.hasError()) {
+      delay(100);
+      ESP.restart();
+    }
+  }, []() {
+    HTTPUpload& upload = server.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { // start with max available size
+        storeLogEntry("OTA Update Error: " + String(Update.getError()));
+      } else {
+        storeLogEntry("OTA Update Started");
+      }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+        // Error handling
+      }
+    } else if (upload.status == UPLOAD_FILE_END) {
+      if (Update.end(true)) { // true to set the size to the current progress
+        storeLogEntry("OTA Update Success: " + String(upload.totalSize) + " bytes");
+      } else {
+        storeLogEntry("OTA Update Error: " + String(Update.getError()));
+      }
+    }
+  });
+
   server.begin();
 
   apiServer.on("/api/status", HTTP_GET, handleApiStatus);
@@ -2811,4 +2844,8 @@ void handleRestore() {
   
   storeLogEntry("Configuration completely restored from backup");
   server.send(200, "application/json", "{\"status\":\"success\"}");
+}
+
+void handleOtaPage() {
+  server.send_P(200, "text/html", otaPage);
 }

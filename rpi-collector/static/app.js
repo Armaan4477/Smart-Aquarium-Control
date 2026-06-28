@@ -177,6 +177,8 @@ async function initializeLinks() {
         document.getElementById('link-disp-ctrl').href  = '/proxy/displayctrl';
         document.getElementById('link-email-cfg').href  = '/proxy/emailConfig';
         document.getElementById('link-docker-cfg').href = '/proxy/dockerConfig';
+        document.getElementById('link-backup-restore').href = '/proxy/backuprestore';
+        document.getElementById('link-ota-update').href = '/proxy/ota';
     } catch (e) {
         console.error("Could not initialize links:", e);
     }
@@ -378,6 +380,47 @@ async function toggleRelay(relayNumber) {
         console.error(e);
         el.textContent = originalText;
         alert("Error toggling relay. Check connection.");
+    }
+}
+
+// Toggle Feeding Mode
+async function toggleFeedingMode() {
+    const el = document.getElementById('btn-feeding');
+    const originalText = el.textContent;
+    el.textContent = '...';
+    try {
+        const res = await fetch('/proxy/api/feeding_mode', { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to toggle feeding mode');
+        await fetchLatestStatus();
+    } catch (e) {
+        console.error(e);
+        alert("Error toggling feeding mode. Check connection.");
+    } finally {
+        el.textContent = originalText;
+    }
+}
+
+// Change Light
+async function changeLight() {
+    const el = document.getElementById('btn-light-mode');
+    const originalText = el.textContent;
+    el.textContent = '...';
+    try {
+        const res = await fetch('/proxy/relay/oneclick', { method: 'POST' });
+        if (!res.ok) {
+            let errMsg = 'Check connection.';
+            try {
+                const data = await res.json();
+                if (data.error) errMsg = data.error;
+            } catch(e) {}
+            throw new Error(errMsg);
+        }
+        await fetchLatestStatus();
+    } catch (e) {
+        console.error(e);
+        alert("Error changing light: " + e.message);
+    } finally {
+        el.textContent = originalText;
     }
 }
 
