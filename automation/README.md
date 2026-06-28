@@ -80,6 +80,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
    - `OneWire`, `DallasTemperature`
    - `TimeLib`, `Ticker`
    - `Adafruit GFX Library`, `Adafruit SSD1306` (for OLED)
+   - `Update` (for OTA updates)
 4. **Configure Credentials**: Update the following basic variables in `automation.ino`:
    ```cpp
    const char* ssid = "Your_WiFi_SSID";
@@ -108,6 +109,8 @@ The intuitive web dashboard provides complete control over your aquarium (includ
 - **Docker Config**: Configure connection settings for the Raspberry Pi data collector.
 - **Display Control**: Configure OLED screen behavior, including operating hours and manual overrides.
 - **System Logs**: Review historical events, errors and system warnings.
+- **Backup & Restore**: Easily backup and restore the full EEPROM configuration (schedules, settings) to a JSON file.
+- **OTA Updates**: Securely perform Over-The-Air (OTA) firmware updates directly from the dashboard without needing physical access to the ESP32.
 
 ### Physical Manual Overrides
 Physical switches allow you to instantly override automated schedules without accessing the web interface:

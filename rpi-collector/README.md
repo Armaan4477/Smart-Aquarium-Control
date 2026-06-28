@@ -41,8 +41,11 @@ Before building or running the container, ensure the variables in [`config.py`](
 | `RETENTION_DAYS` | `30` | Records older than this are automatically purged |
 | `API_PORT` | `5050` | LAN port for the historical query API |
 | `SMTP_HOST` | `smtp.gmail.com`| SMTP server address for RPi email notifications |
+| `SMTP_PORT` | `465` | SMTP server port |
 | `EMAIL_SENDER_ACCOUNT`| (empty) | Your sender email address |
 | `EMAIL_SENDER_PASSWORD`| (empty) | Your app-specific email password |
+| `EMAIL_RECIPIENT`| (empty) | Destination email address for alerts |
+| `EMAIL_SUBJECT` | `Aquarium Control Logs` | Subject line for notification emails |
 
 **Note**: If you modify `config.py` while the container is running, you must rebuild it for changes to take effect: `docker compose up -d --build`
 
@@ -121,6 +124,8 @@ The collector exposes a local API for data visualization and querying. All endpo
 | `GET` | `/api/config` | Frontend configuration (ESP32 IP, etc.) |
 | `GET` | `/api/email_config` | Returns whether RPi email notifications are enabled |
 | `POST`| `/api/email_config` | Enable or disable RPi email notifications |
+| `GET` | `/api/maintenance` | Return maintenance mode status (active state and until time) |
+| `POST`| `/api/maintenance` | Update maintenance mode (start or stop) |
 | `ANY` | `/proxy/<path>` | Proxies ESP32 WebUI, dynamically rewriting HTML/JS to bypass Chrome's Private Network Access (PNA) restrictions |
 
 ---

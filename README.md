@@ -18,6 +18,8 @@ This repository is split into two primary components:
 
 - **Automated Equipment Scheduling:** Manage wave makers, lights and air pumps through weekly recurring and temporary one-time schedules.
 - **Maintenance Mode:** Temporarily pause automated background polling and email alerts via the data collector to safely perform tank maintenance without triggering false alarms.
+- **Configuration & Firmware Management:** Built-in Backup/Restore functionality for device settings and Over-The-Air (OTA) update support for seamless firmware upgrades directly from the dashboard.
+- **Persistent Dark Mode:** A modern, customizable Web UI with a built-in dark mode that remembers your preference.
 - **Precision Temperature Monitoring:** Dual-sensor setup for tracking both water and ambient temperatures.
 - **Robust Hardware Controls:** Local OLED status display and physical override switches for immediate, web-free access.
 - **Historical Data Logging:** Automated data collection every 60 seconds, stored in an SQLite database for trend analysis.
