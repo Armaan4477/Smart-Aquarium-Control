@@ -194,6 +194,26 @@ const char otaPage[] PROGMEM = R"html(
             border: 1px solid var(--error-color);
         }
         
+        .info-note {
+            background-color: rgba(33, 150, 243, 0.1);
+            color: var(--text-color);
+            padding: 12px 15px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .info-note a {
+            color: var(--primary-color);
+            font-weight: bold;
+            text-decoration: none;
+        }
+        
+        .info-note a:hover {
+            text-decoration: underline;
+        }
+        
         .warning-text {
             color: var(--warning-color);
             font-size: 0.9rem;
@@ -217,6 +237,11 @@ const char otaPage[] PROGMEM = R"html(
         </div>
         <div class="card">
             <h2>Select Firmware</h2>
+            
+            <div class="info-note">
+                <strong>Tip:</strong> It is highly recommended to <a href="/backuprestore">backup your configuration</a> before performing an OTA update.
+            </div>
+
             <form id="uploadForm" enctype="multipart/form-data">
                 <div class="form-group">
                     <label for="firmwareFile">Compiled .bin File:</label>
