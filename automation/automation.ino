@@ -1184,8 +1184,10 @@ void networkLoop(void* parameter) {
       }
 
       if (millis() - lastWifiConnectAttempt >= WIFI_RECONNECT_INTERVAL) {
-        WiFi.disconnect();
-        WiFi.begin(ssid, password);
+        if (!Update.isRunning()) {
+          WiFi.disconnect();
+          WiFi.begin(ssid, password);
+        }
         lastWifiConnectAttempt = millis();
       }
     } else {
