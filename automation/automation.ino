@@ -1147,6 +1147,12 @@ void networkLoop(void* parameter) {
         storeLogEntry("WiFi disconnected");
         activeErrors |= ERR_WIFI;
       }
+
+      if (millis() - lastWifiConnectAttempt >= WIFI_RECONNECT_INTERVAL) {
+        WiFi.disconnect();
+        WiFi.begin(ssid, password);
+        lastWifiConnectAttempt = millis();
+      }
     } else {
       if ((activeErrors & ERR_WIFI) || (acknowledgedErrors & ERR_WIFI)) {
         storeLogEntry("WiFi reconnected");
