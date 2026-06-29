@@ -116,6 +116,7 @@ void handleGetThemeConfig();
 void handleSaveThemeConfig();
 void handleOtaPage();
 void handleRollback();
+void handleReboot();
 
 struct Schedule {
   int id;
@@ -530,6 +531,7 @@ void setup() {
 
   server.on("/ota", HTTP_GET, handleOtaPage);
   server.on("/api/rollback", HTTP_POST, handleRollback);
+  server.on("/api/reboot", HTTP_POST, handleReboot);
   server.on("/update", HTTP_POST, []() {
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
@@ -2853,6 +2855,17 @@ void handleRestore() {
   
   storeLogEntry("Configuration completely restored from backup");
   server.send(200, "application/json", "{\"status\":\"success\"}");
+}
+
+void handleReboot() {
+  if (!checkAuthentication()) {
+    return;
+  }
+  
+  storeLogEntry("System reboot initiated by user");
+  server.send(200, "application/json", "{\"status\":\"success\"}");
+  delay(1000);
+  ESP.restart();
 }
 
 void handleOtaPage() {

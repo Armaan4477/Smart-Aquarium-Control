@@ -48,13 +48,11 @@ const char mainPage[] PROGMEM = R"html(
         }
 
         /* Dark Mode Overrides for Hardcoded Colors */
-        [data-theme="dark"] .temperature-item,
-        [data-theme="dark"] .raw-data-item {
+        [data-theme="dark"] .temperature-item {
             background-color: #2C2C2C !important;
         }
 
-        [data-theme="dark"] .temperature-item:hover,
-        [data-theme="dark"] .raw-data-item:hover {
+        [data-theme="dark"] .temperature-item:hover {
             background-color: #3C3C3C !important;
         }
 
@@ -66,69 +64,11 @@ const char mainPage[] PROGMEM = R"html(
             background-color: rgba(244, 67, 54, 0.25) !important;
         }
         
-        /* Table overrides (logs and schedules) */
-        [data-theme="dark"] .logs-table tr:nth-child(even),
-        [data-theme="dark"] .logs-table tr:nth-child(odd),
-        [data-theme="dark"] .logs-table tr,
-        [data-theme="dark"] .schedule-table tr {
-            background-color: #2C2C2C !important;
-            color: var(--text-color) !important;
-        }
-        
-        [data-theme="dark"] .logs-table tr:nth-child(even) {
-            background-color: #242424 !important;
-        }
-
-        [data-theme="dark"] .logs-table tr:hover,
-        [data-theme="dark"] .schedule-table tr:hover {
-            background-color: #3C3C3C !important;
-        }
-
-        [data-theme="dark"] .schedule-table tr.disabled {
-            background-color: #222 !important;
-            opacity: 0.8 !important;
-        }
-        
-        [data-theme="dark"] .temporary-indicator {
-            background-color: #4A3B00 !important;
-            color: #FFD54F !important;
-        }
-
-        [data-theme="dark"] .status-badge.on,
-        [data-theme="dark"] .override-btn.active-on {
-            background-color: #1b4332 !important;
-            color: #4CAF50 !important;
-            border-color: #4CAF50 !important;
-        }
-
-        [data-theme="dark"] .status-badge.off,
-        [data-theme="dark"] .override-btn.active-off {
-            background-color: #641220 !important;
-            color: #F44336 !important;
-            border-color: #F44336 !important;
-        }
-
-        [data-theme="dark"] .override-btn {
-            background-color: #333 !important;
-            color: var(--text-color) !important;
-        }
-
-        [data-theme="dark"] .override-btn:hover {
-            background-color: #444 !important;
-        }
-
-        [data-theme="dark"] .override-btn.active-schedule {
-            background-color: var(--primary-dark) !important;
-            color: white !important;
-        }
-
-        [data-theme="dark"] #clearErrorBtn,
         [data-theme="dark"] .dismiss-btn {
             background-color: #333 !important;
             color: var(--error-color) !important;
         }
 
-        [data-theme="dark"] #clearErrorBtn:hover,
         [data-theme="dark"] .dismiss-btn:hover {
             background-color: #444 !important;
         }
@@ -136,20 +76,6 @@ const char mainPage[] PROGMEM = R"html(
         [data-theme="dark"] .dismiss-all:hover {
             background-color: #333 !important;
         }
-
-        [data-theme="dark"] input,
-        [data-theme="dark"] select,
-        [data-theme="dark"] textarea {
-            background-color: #333 !important;
-            color: white !important;
-            border-color: #555 !important;
-        }
-        
-        [data-theme="dark"] .modal-content {
-            background-color: var(--card-color) !important;
-        }
-
-
         * {
             box-sizing: border-box;
             margin: 0;
@@ -388,24 +314,6 @@ const char mainPage[] PROGMEM = R"html(
             0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.4); }
             70% { box-shadow: 0 0 0 10px rgba(244, 67, 54, 0); }
             100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
-        }
-
-        #clearErrorBtn {
-            padding: 12px 24px;
-            background-color: white;
-            color: var(--error-color);
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 500;
-            margin-top: 15px;
-            transition: var(--transition);
-        }
-
-        #clearErrorBtn:hover {
-            background-color: #f5f5f5;
-            transform: scale(1.05);
         }
 
         @media (max-width: 768px) {
@@ -807,10 +715,6 @@ const char mainPage[] PROGMEM = R"html(
                 showToast(action === 'start' ? "Feeding Mode Started" : "Feeding Mode Stopped", "success");
             })
             .catch(error => showToast(error.message, 'error'));
-        }
-
-        function showBackupRestore() {
-            window.location.href = '/backuprestore';
         }
 
         function updateButtonStyle(relay) {

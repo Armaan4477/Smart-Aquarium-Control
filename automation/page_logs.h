@@ -46,22 +46,10 @@ const char logsPage[] PROGMEM = R"html(
             --lightbtn-color: #bfa13a;
         }
 
-        /* Dark Mode Overrides for Hardcoded Colors */
-        [data-theme="dark"] .temperature-item,
-        [data-theme="dark"] .raw-data-item {
-            background-color: #2C2C2C !important;
-        }
-
-        [data-theme="dark"] .temperature-item:hover,
-        [data-theme="dark"] .raw-data-item:hover {
-            background-color: #3C3C3C !important;
-        }
-        
-        /* Table overrides (logs and schedules) */
+        /* Table overrides */
         [data-theme="dark"] .logs-table tr:nth-child(even),
         [data-theme="dark"] .logs-table tr:nth-child(odd),
-        [data-theme="dark"] .logs-table tr,
-        [data-theme="dark"] .schedule-table tr {
+        [data-theme="dark"] .logs-table tr {
             background-color: #2C2C2C !important;
             color: var(--text-color) !important;
         }
@@ -70,77 +58,9 @@ const char logsPage[] PROGMEM = R"html(
             background-color: #242424 !important;
         }
 
-        [data-theme="dark"] .logs-table tr:hover,
-        [data-theme="dark"] .schedule-table tr:hover {
+        [data-theme="dark"] .logs-table tr:hover {
             background-color: #3C3C3C !important;
         }
-
-        [data-theme="dark"] .schedule-table tr.disabled {
-            background-color: #222 !important;
-            opacity: 0.8 !important;
-        }
-        
-        [data-theme="dark"] .temporary-indicator {
-            background-color: #4A3B00 !important;
-            color: #FFD54F !important;
-        }
-
-        [data-theme="dark"] .status-badge.on,
-        [data-theme="dark"] .override-btn.active-on {
-            background-color: #1b4332 !important;
-            color: #4CAF50 !important;
-            border-color: #4CAF50 !important;
-        }
-
-        [data-theme="dark"] .status-badge.off,
-        [data-theme="dark"] .override-btn.active-off {
-            background-color: #641220 !important;
-            color: #F44336 !important;
-            border-color: #F44336 !important;
-        }
-
-        [data-theme="dark"] .override-btn {
-            background-color: #333 !important;
-            color: var(--text-color) !important;
-        }
-
-        [data-theme="dark"] .override-btn:hover {
-            background-color: #444 !important;
-        }
-
-        [data-theme="dark"] .override-btn.active-schedule {
-            background-color: var(--primary-dark) !important;
-            color: white !important;
-        }
-
-        [data-theme="dark"] #clearErrorBtn,
-        [data-theme="dark"] .dismiss-btn {
-            background-color: #333 !important;
-            color: var(--error-color) !important;
-        }
-
-        [data-theme="dark"] #clearErrorBtn:hover,
-        [data-theme="dark"] .dismiss-btn:hover {
-            background-color: #444 !important;
-        }
-
-        [data-theme="dark"] .dismiss-all:hover {
-            background-color: #333 !important;
-        }
-
-        [data-theme="dark"] input,
-        [data-theme="dark"] select,
-        [data-theme="dark"] textarea {
-            background-color: #333 !important;
-            color: white !important;
-            border-color: #555 !important;
-        }
-        
-        [data-theme="dark"] .modal-content {
-            background-color: var(--card-color) !important;
-        }
-
-
         * {
             box-sizing: border-box;
             margin: 0;
@@ -300,43 +220,7 @@ const char logsPage[] PROGMEM = R"html(
             100% { transform: rotate(360deg); }
         }
 
-        #errorSection h3 {
-            color: #fff;
-            border-bottom: 2px solid rgba(255,255,255,0.3);
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-        }
-        .error-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(0,0,0,0.15);
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            font-size: 1.1rem;
-        }
-        .dismiss-btn {
-            background-color: #fff;
-            color: var(--error-color);
-            padding: 5px 15px;
-            font-size: 0.9rem;
-            margin: 0;
-        }
-        .dismiss-btn:hover {
-            background-color: #f1f1f1;
-            transform: scale(1.05);
-        }
-        .dismiss-all {
-            background-color: transparent;
-            color: #fff;
-            border: 2px solid #fff;
-            width: 100%;
-        }
-        .dismiss-all:hover {
-            background-color: #fff;
-            color: var(--error-color);
-        }
+
     </style>
 </head>
 <body>

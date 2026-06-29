@@ -46,31 +46,12 @@ const char mainSchedules[] PROGMEM = R"html(
             --lightbtn-color: #bfa13a;
         }
 
-        /* Dark Mode Overrides for Hardcoded Colors */
-        [data-theme="dark"] .temperature-item,
-        [data-theme="dark"] .raw-data-item {
-            background-color: #2C2C2C !important;
-        }
-
-        [data-theme="dark"] .temperature-item:hover,
-        [data-theme="dark"] .raw-data-item:hover {
-            background-color: #3C3C3C !important;
-        }
-        
-        /* Table overrides (logs and schedules) */
-        [data-theme="dark"] .logs-table tr:nth-child(even),
-        [data-theme="dark"] .logs-table tr:nth-child(odd),
-        [data-theme="dark"] .logs-table tr,
+        /* Table overrides */
         [data-theme="dark"] .schedule-table tr {
             background-color: #2C2C2C !important;
             color: var(--text-color) !important;
         }
-        
-        [data-theme="dark"] .logs-table tr:nth-child(even) {
-            background-color: #242424 !important;
-        }
 
-        [data-theme="dark"] .logs-table tr:hover,
         [data-theme="dark"] .schedule-table tr:hover {
             background-color: #3C3C3C !important;
         }
@@ -78,54 +59,6 @@ const char mainSchedules[] PROGMEM = R"html(
         [data-theme="dark"] .schedule-table tr.disabled {
             background-color: #222 !important;
             opacity: 0.8 !important;
-        }
-        
-        [data-theme="dark"] .temporary-indicator {
-            background-color: #4A3B00 !important;
-            color: #FFD54F !important;
-        }
-
-        [data-theme="dark"] .status-badge.on,
-        [data-theme="dark"] .override-btn.active-on {
-            background-color: #1b4332 !important;
-            color: #4CAF50 !important;
-            border-color: #4CAF50 !important;
-        }
-
-        [data-theme="dark"] .status-badge.off,
-        [data-theme="dark"] .override-btn.active-off {
-            background-color: #641220 !important;
-            color: #F44336 !important;
-            border-color: #F44336 !important;
-        }
-
-        [data-theme="dark"] .override-btn {
-            background-color: #333 !important;
-            color: var(--text-color) !important;
-        }
-
-        [data-theme="dark"] .override-btn:hover {
-            background-color: #444 !important;
-        }
-
-        [data-theme="dark"] .override-btn.active-schedule {
-            background-color: var(--primary-dark) !important;
-            color: white !important;
-        }
-
-        [data-theme="dark"] #clearErrorBtn,
-        [data-theme="dark"] .dismiss-btn {
-            background-color: #333 !important;
-            color: var(--error-color) !important;
-        }
-
-        [data-theme="dark"] #clearErrorBtn:hover,
-        [data-theme="dark"] .dismiss-btn:hover {
-            background-color: #444 !important;
-        }
-
-        [data-theme="dark"] .dismiss-all:hover {
-            background-color: #333 !important;
         }
 
         [data-theme="dark"] input,
@@ -216,7 +149,7 @@ const char mainSchedules[] PROGMEM = R"html(
             gap: 10px;
         }
 
-        .schedule-form, .log-section {
+        .schedule-form {
             background-color: var(--card-color);
             padding: 25px;
             border-radius: var(--border-radius);
@@ -225,11 +158,11 @@ const char mainSchedules[] PROGMEM = R"html(
             transition: var(--transition);
         }
 
-        .schedule-form:hover, .log-section:hover {
+        .schedule-form:hover {
             box-shadow: 0 5px 15px rgba(0,0,0,0.15);
         }
 
-        .schedule-form h3, .log-section h3 {
+        .schedule-form h3 {
             color: var(--primary-color);
             margin-bottom: 15px;
             font-size: 1.5rem;
@@ -398,56 +331,7 @@ const char mainSchedules[] PROGMEM = R"html(
         .action-button.edit { background-color: var(--accent-color); color: white; }
         .action-button.edit:hover { background-color: #0288D1; }
 
-        #errorSection {
-            text-align: center;
-            margin: 20px 0;
-            color: white;
-            background-color: var(--error-color);
-            padding: 20px;
-            border-radius: var(--border-radius);
-            display: none;
-            animation: pulse 2s infinite;
-            box-shadow: 0 4px 10px rgba(244, 67, 54, 0.3);
-        }
 
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(244, 67, 54, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
-        }
-
-        #clearErrorBtn {
-            padding: 12px 24px;
-            background-color: white;
-            color: var(--error-color);
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 500;
-            margin-top: 15px;
-            transition: var(--transition);
-        }
-
-        #clearErrorBtn:hover {
-            background-color: #f5f5f5;
-            transform: scale(1.05);
-        }
-
-        #logSection {
-            display: none;
-        }
-
-        pre {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: var(--border-radius);
-            max-height: 300px;
-            overflow-y: auto;
-            font-family: 'Consolas', 'Monaco', monospace;
-            border: 1px solid #eee;
-            white-space: pre-wrap;
-        }
 
         .error {
             color: var(--error-color);
@@ -589,43 +473,7 @@ const char mainSchedules[] PROGMEM = R"html(
         }
 
 
-        #errorSection h3 {
-            color: #fff;
-            border-bottom: 2px solid rgba(255,255,255,0.3);
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-        }
-        .error-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(0,0,0,0.15);
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            font-size: 1.1rem;
-        }
-        .dismiss-btn {
-            background-color: #fff;
-            color: var(--error-color);
-            padding: 5px 15px;
-            font-size: 0.9rem;
-            margin: 0;
-        }
-        .dismiss-btn:hover {
-            background-color: #f1f1f1;
-            transform: scale(1.05);
-        }
-        .dismiss-all {
-            background-color: transparent;
-            color: #fff;
-            border: 2px solid #fff;
-            width: 100%;
-        }
-        .dismiss-all:hover {
-            background-color: #fff;
-            color: var(--error-color);
-        }
+
 
         /* Toast */
         #toast {
@@ -803,13 +651,11 @@ const char mainSchedules[] PROGMEM = R"html(
             })
             .then(() => { 
                 loadSchedules(); 
-                checkErrorStatus(); 
                 showToast(editingScheduleId !== null ? 'Schedule updated successfully!' : 'Schedule added successfully!', 'success');
                 if (editingScheduleId !== null) cancelEdit();
             })
             .catch(error => { 
                 showToast('Failed to save schedule: ' + error.message, 'error'); 
-                checkErrorStatus(); 
             });
         }
 
@@ -862,52 +708,7 @@ const char mainSchedules[] PROGMEM = R"html(
             checkFields();
         }
 
-        function checkErrorStatus() {
-            fetch('/error/status')
-                .then(response => response.json())
-                .then(data => {
-                    const errSec = document.getElementById('errorSection');
-                    if (!errSec) return;
-                    let activeErrors = data.activeErrors || 0;
-                    if (activeErrors > 0) {
-                                                let html = '<h3>System Errors Detected</h3>';
-                        if (activeErrors & 1) html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
-                        if (activeErrors & 2) html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
-                        if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
-                        if (activeErrors & 8) html += '<p class="error-row"><span>External Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
-                        html += '<div style="margin-top: 15px;"><button class="button dismiss-btn dismiss-all" onclick="clearError(\'all\')">Dismiss All</button></div>';
-                        errSec.innerHTML = html;
-                        errSec.style.display = 'block';
-                    } else {
-                        errSec.style.display = 'none';
-                    }
-                })
-                .catch(() => {
-                    const errSec = document.getElementById('errorSection');
-                    if (errSec) errSec.style.display = 'none';
-                });
-        }
 
-        function clearError(errId) {
-            fetch('/error/clear', { 
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ error_id: errId })
-            })
-            .then(response => response.ok ? response.json() : { status: 'error' })
-            .then(data => { 
-                if (data.status === 'success') { 
-                    checkErrorStatus(); 
-                    if (errId === 'all') {
-                        showToast('All errors dismissed', 'success');
-                    } else {
-                        showToast('Error dismissed', 'success');
-                    }
-                } 
-                else { throw new Error('Failed to clear error'); }
-            })
-            .catch(error => { showToast('Failed to clear error: ' + error.message, 'error'); });
-        }
 
 
         function deleteSchedule(id) {
@@ -916,13 +717,12 @@ const char mainSchedules[] PROGMEM = R"html(
                 .then(data => { 
                     if (data.status === 'success') { 
                         loadSchedules(); 
-                        checkErrorStatus(); 
                         showToast('Schedule deleted successfully', 'success');
                     } else { 
                         throw new Error('Failed to delete schedule'); 
                     } 
                 })
-                .catch(error => { showToast('Failed to delete schedule: ' + error.message, 'error'); checkErrorStatus(); });
+                .catch(error => { showToast('Failed to delete schedule: ' + error.message, 'error'); });
         }
 
         function loadSchedules() {
@@ -981,7 +781,7 @@ const char mainSchedules[] PROGMEM = R"html(
                         actionCell.appendChild(deleteBtn);
                     });
                 })
-                .catch(() => checkErrorStatus());
+                .catch(console.error);
         }
 
         function toggleSchedule(id, enabled) {
@@ -993,10 +793,9 @@ const char mainSchedules[] PROGMEM = R"html(
             .then(response => response.ok ? response.json() : response.json().then(data => { throw new Error(data.error); }))
             .then(() => { 
                 loadSchedules(); 
-                checkErrorStatus(); 
                 showToast(enabled ? 'Schedule activated' : 'Schedule deactivated', 'success');
             })
-            .catch(error => { showToast('Failed to update schedule: ' + error.message, 'error'); checkErrorStatus(); });
+            .catch(error => { showToast('Failed to update schedule: ' + error.message, 'error'); });
         }
 
         function checkFields() {

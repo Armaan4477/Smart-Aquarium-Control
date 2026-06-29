@@ -211,6 +211,14 @@ const char deviceSettingsPage[] PROGMEM = R"html(
             margin-bottom: 20px;
         }
         
+        .section-subtitle {
+            color: var(--text-color);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            font-weight: 600;
+            opacity: 0.9;
+        }
+        
         .navigation-buttons {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -269,12 +277,29 @@ const char deviceSettingsPage[] PROGMEM = R"html(
         </div>
 
         <div class="card">
+            <h3>System Management</h3>
+            <div class="navigation-buttons">
+                <button class="nav-button" onclick="rebootDevice()" style="background-color: var(--error-color);">Reboot Device</button>
+            </div>
+        </div>
+
+        <div class="card">
             <h3>Configuration Options</h3>
+            
+            <h4 class="section-subtitle">Hardware Setup</h4>
             <div class="navigation-buttons">
                 <button class="nav-button" onclick="showTempControl()">Sensor Calibration</button>
                 <button class="nav-button" onclick="showDisplayCtrl()">Display Control</button>
+            </div>
+
+            <h4 class="section-subtitle" style="margin-top: 20px;">Services</h4>
+            <div class="navigation-buttons">
                 <button class="nav-button" onclick="showEmailConfig()">Email Settings</button>
                 <button class="nav-button" onclick="showDockerConfig()">Docker Settings</button>
+            </div>
+
+            <h4 class="section-subtitle" style="margin-top: 20px;">System Maintenance</h4>
+            <div class="navigation-buttons">
                 <button class="nav-button" onclick="showBackupRestore()">Backup / Restore</button>
                 <button class="nav-button" onclick="showOTAUpdate()">OTA Update</button>
             </div>
@@ -282,6 +307,22 @@ const char deviceSettingsPage[] PROGMEM = R"html(
     </div>
     
     <script>
+        function rebootDevice() {
+            if(confirm("Are you sure you want to reboot the device?")) {
+                fetch('/api/reboot', { method: 'POST' })
+                .then(response => {
+                    if(response.ok) {
+                        alert("Device is rebooting. Please wait a moment and refresh the page.");
+                    } else {
+                        alert("Failed to initiate reboot.");
+                    }
+                })
+                .catch(error => {
+                    alert("Error: " + error);
+                });
+            }
+        }
+
         function goBack() { window.location.href = '/'; }
         
         function showTempControl() {
