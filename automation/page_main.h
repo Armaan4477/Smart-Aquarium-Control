@@ -57,6 +57,14 @@ const char mainPage[] PROGMEM = R"html(
         [data-theme="dark"] .raw-data-item:hover {
             background-color: #3C3C3C !important;
         }
+
+        .temperature-item.error-state {
+            background-color: rgba(244, 67, 54, 0.15) !important;
+        }
+
+        [data-theme="dark"] .temperature-item.error-state {
+            background-color: rgba(244, 67, 54, 0.25) !important;
+        }
         
         /* Table overrides (logs and schedules) */
         [data-theme="dark"] .logs-table tr:nth-child(even),
@@ -614,23 +622,19 @@ const char mainPage[] PROGMEM = R"html(
             if (tempEl) {
                 if ((currentActiveErrors & 4) || (currentAckErrors & 4)) { // ERR_TEMP_INT
                     tempEl.textContent = '-- °C';
-                    tempEl.parentElement.style.backgroundColor = 'rgba(244, 67, 54, 0.15)';
-                    tempEl.parentElement.style.color = 'var(--error-color)';
+                    tempEl.parentElement.classList.add('error-state');
                 } else {
                     tempEl.textContent = lastReceivedTemp + ' °C';
-                    tempEl.parentElement.style.backgroundColor = '';
-                    tempEl.parentElement.style.color = '';
+                    tempEl.parentElement.classList.remove('error-state');
                 }
             }
             if (extTempEl) {
                 if ((currentActiveErrors & 8) || (currentAckErrors & 8)) { // ERR_TEMP_EXT
                     extTempEl.textContent = '-- °C';
-                    extTempEl.parentElement.style.backgroundColor = 'rgba(244, 67, 54, 0.15)';
-                    extTempEl.parentElement.style.color = 'var(--error-color)';
+                    extTempEl.parentElement.classList.add('error-state');
                 } else {
                     extTempEl.textContent = lastReceivedExtTemp + ' °C';
-                    extTempEl.parentElement.style.backgroundColor = '';
-                    extTempEl.parentElement.style.color = '';
+                    extTempEl.parentElement.classList.remove('error-state');
                 }
             }
         }

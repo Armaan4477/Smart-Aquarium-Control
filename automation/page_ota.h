@@ -258,6 +258,12 @@ const char otaPage[] PROGMEM = R"html(
                 <span class="warning-text">Do not close this page or turn off the device during update!</span>
             </form>
         </div>
+        
+        <div class="card" id="rollbackCard">
+            <h2>Firmware Rollback</h2>
+            <p style="margin-bottom: 15px;">If the current firmware is unstable, you can revert to the previously installed version (Dual-Bank OTA).</p>
+            <button type="button" class="button" style="background-color: var(--warning-color); color: #000; width: 100%; font-weight: bold;" id="rollbackBtn" onclick="triggerRollback()">Revert to Previous Firmware</button>
+        </div>
     </div>
 
     <script>
@@ -339,6 +345,34 @@ const char otaPage[] PROGMEM = R"html(
             uploadBtn.disabled = false;
             uploadBtn.innerText = 'Upload and Update';
             progressBar.style.backgroundColor = 'var(--error-color)';
+        }
+
+        function triggerRollback() {
+            if (!confirm('Are you sure you want to revert to the previous firmware version? The device will reboot immediately if successful.')) return;
+            
+            const btn = document.getElementById('rollbackBtn');
+            btn.disabled = true;
+            btn.innerText = 'Rolling back...';
+            statusMessage.style.display = 'none';
+
+            fetch('/api/rollback', { method: 'POST' })
+            .then(response => {
+                if (response.ok) {
+                    showStatus('Rollback Successful! Rebooting...', 'success');
+                    setTimeout(() => window.location.href = '/', 5000);
+                } else {
+                    response.text().then(text => {
+                        showStatus('Rollback Failed: ' + text, 'error');
+                        btn.disabled = false;
+                        btn.innerText = 'Revert to Previous Firmware';
+                    });
+                }
+            })
+            .catch(error => {
+                showStatus('Network error during rollback', 'error');
+                btn.disabled = false;
+                btn.innerText = 'Revert to Previous Firmware';
+            });
         }
     </script>
 </body>

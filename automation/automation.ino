@@ -113,6 +113,7 @@ void handleThemeJS();
 void handleGetThemeConfig();
 void handleSaveThemeConfig();
 void handleOtaPage();
+void handleRollback();
 
 struct Schedule {
   int id;
@@ -525,6 +526,7 @@ void setup() {
   server.on("/api/themeConfig", HTTP_POST, handleSaveThemeConfig);
 
   server.on("/ota", HTTP_GET, handleOtaPage);
+  server.on("/api/rollback", HTTP_POST, handleRollback);
   server.on("/update", HTTP_POST, []() {
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
@@ -2847,5 +2849,28 @@ void handleRestore() {
 }
 
 void handleOtaPage() {
+  if (!checkAuthentication()) {
+    return;
+  }
   server.send_P(200, "text/html", otaPage);
+}
+
+void handleRollback() {
+  if (!checkAuthentication()) {
+    return;
+  }
+
+  if (Update.canRollBack()) {
+    if (Update.rollBack()) {
+      storeLogEntry("Firmware Rollback Successful");
+      server.send(200, "text/plain", "OK");
+      delay(500);
+      ESP.restart();
+    } else {
+      storeLogEntry("Firmware Rollback Failed");
+      server.send(500, "text/plain", "Rollback failed");
+    }
+  } else {
+    server.send(400, "text/plain", "No previous firmware available to rollback");
+  }
 }
