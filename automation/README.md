@@ -85,10 +85,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
    ```cpp
    const char* ssid = "Your_WiFi_SSID";
    const char* password = "Your_WiFi_Password";
-   const char* authUsername = "admin";
-   const char* authPassword = "your_password";
    ```
-   *(Note: Email and Docker settings are no longer hardcoded here; configure them directly via the Web UI.)*
 5. **Review Deployment Settings**: 
    - Update the `allowedIPs` list to match your local network devices.
    - Adjust sensor addresses (`sensorAddress`, `externalSensorAddress`).
@@ -105,6 +102,7 @@ The intuitive web dashboard provides complete control over your aquarium (includ
 - **Schedules**: Create and manage recurring weekly schedules.
 - **Temp Schedules**: Set up one-time, expiring temporary schedules.
 - **Temp Control**: Monitor raw temperature data and calibrate internal/external sensors.
+- **Auth Config**: Update Web UI login credentials (default is `Admin` / `Admin`, saved persistently to EEPROM).
 - **Email Config**: Manage SMTP email credentials directly from the web interface (saved persistently to EEPROM).
 - **Docker Config**: Configure connection settings for the Raspberry Pi data collector.
 - **Display Control**: Configure OLED screen behavior, including operating hours and manual overrides.
@@ -124,3 +122,4 @@ Physical switches allow you to instantly override automated schedules without ac
 - **Sensor Polling**: Internal temps update every 20s, external every 60s.
 - **Health Checks**: Schedule verification runs every second.
 - **Email Reporting**: Automated status emails are dispatched periodically and upon critical sensor failures.
+- **Fallback Access Point**: If WiFi fails to connect, the ESP32 hosts a fallback AP (`ESP32_Aquarium` / `aquarium123`). This mode provides full Web UI access and allows for safe OTA updates even when the local network is down.
