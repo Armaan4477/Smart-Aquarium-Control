@@ -211,6 +211,9 @@ uint16_t acknowledgedErrors = 0;
 
 const char* ssid = "Your_WiFi_SSID";
 const char* password = "Your_WiFi_Password";
+bool isApActive = false;
+const char* apSsid = "ESP32_Aquarium";
+const char* apPassword = "aquarium123";
 const char* authUsername = "admin";
 const char* authPassword = "12345678";
 std::vector<LogEntry> logBuffer;
@@ -481,6 +484,10 @@ void setup() {
     if (millis() - wifiStartTime > wifiTimeout) {
       storeLogEntry("WiFi connection failed.");
       activeErrors |= ERR_WIFI;
+      WiFi.mode(WIFI_AP_STA);
+      WiFi.softAP(apSsid, apPassword);
+      isApActive = true;
+      storeLogEntry("Fallback AP started");
       break;
     }
 
@@ -1152,6 +1159,13 @@ void networkLoop(void* parameter) {
         activeErrors |= ERR_WIFI;
       }
 
+      if (!isApActive) {
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.softAP(apSsid, apPassword);
+        isApActive = true;
+        storeLogEntry("Fallback AP started");
+      }
+
       if (millis() - lastWifiConnectAttempt >= WIFI_RECONNECT_INTERVAL) {
         WiFi.disconnect();
         WiFi.begin(ssid, password);
@@ -1162,6 +1176,13 @@ void networkLoop(void* parameter) {
         storeLogEntry("WiFi reconnected");
         activeErrors &= ~ERR_WIFI;
         acknowledgedErrors &= ~ERR_WIFI;
+      }
+
+      if (isApActive) {
+        WiFi.softAPdisconnect(true);
+        WiFi.mode(WIFI_STA);
+        isApActive = false;
+        storeLogEntry("Fallback AP stopped");
       }
     }
 
