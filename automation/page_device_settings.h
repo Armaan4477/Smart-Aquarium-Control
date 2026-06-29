@@ -344,10 +344,11 @@ const char deviceSettingsPage[] PROGMEM = R"html(
                 <button class="nav-button" onclick="showDisplayCtrl()">Display Control</button>
             </div>
 
-            <h4 class="section-subtitle" style="margin-top: 20px;">Services</h4>
+            <h4 class="section-subtitle" style="margin-top: 20px;">Services & Security</h4>
             <div class="navigation-buttons">
                 <button class="nav-button" onclick="showEmailConfig()">Email Settings</button>
                 <button class="nav-button" onclick="showDockerConfig()">Docker Settings</button>
+                <button class="nav-button nav-full" onclick="showAuthConfig()">Authentication Settings</button>
             </div>
 
             <h4 class="section-subtitle" style="margin-top: 20px;">System Maintenance</h4>
@@ -473,6 +474,9 @@ const char deviceSettingsPage[] PROGMEM = R"html(
         }
         function showOTAUpdate() {
             window.location.href = '/ota';
+        }
+        function showAuthConfig() {
+            window.location.href = '/authconfig';
         }
     </script>
 </body>

@@ -30,6 +30,7 @@
 #include "page_backup_restore.h"
 #include "page_ota.h"
 #include "page_device_settings.h"
+#include "page_auth_config.h"
 #include <Update.h>
 
 #define OLED_SDA 21
@@ -119,6 +120,11 @@ void handleSaveThemeConfig();
 void handleOtaPage();
 void handleRollback();
 void handleReboot();
+void handleAuthConfigPage();
+void handleGetAuthConfig();
+void handleSaveAuthConfig();
+void loadAuthConfig();
+void saveAuthConfig();
 
 struct Schedule {
   int id;
@@ -184,6 +190,12 @@ struct ThemeConfig {
   bool isDarkMode;
 };
 
+struct AuthConfig {
+  uint8_t magic;
+  char username[32];
+  char password[32];
+};
+
 const int relay1 = 18;
 const int relay2 = 19;
 const int relay3 = 23;
@@ -214,8 +226,6 @@ const char* password = "Your_WiFi_Password";
 bool isApActive = false;
 const char* apSsid = "ESP32_Aquarium";
 const char* apPassword = "aquarium123";
-const char* authUsername = "admin";
-const char* authPassword = "12345678";
 std::vector<LogEntry> logBuffer;
 bool spiffsInitialized = false;
 WiFiUDP ntpUDP;
@@ -299,6 +309,9 @@ DockerConfig dockerConfig = { 0xD1, false };
 
 const int THEME_CONFIG_ADDR = DOCKER_CONFIG_ADDR + sizeof(DockerConfig) + 1;
 ThemeConfig themeConfig = { 0xDC, false };
+
+const int AUTH_CONFIG_ADDR = THEME_CONFIG_ADDR + sizeof(ThemeConfig) + 1;
+AuthConfig authConfig = { 0xA1, "Admin", "Admin" };
 
 bool oledPhysicalState = false;
 
@@ -539,6 +552,9 @@ void setup() {
   server.on("/theme.js", HTTP_GET, handleThemeJS);
   server.on("/api/themeConfig", HTTP_GET, handleGetThemeConfig);
   server.on("/api/themeConfig", HTTP_POST, handleSaveThemeConfig);
+  server.on("/authconfig", HTTP_GET, handleAuthConfigPage);
+  server.on("/api/authConfig", HTTP_GET, handleGetAuthConfig);
+  server.on("/api/authConfig", HTTP_POST, handleSaveAuthConfig);
 
   server.on("/ota", HTTP_GET, handleOtaPage);
   server.on("/api/rollback", HTTP_POST, handleRollback);
@@ -585,6 +601,7 @@ void setup() {
   loadEmailConfig();
   loadDockerConfig();
   loadThemeConfig();
+  loadAuthConfig();
 
   schedules.reserve(MAX_SCHEDULES);
   temporarySchedules.reserve(6);
@@ -1091,7 +1108,7 @@ bool checkAuthentication() {
       return true;
     }
   }
-  if (!server.authenticate(authUsername, authPassword)) {
+  if (!server.authenticate(authConfig.username, authConfig.password)) {
     server.requestAuthentication();
     return false;
   }
@@ -2834,6 +2851,10 @@ void handleBackup() {
   JsonObject docker = doc.createNestedObject("dockerConfig");
   docker["enabled"] = dockerConfig.enabled;
   
+  JsonObject auth = doc.createNestedObject("authConfig");
+  auth["username"] = authConfig.username;
+  auth["password"] = authConfig.password;
+  
   String output;
   serializeJson(doc, output);
   server.send(200, "application/json", output);
@@ -2914,6 +2935,14 @@ void handleRestore() {
     EEPROM.commit();
   }
   
+  if (doc.containsKey("authConfig")) {
+    authConfig.magic = 0xA1;
+    strlcpy(authConfig.username, doc["authConfig"]["username"] | "Admin", sizeof(authConfig.username));
+    strlcpy(authConfig.password, doc["authConfig"]["password"] | "Admin", sizeof(authConfig.password));
+    EEPROM.put(AUTH_CONFIG_ADDR, authConfig);
+    EEPROM.commit();
+  }
+  
   storeLogEntry("Configuration completely restored from backup");
   server.send(200, "application/json", "{\"status\":\"success\"}");
 }
@@ -2954,4 +2983,68 @@ void handleRollback() {
   } else {
     server.send(400, "text/plain", "No previous firmware available to rollback");
   }
+}
+
+void handleAuthConfigPage() {
+  if (!checkAuthentication()) {
+    return;
+  }
+  server.send_P(200, "text/html", authConfigPage);
+}
+
+void loadAuthConfig() {
+  AuthConfig stored;
+  EEPROM.get(AUTH_CONFIG_ADDR, stored);
+  if (stored.magic == 0xA1 && strlen(stored.username) > 0 && strlen(stored.password) > 0) {
+    authConfig = stored;
+  } else {
+    // If not found, fall back to "Admin"
+    strlcpy(authConfig.username, "Admin", sizeof(authConfig.username));
+    strlcpy(authConfig.password, "Admin", sizeof(authConfig.password));
+    saveAuthConfig();
+    storeLogEntry("Using default auth config");
+  }
+}
+
+void saveAuthConfig() {
+  authConfig.magic = 0xA1;
+  EEPROM.put(AUTH_CONFIG_ADDR, authConfig);
+  EEPROM.commit();
+  storeLogEntry("Auth config saved to EEPROM");
+}
+
+void handleGetAuthConfig() {
+  if (!checkAuthentication()) return;
+  String json = "{";
+  json += "\"username\":\"" + String(authConfig.username) + "\",";
+  json += "\"password\":\"" + String(authConfig.password) + "\"";
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void handleSaveAuthConfig() {
+  if (!checkAuthentication()) return;
+  
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    StaticJsonDocument<256> doc;
+    DeserializationError error = deserializeJson(doc, body);
+
+    if (!error) {
+      if (doc.containsKey("username") && doc.containsKey("password")) {
+        const char* un = doc["username"];
+        const char* pw = doc["password"];
+        
+        if (strlen(un) > 0 && strlen(pw) > 0 && strlen(un) < 32 && strlen(pw) < 32) {
+          strlcpy(authConfig.username, un, sizeof(authConfig.username));
+          strlcpy(authConfig.password, pw, sizeof(authConfig.password));
+          saveAuthConfig();
+          server.send(200, "application/json", "{\"success\":true}");
+          storeLogEntry("Authentication credentials updated");
+          return;
+        }
+      }
+    }
+  }
+  server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
