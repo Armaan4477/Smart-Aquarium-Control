@@ -46,6 +46,7 @@ const char tempschedules[] PROGMEM = R"html(
             --lightbtn-color: #bfa13a;
         }
 
+
         /* Dark Mode Overrides for Hardcoded Colors */
         [data-theme="dark"] .temperature-item,
         [data-theme="dark"] .raw-data-item {
@@ -713,6 +714,28 @@ const char tempschedules[] PROGMEM = R"html(
         #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         #toast.success { background: var(--success-color); }
         #toast.error   { background: var(--error-color); display: block !important; }
+        @media (max-width: 768px) {
+            [data-theme="dark"] {
+                --background-color: #000000;
+                --card-color: #000000;
+            }
+            [data-theme="dark"] .temperature-item:not(.error-state),
+            [data-theme="dark"] .raw-data-item,
+            [data-theme="dark"] .logs-table tr,
+            [data-theme="dark"] .logs-table tr:nth-child(even),
+            [data-theme="dark"] .logs-table tr:nth-child(odd),
+            [data-theme="dark"] .schedule-table tr,
+            [data-theme="dark"] .schedule-table tr:nth-child(even),
+            [data-theme="dark"] .schedule-table tr:nth-child(odd) {
+                background-color: #000000 !important;
+            }
+            [data-theme="dark"] .temperature-item:not(.error-state):hover,
+            [data-theme="dark"] .raw-data-item:hover,
+            [data-theme="dark"] .logs-table tr:hover,
+            [data-theme="dark"] .schedule-table tr:hover {
+                background-color: #111111 !important;
+            }
+        }
     </style>
 </head>
 <body>
