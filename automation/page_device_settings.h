@@ -335,7 +335,10 @@ const char deviceSettingsPage[] PROGMEM = R"html(
                 fetch('/api/reboot', { method: 'POST' })
                 .then(response => {
                     if(response.ok) {
-                        alert("Device is rebooting. Please wait a moment and refresh the page.");
+                        alert("Device is rebooting. You will be redirected shortly.");
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 8000);
                     } else {
                         alert("Failed to initiate reboot.");
                     }
