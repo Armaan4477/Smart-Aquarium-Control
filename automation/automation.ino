@@ -29,6 +29,7 @@
 #include "page_main_schedules.h"
 #include "page_backup_restore.h"
 #include "page_ota.h"
+#include "page_device_settings.h"
 #include <Update.h>
 
 #define OLED_SDA 21
@@ -78,6 +79,7 @@ void handleGetTemporarySchedules();
 void handleAddTemporarySchedule();
 void handleDeleteTemporarySchedule();
 void checkTemporarySchedules();
+void handleDeviceSettingsPage();
 void handleTempCtrlPage();
 void handleTempSchedulesPage();
 void handleSchedulesPage();
@@ -486,6 +488,7 @@ void setup() {
   server.on("/favicon.png", HTTP_GET, handleFavicon);
   server.on("/logs", HTTP_GET, handleLogsPage);
   server.on("/logs/data", HTTP_GET, handleGetLogs);
+  server.on("/devicesettings", HTTP_GET, handleDeviceSettingsPage);
   server.on("/tempcontrol", HTTP_GET, handleTempCtrlPage);
   server.on("/tempschedules", HTTP_GET, handleTempSchedulesPage);
   server.on("/mainSchedules", HTTP_GET, handleSchedulesPage);
@@ -1092,6 +1095,10 @@ const unsigned long WIFI_RECONNECT_INTERVAL = 30000;
 
 void handleLogsPage() {
   server.send_P(200, "text/html", logsPage);
+}
+
+void handleDeviceSettingsPage() {
+  server.send_P(200, "text/html", deviceSettingsPage);
 }
 
 void handleTempCtrlPage() {

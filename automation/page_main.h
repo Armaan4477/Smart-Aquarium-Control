@@ -561,12 +561,7 @@ const char mainPage[] PROGMEM = R"html(
             <div class="navigation-buttons">
                 <button class="button nav-button" onclick="showTempSchedules()">Temporary Schedules</button>
                 <button class="button nav-button" onclick="showSchedules()">Main Schedules</button>
-                <button class="button nav-button" onclick="showTempControl()">Sensor Calibration</button>
-                <button class="button nav-button" onclick="showDisplayCtrl()">Display Control</button>
-                <button class="button nav-button" onclick="showEmailConfig()">Email Settings</button>
-                <button class="button nav-button" onclick="showDockerConfig()">Docker Settings</button>
-                <button class="button nav-button" onclick="showBackupRestore()">Backup / Restore</button>
-                <button class="button nav-button" onclick="showOTAUpdate()">OTA Update</button>
+                <button class="button nav-button nav-full" onclick="showDeviceSettings()">Device Settings</button>
                 <button class="button nav-button nav-full" onclick="showLogs()">System Logs</button>
             </div>
         </div>
@@ -954,15 +949,8 @@ const char mainPage[] PROGMEM = R"html(
         function showLogs() {
             window.location.href = '/logs';
         }
-        function showEmailConfig() {
-            window.location.href = '/emailConfig';
-        }
-
-        function showDockerConfig() {
-            window.location.href = '/dockerConfig';
-        }
-        function showTempControl() {
-            window.location.href = '/tempcontrol';
+        function showDeviceSettings() {
+            window.location.href = '/devicesettings';
         }
         function showTempSchedules() {
             window.location.href = '/tempschedules';
@@ -970,13 +958,6 @@ const char mainPage[] PROGMEM = R"html(
         function showSchedules() {
             window.location.href = '/mainSchedules';
         }
-        function showDisplayCtrl() {
-            window.location.href = '/displayctrl';
-        }
-        function showOTAUpdate() {
-            window.location.href = '/ota';
-        }
-
         function oneClickLight() {
             fetch('/relay/oneclick', { method: 'POST' })
             .then(response => response.json().then(data => {

@@ -233,7 +233,7 @@ const char otaPage[] PROGMEM = R"html(
     </header>
     <div class="container">
         <div class="header-actions">
-            <button onclick="goBack()" class="button">Back to Dashboard</button>
+            <button id="backBtn" onclick="goBack()" class="button">Back to Dashboard</button>
         </div>
         <div class="card">
             <h2>Select Firmware</h2>
@@ -293,6 +293,7 @@ const char otaPage[] PROGMEM = R"html(
             }
 
             uploadBtn.disabled = true;
+            document.getElementById('backBtn').disabled = true;
             uploadBtn.innerText = 'Uploading...';
             progressContainer.style.display = 'block';
             statusMessage.style.display = 'none';
@@ -343,6 +344,7 @@ const char otaPage[] PROGMEM = R"html(
         
         function resetForm() {
             uploadBtn.disabled = false;
+            document.getElementById('backBtn').disabled = false;
             uploadBtn.innerText = 'Upload and Update';
             progressBar.style.backgroundColor = 'var(--error-color)';
         }
@@ -352,6 +354,7 @@ const char otaPage[] PROGMEM = R"html(
             
             const btn = document.getElementById('rollbackBtn');
             btn.disabled = true;
+            document.getElementById('backBtn').disabled = true;
             btn.innerText = 'Rolling back...';
             statusMessage.style.display = 'none';
 
@@ -364,6 +367,7 @@ const char otaPage[] PROGMEM = R"html(
                     response.text().then(text => {
                         showStatus('Rollback Failed: ' + text, 'error');
                         btn.disabled = false;
+                        document.getElementById('backBtn').disabled = false;
                         btn.innerText = 'Revert to Previous Firmware';
                     });
                 }
@@ -371,6 +375,7 @@ const char otaPage[] PROGMEM = R"html(
             .catch(error => {
                 showStatus('Network error during rollback', 'error');
                 btn.disabled = false;
+                document.getElementById('backBtn').disabled = false;
                 btn.innerText = 'Revert to Previous Firmware';
             });
         }
