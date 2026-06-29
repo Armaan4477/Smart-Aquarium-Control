@@ -137,6 +137,34 @@ const char deviceSettingsPage[] PROGMEM = R"html(
             border-color: #555 !important;
         }
         
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: var(--card-color);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+        .modal-content h3 {
+            margin-bottom: 15px;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
+        }
+        
         [data-theme="dark"] .modal-content {
             background-color: var(--card-color) !important;
         }
@@ -303,6 +331,7 @@ const char deviceSettingsPage[] PROGMEM = R"html(
             <h3>System Management</h3>
             <div class="navigation-buttons">
                 <button class="nav-button" onclick="rebootDevice()" style="background-color: var(--error-color);">Reboot Device</button>
+                <button class="nav-button" onclick="openSyncModal()">Sync Time</button>
             </div>
         </div>
 
@@ -329,7 +358,83 @@ const char deviceSettingsPage[] PROGMEM = R"html(
         </div>
     </div>
     
+    <div id="syncTimeModal" class="modal">
+        <div class="modal-content">
+            <h3>Sync Time</h3>
+            <p style="margin-bottom: 20px; opacity: 0.9;">Choose how you want to synchronize the device time:</p>
+            <div class="navigation-buttons" style="grid-template-columns: 1fr; gap: 10px;">
+                <button class="nav-button" onclick="syncTimeWithDevice()">Sync Time with Device</button>
+                <button class="nav-button" onclick="syncTimeWithNTP()">Sync Time with Time Server</button>
+                <button class="nav-button" onclick="closeSyncModal()" style="background-color: var(--text-light); margin-top: 10px;">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
     <script>
+        function openSyncModal() {
+            document.getElementById('syncTimeModal').style.display = 'flex';
+        }
+        
+        function closeSyncModal() {
+            document.getElementById('syncTimeModal').style.display = 'none';
+        }
+
+        function syncTimeWithNTP() {
+            closeSyncModal();
+            fetch('/api/sync_ntp', { method: 'POST' })
+            .then(response => response.json())
+            .then(res => {
+                if(res.status === 'success') {
+                    alert("Time successfully synced with NTP server!");
+                } else {
+                    alert("Failed to sync time with NTP: " + (res.error || "Unknown error"));
+                }
+            })
+            .catch(error => {
+                alert("Error syncing time with NTP: " + error);
+            });
+        }
+
+        function syncTimeWithDevice() {
+            closeSyncModal();
+            fetch('/error/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.time_synced) {
+                    if (!confirm("Time was already synchronized successfully. Do you want to resync time?")) {
+                        return;
+                    }
+                }
+                
+                const timestamp = Math.floor(Date.now() / 1000);
+                
+                const formData = new URLSearchParams();
+                formData.append('timestamp', timestamp);
+
+                fetch('/api/sync_time', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData.toString()
+                })
+                .then(response => response.json())
+                .then(res => {
+                    if(res.status === 'success') {
+                        alert("Time successfully synced!");
+                    } else {
+                        alert("Failed to sync time: " + (res.error || "Unknown error"));
+                    }
+                })
+                .catch(error => {
+                    alert("Error syncing time: " + error);
+                });
+            })
+            .catch(error => {
+                alert("Could not fetch device status: " + error);
+            });
+        }
+
         function rebootDevice() {
             if(confirm("Are you sure you want to reboot the device?")) {
                 fetch('/api/reboot', { method: 'POST' })

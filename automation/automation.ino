@@ -48,6 +48,8 @@ void handleRelay1();
 void handleRelay2();
 void handleRelay3();
 void handleTime();
+void handleSyncTime();
+void handleSyncNTP();
 void handleFeedingModeToggle();
 void handleBackup();
 void handleRestore();
@@ -501,6 +503,8 @@ void setup() {
   server.on("/api/backup", HTTP_GET, handleBackup);
   server.on("/api/restore", HTTP_POST, handleRestore);
   server.on("/time", HTTP_GET, handleTime);
+  server.on("/api/sync_time", HTTP_POST, handleSyncTime);
+  server.on("/api/sync_ntp", HTTP_POST, handleSyncNTP);
   server.on("/schedules", HTTP_GET, handleGetSchedules);
   server.on("/schedule/add", HTTP_POST, handleAddSchedule);
   server.on("/schedule/edit", HTTP_POST, handleEditSchedule);
@@ -1811,6 +1815,35 @@ void handleTime() {
   server.send(200, "text/plain", response);
 }
 
+void handleSyncTime() {
+  if (server.hasArg("timestamp")) {
+    long timestamp = server.arg("timestamp").toInt();
+    if (timestamp > 0) {
+      struct timeval tv;
+      tv.tv_sec = timestamp;
+      tv.tv_usec = 0;
+      settimeofday(&tv, NULL);
+      
+      validTimeSync = true;
+      activeErrors &= ~ERR_NTP;
+      acknowledgedErrors &= ~ERR_NTP;
+      storeLogEntry("Time manually synced with device");
+      server.send(200, "application/json", "{\"status\":\"success\"}");
+      return;
+    }
+  }
+  server.send(400, "application/json", "{\"error\":\"Invalid or missing timestamp\"}");
+}
+
+void handleSyncNTP() {
+  attemptTimeSync();
+  if (!(activeErrors & ERR_NTP) && !(acknowledgedErrors & ERR_NTP)) {
+    server.send(200, "application/json", "{\"status\":\"success\"}");
+  } else {
+    server.send(500, "application/json", "{\"error\":\"Failed to sync with NTP server\"}");
+  }
+}
+
 void handleRelayStatus() {
   String json = "{";
   json += "\"1\":" + String(relay1State || overrideRelay1) + ",";
@@ -1876,6 +1909,7 @@ void handleGetErrorStatus() {
   StaticJsonDocument<256> doc;
   doc["activeErrors"] = activeErrors;
   doc["acknowledgedErrors"] = acknowledgedErrors;
+  doc["time_synced"] = validTimeSync;
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
