@@ -344,12 +344,12 @@ const char deviceSettingsPage[] PROGMEM = R"html(
                 <button class="nav-button" onclick="showDisplayCtrl()">Display Control</button>
             </div>
 
-            <h4 class="section-subtitle" style="margin-top: 20px;">Services & Security</h4>
+            <h4 class="section-subtitle" style="margin-top: 20px;">Security & Services</h4>
             <div class="navigation-buttons">
+                <button class="nav-button" onclick="showAuthConfig()">Authentication Settings</button>
+                <button class="nav-button" onclick="showWifiConfig()">Wi-Fi Settings</button>
                 <button class="nav-button" onclick="showEmailConfig()">Email Settings</button>
                 <button class="nav-button" onclick="showDockerConfig()">Docker Settings</button>
-                <button class="nav-button nav-full" onclick="showAuthConfig()">Authentication Settings</button>
-                <button class="nav-button nav-full" onclick="showWifiConfig()">Wi-Fi Settings</button>
             </div>
 
             <h4 class="section-subtitle" style="margin-top: 20px;">System Maintenance</h4>

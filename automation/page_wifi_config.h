@@ -480,25 +480,55 @@ const char wifiConfigPage[] PROGMEM = R"html(
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    if (data.ip) {
-                        newIp = data.ip;
-                        document.getElementById('newIpAddress').textContent = newIp;
-                        document.getElementById('successModal').style.display = 'flex';
-                    } else {
-                        showToast('Configuration saved successfully!', 'success');
-                    }
+                    btn.textContent = "Connecting to Wi-Fi...";
+                    pollWifiStatus(0);
                 } else {
                     showToast(data.error || 'Failed to save configuration', 'error');
+                    btn.textContent = "Save Settings";
+                    btn.disabled = false;
                 }
             })
             .catch(err => {
-                console.error('Save error', err);
-                showToast('Error saving configuration', 'error');
-            })
-            .finally(() => {
+                // If it fails instantly, the channel might have already switched. Start polling just in case.
+                btn.textContent = "Connecting to Wi-Fi...";
+                pollWifiStatus(0);
+            });
+        }
+
+        function pollWifiStatus(attempts) {
+            if (attempts > 30) {
+                showToast('Wi-Fi connection timed out or failed.', 'error');
+                const btn = document.querySelector('.save-btn');
                 btn.textContent = "Save Settings";
                 btn.disabled = false;
-            });
+                return;
+            }
+            
+            fetch('/api/wifi/status', { credentials: 'include' })
+                .then(res => {
+                    if (!res.ok) throw new Error('Network error');
+                    return res.json();
+                })
+                .then(data => {
+                    const btn = document.querySelector('.save-btn');
+                    if (data.status === 'connected') {
+                        newIp = data.ip;
+                        document.getElementById('newIpAddress').textContent = newIp;
+                        document.getElementById('successModal').style.display = 'flex';
+                        btn.textContent = "Save Settings";
+                        btn.disabled = false;
+                    } else if (data.status === 'failed') {
+                        showToast('Failed to connect to Wi-Fi.', 'error');
+                        btn.textContent = "Save Settings";
+                        btn.disabled = false;
+                    } else {
+                        setTimeout(() => pollWifiStatus(attempts + 1), 2000);
+                    }
+                })
+                .catch(err => {
+                    // AP channel likely changed, causing momentary disconnect. Just retry.
+                    setTimeout(() => pollWifiStatus(attempts + 1), 2000);
+                });
         }
     </script>
 </body>

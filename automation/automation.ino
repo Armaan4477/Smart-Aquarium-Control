@@ -574,6 +574,7 @@ void setup() {
   server.on("/api/wifi/scan", HTTP_GET, handleWifiScan);
   server.on("/api/wifi/config", HTTP_GET, handleGetWifiConfig);
   server.on("/api/wifi/config", HTTP_POST, handleSaveWifiConfig);
+  server.on("/api/wifi/status", HTTP_GET, handleGetWifiStatus);
 
   server.on("/ota", HTTP_GET, handleOtaPage);
   server.on("/api/rollback", HTTP_POST, handleRollback);
@@ -1142,6 +1143,8 @@ void handleFavicon() {
 
 unsigned long lastWifiConnectAttempt = 0;
 const unsigned long WIFI_RECONNECT_INTERVAL = 30000;
+unsigned long apShutdownTime = 0;
+bool pendingApShutdown = false;
 
 void handleLogsPage() {
   server.send_P(200, "text/html", logsPage);
@@ -1191,6 +1194,8 @@ void networkLoop(void* parameter) {
     }
 
     if (WiFi.status() != WL_CONNECTED) {
+      pendingApShutdown = false;
+      
       if (!(activeErrors & ERR_WIFI) && !(acknowledgedErrors & ERR_WIFI)) {
         storeLogEntry("WiFi disconnected");
         activeErrors |= ERR_WIFI;
@@ -1220,10 +1225,16 @@ void networkLoop(void* parameter) {
       }
 
       if (isApActive) {
-        WiFi.softAPdisconnect(true);
-        WiFi.mode(WIFI_STA);
-        isApActive = false;
-        storeLogEntry("Fallback AP stopped");
+        if (!pendingApShutdown) {
+          pendingApShutdown = true;
+          apShutdownTime = millis() + 15000; // 15 seconds grace period
+        } else if (millis() > apShutdownTime) {
+          WiFi.softAPdisconnect(true);
+          WiFi.mode(WIFI_STA);
+          isApActive = false;
+          pendingApShutdown = false;
+          storeLogEntry("Fallback AP stopped");
+        }
       }
     }
 
@@ -1858,8 +1869,13 @@ void handleRelay3() {
 
 
 void handleTime() {
+  if (!validTimeSync) {
+    server.send(503, "text/plain", "Time not synced");
+    return;
+  }
+
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
+  if (!getLocalTime(&timeinfo, 10)) {
     server.send(500, "text/plain", "Error getting time");
     return;
   }
@@ -3173,19 +3189,8 @@ void handleSaveWifiConfig() {
       storeLogEntry("Wi-Fi configuration updated");
 
       if (wifiChanged && strlen(wifiConfig.ssid) > 0) {
+        WiFi.disconnect();
         WiFi.begin(wifiConfig.ssid, wifiConfig.password);
-        unsigned long start = millis();
-        while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
-          delay(500);
-        }
-        if (WiFi.status() == WL_CONNECTED) {
-          String ip = WiFi.localIP().toString();
-          server.send(200, "application/json", "{\"success\":true,\"ip\":\"" + ip + "\"}");
-          return;
-        } else {
-          server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to connect to Wi-Fi\"}");
-          return;
-        }
       }
 
       if (apChanged) {
@@ -3199,4 +3204,20 @@ void handleSaveWifiConfig() {
     }
   }
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+}
+
+void handleGetWifiStatus() {
+  if (!checkAuthentication()) return;
+  DynamicJsonDocument doc(256);
+  if (WiFi.status() == WL_CONNECTED) {
+    doc["status"] = "connected";
+    doc["ip"] = WiFi.localIP().toString();
+  } else if (WiFi.status() == WL_NO_SSID_AVAIL || WiFi.status() == WL_CONNECT_FAILED) {
+    doc["status"] = "failed";
+  } else {
+    doc["status"] = "connecting";
+  }
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
 }
