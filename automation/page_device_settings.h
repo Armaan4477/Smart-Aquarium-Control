@@ -349,6 +349,7 @@ const char deviceSettingsPage[] PROGMEM = R"html(
                 <button class="nav-button" onclick="showEmailConfig()">Email Settings</button>
                 <button class="nav-button" onclick="showDockerConfig()">Docker Settings</button>
                 <button class="nav-button nav-full" onclick="showAuthConfig()">Authentication Settings</button>
+                <button class="nav-button nav-full" onclick="showWifiConfig()">Wi-Fi Settings</button>
             </div>
 
             <h4 class="section-subtitle" style="margin-top: 20px;">System Maintenance</h4>
@@ -477,6 +478,9 @@ const char deviceSettingsPage[] PROGMEM = R"html(
         }
         function showAuthConfig() {
             window.location.href = '/authconfig';
+        }
+        function showWifiConfig() {
+            window.location.href = '/wifiConfig';
         }
     </script>
 </body>

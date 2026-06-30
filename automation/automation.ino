@@ -31,6 +31,7 @@
 #include "page_ota.h"
 #include "page_device_settings.h"
 #include "page_auth_config.h"
+#include "page_wifi_config.h"
 #include <Update.h>
 
 #define OLED_SDA 21
@@ -221,11 +222,17 @@ const uint16_t ERR_TEMP_EXT = 1 << 3;
 uint16_t activeErrors = 0;
 uint16_t acknowledgedErrors = 0;
 
-const char* ssid = "Your_WiFi_SSID";
-const char* password = "Your_WiFi_Password";
+struct WifiConfig {
+  uint8_t magic;
+  char ssid[32];
+  char password[64];
+  char apSsid[32];
+  char apPassword[64];
+};
+WifiConfig wifiConfig;
+const char* fallbackApSsid = "ESP32_Aquarium";
+const char* fallbackApPassword = "aquarium123";
 bool isApActive = false;
-const char* apSsid = "ESP32_Aquarium";
-const char* apPassword = "aquarium123";
 std::vector<LogEntry> logBuffer;
 bool spiffsInitialized = false;
 WiFiUDP ntpUDP;
@@ -312,6 +319,8 @@ ThemeConfig themeConfig = { 0xDC, false };
 
 const int AUTH_CONFIG_ADDR = THEME_CONFIG_ADDR + sizeof(ThemeConfig) + 1;
 AuthConfig authConfig = { 0xA1, "Admin", "Admin" };
+
+const int WIFI_CONFIG_ADDR = AUTH_CONFIG_ADDR + sizeof(AuthConfig) + 1;
 
 bool oledPhysicalState = false;
 
@@ -472,10 +481,37 @@ void setup() {
   // Serial.begin(115200);
   // delay(2000);
 
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  unsigned long wifiStartTime = millis();
-  const unsigned long wifiTimeout = 20000;
+  EEPROM.begin(EEPROM_SIZE);
+  loadWifiConfig();
+  
+  WiFi.mode(WIFI_AP_STA);
+  const char* currentApSsid = strlen(wifiConfig.apSsid) > 0 ? wifiConfig.apSsid : fallbackApSsid;
+  const char* currentApPassword = strlen(wifiConfig.apPassword) > 0 ? wifiConfig.apPassword : fallbackApPassword;
+  WiFi.softAP(currentApSsid, currentApPassword);
+  isApActive = true;
+  storeLogEntry("AP started: " + String(currentApSsid));
+  
+  if (wifiConfig.magic == 0xA1 && strlen(wifiConfig.ssid) > 0) {
+    WiFi.begin(wifiConfig.ssid, wifiConfig.password);
+    unsigned long wifiStartTime = millis();
+    const unsigned long wifiTimeout = 20000;
+
+    while (millis() - wifiStartTime < wifiTimeout) {
+      if (WiFi.status() == WL_CONNECTED) {
+        storeLogEntry("Connected to WiFi");
+        attemptTimeSync();
+        break;
+      }
+      delay(1000);
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+      storeLogEntry("WiFi connection failed.");
+      activeErrors |= ERR_WIFI;
+    }
+  } else {
+    storeLogEntry("No WiFi config found. Starting AP mode only.");
+  }
 
   sensors.begin();
   externalSensors.begin();
@@ -484,27 +520,6 @@ void setup() {
     storeLogEntry("Failed to mount FS");
   } else {
     spiffsInitialized = true;
-  }
-
-  while (true) {
-    if (WiFi.status() == WL_CONNECTED) {
-      storeLogEntry("Connected to WiFi");
-      //storeLogEntry("IP Address: " + WiFi.localIP().toString());
-      attemptTimeSync();
-      break;
-    }
-
-    if (millis() - wifiStartTime > wifiTimeout) {
-      storeLogEntry("WiFi connection failed.");
-      activeErrors |= ERR_WIFI;
-      WiFi.mode(WIFI_AP_STA);
-      WiFi.softAP(apSsid, apPassword);
-      isApActive = true;
-      storeLogEntry("Fallback AP started");
-      break;
-    }
-
-    delay(1000);
   }
 
   server.on("/", HTTP_GET, handleRoot);
@@ -555,6 +570,10 @@ void setup() {
   server.on("/authconfig", HTTP_GET, handleAuthConfigPage);
   server.on("/api/authConfig", HTTP_GET, handleGetAuthConfig);
   server.on("/api/authConfig", HTTP_POST, handleSaveAuthConfig);
+  server.on("/wifiConfig", HTTP_GET, handleWifiConfigPage);
+  server.on("/api/wifi/scan", HTTP_GET, handleWifiScan);
+  server.on("/api/wifi/config", HTTP_GET, handleGetWifiConfig);
+  server.on("/api/wifi/config", HTTP_POST, handleSaveWifiConfig);
 
   server.on("/ota", HTTP_GET, handleOtaPage);
   server.on("/api/rollback", HTTP_POST, handleRollback);
@@ -596,7 +615,6 @@ void setup() {
   apiServer.on("/api/ping", HTTP_GET, handleApiPing);
   apiServer.on("/api/errors/clear", HTTP_POST, handleApiClearError);
   apiServer.begin();
-  EEPROM.begin(EEPROM_SIZE);
   loadSchedulesFromEEPROM();
   loadCalibrationSettings();
   loadDisplaySchedule();
@@ -1180,15 +1198,17 @@ void networkLoop(void* parameter) {
 
       if (!isApActive) {
         WiFi.mode(WIFI_AP_STA);
-        WiFi.softAP(apSsid, apPassword);
+        const char* currentApSsid = strlen(wifiConfig.apSsid) > 0 ? wifiConfig.apSsid : fallbackApSsid;
+        const char* currentApPassword = strlen(wifiConfig.apPassword) > 0 ? wifiConfig.apPassword : fallbackApPassword;
+        WiFi.softAP(currentApSsid, currentApPassword);
         isApActive = true;
         storeLogEntry("Fallback AP started");
       }
 
       if (millis() - lastWifiConnectAttempt >= WIFI_RECONNECT_INTERVAL) {
-        if (!Update.isRunning()) {
+        if (!Update.isRunning() && strlen(wifiConfig.ssid) > 0) {
           WiFi.disconnect();
-          WiFi.begin(ssid, password);
+          WiFi.begin(wifiConfig.ssid, wifiConfig.password);
         }
         lastWifiConnectAttempt = millis();
       }
@@ -2859,6 +2879,12 @@ void handleBackup() {
   auth["username"] = authConfig.username;
   auth["password"] = authConfig.password;
   
+  JsonObject wifi = doc.createNestedObject("wifiConfig");
+  wifi["ssid"] = wifiConfig.ssid;
+  wifi["password"] = wifiConfig.password;
+  wifi["apSsid"] = wifiConfig.apSsid;
+  wifi["apPassword"] = wifiConfig.apPassword;
+  
   String output;
   serializeJson(doc, output);
   server.send(200, "application/json", output);
@@ -2944,6 +2970,16 @@ void handleRestore() {
     strlcpy(authConfig.username, doc["authConfig"]["username"] | "Admin", sizeof(authConfig.username));
     strlcpy(authConfig.password, doc["authConfig"]["password"] | "Admin", sizeof(authConfig.password));
     EEPROM.put(AUTH_CONFIG_ADDR, authConfig);
+    EEPROM.commit();
+  }
+  
+  if (doc.containsKey("wifiConfig")) {
+    wifiConfig.magic = 0xA1;
+    strlcpy(wifiConfig.ssid, doc["wifiConfig"]["ssid"] | "", sizeof(wifiConfig.ssid));
+    strlcpy(wifiConfig.password, doc["wifiConfig"]["password"] | "", sizeof(wifiConfig.password));
+    strlcpy(wifiConfig.apSsid, doc["wifiConfig"]["apSsid"] | "", sizeof(wifiConfig.apSsid));
+    strlcpy(wifiConfig.apPassword, doc["wifiConfig"]["apPassword"] | "", sizeof(wifiConfig.apPassword));
+    EEPROM.put(WIFI_CONFIG_ADDR, wifiConfig);
     EEPROM.commit();
   }
   
@@ -3048,6 +3084,118 @@ void handleSaveAuthConfig() {
           return;
         }
       }
+    }
+  }
+  server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+}
+
+void loadWifiConfig() {
+  WifiConfig stored;
+  EEPROM.get(WIFI_CONFIG_ADDR, stored);
+  if (stored.magic == 0xA1) {
+    wifiConfig = stored;
+  } else {
+    wifiConfig.magic = 0xA1;
+    strlcpy(wifiConfig.ssid, "", sizeof(wifiConfig.ssid));
+    strlcpy(wifiConfig.password, "", sizeof(wifiConfig.password));
+    strlcpy(wifiConfig.apSsid, "", sizeof(wifiConfig.apSsid));
+    strlcpy(wifiConfig.apPassword, "", sizeof(wifiConfig.apPassword));
+    saveWifiConfig();
+  }
+}
+
+void saveWifiConfig() {
+  wifiConfig.magic = 0xA1;
+  EEPROM.put(WIFI_CONFIG_ADDR, wifiConfig);
+  EEPROM.commit();
+}
+
+void handleWifiConfigPage() {
+  if (!checkAuthentication()) return;
+  server.send_P(200, "text/html", wifiConfigPage);
+}
+
+void handleWifiScan() {
+  if (!checkAuthentication()) return;
+  int n = WiFi.scanNetworks();
+  String json = "[";
+  for (int i = 0; i < n; ++i) {
+    if (i > 0) json += ",";
+    json += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
+
+void handleGetWifiConfig() {
+  if (!checkAuthentication()) return;
+  DynamicJsonDocument doc(512);
+  doc["ssid"] = wifiConfig.ssid;
+  doc["apSsid"] = strlen(wifiConfig.apSsid) > 0 ? wifiConfig.apSsid : fallbackApSsid;
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleSaveWifiConfig() {
+  if (!checkAuthentication()) return;
+  
+  if (server.hasArg("plain")) {
+    String body = server.arg("plain");
+    DynamicJsonDocument doc(512);
+    DeserializationError error = deserializeJson(doc, body);
+
+    if (!error) {
+      bool wifiChanged = false;
+      bool apChanged = false;
+
+      if (doc.containsKey("ssid") && doc.containsKey("password")) {
+        const char* s = doc["ssid"];
+        const char* p = doc["password"];
+        if (strcmp(wifiConfig.ssid, s) != 0 || strcmp(wifiConfig.password, p) != 0) {
+          strlcpy(wifiConfig.ssid, s, sizeof(wifiConfig.ssid));
+          strlcpy(wifiConfig.password, p, sizeof(wifiConfig.password));
+          wifiChanged = true;
+        }
+      }
+
+      if (doc.containsKey("apSsid") && doc.containsKey("apPassword")) {
+        const char* as = doc["apSsid"];
+        const char* ap = doc["apPassword"];
+        if (strcmp(wifiConfig.apSsid, as) != 0 || strcmp(wifiConfig.apPassword, ap) != 0) {
+          strlcpy(wifiConfig.apSsid, as, sizeof(wifiConfig.apSsid));
+          strlcpy(wifiConfig.apPassword, ap, sizeof(wifiConfig.apPassword));
+          apChanged = true;
+        }
+      }
+
+      saveWifiConfig();
+      storeLogEntry("Wi-Fi configuration updated");
+
+      if (wifiChanged && strlen(wifiConfig.ssid) > 0) {
+        WiFi.begin(wifiConfig.ssid, wifiConfig.password);
+        unsigned long start = millis();
+        while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+          delay(500);
+        }
+        if (WiFi.status() == WL_CONNECTED) {
+          String ip = WiFi.localIP().toString();
+          server.send(200, "application/json", "{\"success\":true,\"ip\":\"" + ip + "\"}");
+          return;
+        } else {
+          server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to connect to Wi-Fi\"}");
+          return;
+        }
+      }
+
+      if (apChanged) {
+        const char* currentApSsid = strlen(wifiConfig.apSsid) > 0 ? wifiConfig.apSsid : fallbackApSsid;
+        const char* currentApPassword = strlen(wifiConfig.apPassword) > 0 ? wifiConfig.apPassword : fallbackApPassword;
+        WiFi.softAP(currentApSsid, currentApPassword);
+      }
+
+      server.send(200, "application/json", "{\"success\":true}");
+      return;
     }
   }
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
