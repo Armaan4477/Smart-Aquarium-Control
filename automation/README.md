@@ -81,16 +81,13 @@ This directory contains the firmware for the ESP32-based hardware controller. It
    - `TimeLib`, `Ticker`
    - `Adafruit GFX Library`, `Adafruit SSD1306` (for OLED)
    - `Update` (for OTA updates)
-4. **Configure Credentials**: Update the following basic variables in `automation.ino`:
-   ```cpp
-   const char* ssid = "Your_WiFi_SSID";
-   const char* password = "Your_WiFi_Password";
-   ```
-5. **Review Deployment Settings**: 
+4. **Review Deployment Settings**: 
    - Update the `allowedIPs` list to match your local network devices.
    - Adjust sensor addresses (`sensorAddress`, `externalSensorAddress`).
-6. **Upload**: Flash the code to your ESP32.
-7. **Access**: Navigate to the ESP32's assigned IP address in your web browser.
+5. **Upload**: Flash the code to your ESP32.
+6. **Initial Setup (Wi-Fi Provisioning)**: Connect your device to the ESP32's fallback access point (`ESP32_Aquarium` / `aquarium123`). Navigate to `http://192.168.4.1` in your browser.
+7. **Configure Wi-Fi**: Go to the **WiFi Config** page in the Web UI to scan for networks and save your local Wi-Fi credentials. The ESP32 will reboot and connect to your network.
+8. **Access**: Once connected to your local network, navigate to the ESP32's assigned IP address in your web browser.
 
 ---
 
@@ -102,6 +99,7 @@ The intuitive web dashboard provides complete control over your aquarium (includ
 - **Schedules**: Create and manage recurring weekly schedules.
 - **Temp Schedules**: Set up one-time, expiring temporary schedules.
 - **Temp Control**: Monitor raw temperature data and calibrate internal/external sensors.
+- **WiFi Config**: Manage Wi-Fi credentials and connection settings directly from the web interface. Features network scanning and dynamic AP fallback management.
 - **Auth Config**: Update Web UI login credentials (default is `Admin` / `Admin`, saved persistently to EEPROM).
 - **Email Config**: Manage SMTP email credentials directly from the web interface (saved persistently to EEPROM).
 - **Docker Config**: Configure connection settings for the Raspberry Pi data collector.

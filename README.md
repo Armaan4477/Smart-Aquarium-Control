@@ -19,13 +19,14 @@ This repository is split into two primary components:
 - **Automated Equipment Scheduling:** Manage wave makers, lights and air pumps through weekly recurring and temporary one-time schedules.
 - **Maintenance Mode:** Temporarily pause automated background polling and email alerts via the data collector to safely perform tank maintenance without triggering false alarms.
 - **Configuration & Firmware Management:** Built-in Backup/Restore functionality for device settings and Over-The-Air (OTA) update support for seamless firmware upgrades directly from the dashboard.
+- **Wi-Fi Provisioning System:** Built-in fallback Access Point (AP) mode for initial network setup and recovery, allowing easy Wi-Fi configuration without hardcoding credentials.
 - **Persistent Dark Mode:** A modern, customizable Web UI with a built-in dark mode that remembers your preference.
 - **Precision Temperature Monitoring:** Dual-sensor setup for tracking both water and ambient temperatures.
 - **Robust Hardware Controls:** Local OLED status display and physical override switches for immediate, web-free access.
 - **Historical Data Logging:** Automated data collection every 60 seconds, stored in an SQLite database for trend analysis.
 - **Reliable Alerting & Error Tracking:** Features dynamic UI pop-ups for immediate visual feedback, alongside automated email notifications for system startups, sensor failures and periodic health checks.
 - **High Stability:** Optimized FreeRTOS task scheduling ensures reliable long-term execution and prevents Watchdog Timer (WDT) resets.
-- **Local Network Independence:** Fully offline-optimized web interface that operates entirely over your LAN without reliance on external cloud services or CDNs.
+- **Local Network Independence:** Fully offline-optimized, self-hosted web interface that operates entirely over your LAN without reliance on external cloud services or CDNs.
 
 ## Getting Started
 
