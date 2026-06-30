@@ -578,6 +578,8 @@ void setup() {
       if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
         // Error handling
       }
+      resetWatchdog();
+      yield();
     } else if (upload.status == UPLOAD_FILE_END) {
       if (Update.end(true)) { // true to set the size to the current progress
         storeLogEntry("OTA Update Success: " + String(upload.totalSize) + " bytes");
