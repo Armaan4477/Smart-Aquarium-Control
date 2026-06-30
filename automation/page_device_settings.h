@@ -357,6 +357,9 @@ const char deviceSettingsPage[] PROGMEM = R"html(
                 <button class="nav-button" onclick="showBackupRestore()">Backup / Restore</button>
                 <button class="nav-button" onclick="showOTAUpdate()">OTA Update</button>
             </div>
+            <div class="navigation-buttons" style="margin-top: 15px;">
+                <button class="nav-button nav-full" onclick="factoryResetDevice()" style="background-color: var(--error-color);">Factory Reset</button>
+            </div>
         </div>
     </div>
     
@@ -448,6 +451,25 @@ const char deviceSettingsPage[] PROGMEM = R"html(
                         }, 8000);
                     } else {
                         alert("Failed to initiate reboot.");
+                    }
+                })
+                .catch(error => {
+                    alert("Error: " + error);
+                });
+            }
+        }
+
+        function factoryResetDevice() {
+            if(confirm("WARNING: This will erase all settings, schedules, and Wi-Fi configurations. The device will be restored to its factory state and rebooted. Are you absolutely sure you want to proceed?")) {
+                fetch('/api/reset', { method: 'POST' })
+                .then(response => {
+                    if(response.ok) {
+                        alert("Factory reset initiated. The device will wipe all data and reboot. Please reconnect to the setup Wi-Fi network afterwards.");
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 8000);
+                    } else {
+                        alert("Failed to initiate factory reset.");
                     }
                 })
                 .catch(error => {

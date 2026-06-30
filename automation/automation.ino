@@ -121,6 +121,7 @@ void handleSaveThemeConfig();
 void handleOtaPage();
 void handleRollback();
 void handleReboot();
+void handleFactoryReset();
 void handleAuthConfigPage();
 void handleGetAuthConfig();
 void handleSaveAuthConfig();
@@ -579,6 +580,7 @@ void setup() {
   server.on("/ota", HTTP_GET, handleOtaPage);
   server.on("/api/rollback", HTTP_POST, handleRollback);
   server.on("/api/reboot", HTTP_POST, handleReboot);
+  server.on("/api/reset", HTTP_POST, handleFactoryReset);
   server.on("/update", HTTP_POST, []() {
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
@@ -589,19 +591,18 @@ void setup() {
   }, []() {
     HTTPUpload& upload = server.upload();
     if (upload.status == UPLOAD_FILE_START) {
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { // start with max available size
+      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
         storeLogEntry("OTA Update Error: " + String(Update.getError()));
       } else {
         storeLogEntry("OTA Update Started");
       }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
       if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-        // Error handling
       }
       resetWatchdog();
       yield();
     } else if (upload.status == UPLOAD_FILE_END) {
-      if (Update.end(true)) { // true to set the size to the current progress
+      if (Update.end(true)) {
         storeLogEntry("OTA Update Success: " + String(upload.totalSize) + " bytes");
       } else {
         storeLogEntry("OTA Update Error: " + String(Update.getError()));
@@ -1227,7 +1228,7 @@ void networkLoop(void* parameter) {
       if (isApActive) {
         if (!pendingApShutdown) {
           pendingApShutdown = true;
-          apShutdownTime = millis() + 15000; // 15 seconds grace period
+          apShutdownTime = millis() + 15000;
         } else if (millis() > apShutdownTime) {
           WiFi.softAPdisconnect(true);
           WiFi.mode(WIFI_STA);
@@ -3014,6 +3015,23 @@ void handleReboot() {
   ESP.restart();
 }
 
+void handleFactoryReset() {
+  if (!checkAuthentication()) {
+    return;
+  }
+  
+  storeLogEntry("System factory reset initiated by user");
+
+  for (int i = 0; i < EEPROM_SIZE; i++) {
+    EEPROM.write(i, 0);
+  }
+  EEPROM.commit();
+  
+  server.send(200, "application/json", "{\"status\":\"success\"}");
+  delay(1000);
+  ESP.restart();
+}
+
 void handleOtaPage() {
   if (!checkAuthentication()) {
     return;
@@ -3054,7 +3072,6 @@ void loadAuthConfig() {
   if (stored.magic == 0xA1 && strlen(stored.username) > 0 && strlen(stored.password) > 0) {
     authConfig = stored;
   } else {
-    // If not found, fall back to "Admin"
     strlcpy(authConfig.username, "Admin", sizeof(authConfig.username));
     strlcpy(authConfig.password, "Admin", sizeof(authConfig.password));
     saveAuthConfig();
