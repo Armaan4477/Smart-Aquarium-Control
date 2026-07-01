@@ -240,8 +240,8 @@ const char authConfigPage[] PROGMEM = R"html(
 </head>
 <body>
     <header>
-        <h1>Authentication Settings</h1>
-        <p>Manage device login credentials</p>
+        <h1>Device Access Management</h1>
+        <p>Manage device login credentials and allowed IP addresses</p>
     </header>
 
     <div class="container">
@@ -278,6 +278,42 @@ const char authConfigPage[] PROGMEM = R"html(
                 If credentials are forgotten, they fallback to "Admin" / "Admin" on EEPROM corruption or clearance.
             </p>
             <button class="save-btn" onclick="saveAuthConfig()">Save Settings</button>
+        </div>
+
+        <div class="card">
+            <h3>Allowed IP Addresses</h3>
+            <div class="form-row">
+                <div class="form-group" style="flex: 1 1 45%;">
+                    <label for="ipAddress">IP Address</label>
+                    <input type="text" id="ipAddress" placeholder="e.g. 192.168.1.100" maxlength="15">
+                </div>
+                <div class="form-group" style="flex: 1 1 45%;">
+                    <label for="ipNote">Note</label>
+                    <input type="text" id="ipNote" placeholder="e.g. My Phone" maxlength="15">
+                </div>
+                <div class="form-group" style="flex: 1 1 100%;">
+                    <button class="button" onclick="addIp()" style="width: 100%; margin: 10px 0 0 0;">Add IP</button>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;" id="ipTable">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--primary-light); text-align: left;">
+                            <th style="padding: 10px;">IP Address</th>
+                            <th style="padding: 10px;">Note</th>
+                            <th style="padding: 10px; width: 80px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ipListBody">
+                        <!-- IPs will be populated here -->
+                    </tbody>
+                </table>
+                <p style="font-size: 0.9rem; color: var(--text-light); margin-bottom: 20px;">
+                    Note: Adding IPs here will allow them to bypass the login screen. Maximum 20 IPs.
+                </p>
+                <button class="save-btn" onclick="saveIpAllowlist()">Save IP List</button>
+            </div>
         </div>
     </div>
     
@@ -383,7 +419,119 @@ const char authConfigPage[] PROGMEM = R"html(
             });
         }
         
-        window.addEventListener('load', () => loadConfig(0));
+        let ipAllowlist = [];
+
+        function loadIpAllowlist(retryCount) {
+            retryCount = retryCount || 0;
+            fetch('/api/ipAllowlist', { credentials: 'include' })
+                .then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(data => {
+                    ipAllowlist = data || [];
+                    renderIpAllowlist();
+                })
+                .catch(err => {
+                    console.error('Failed to load IP allowlist (attempt ' + (retryCount + 1) + ')', err);
+                    if (retryCount < 2) {
+                        setTimeout(() => loadIpAllowlist(retryCount + 1), 1000);
+                    } else {
+                        showToast('Failed to load IP Allowlist', 'error');
+                    }
+                });
+        }
+        
+        function renderIpAllowlist() {
+            const tbody = document.getElementById('ipListBody');
+            tbody.innerHTML = '';
+            
+            if (ipAllowlist.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 15px; color: var(--text-light);">No allowed IPs configured.</td></tr>';
+                return;
+            }
+            
+            ipAllowlist.forEach((entry, index) => {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid #33333333';
+                if (document.documentElement.getAttribute('data-theme') === 'dark') {
+                   tr.style.borderBottom = '1px solid #444';
+                }
+                
+                tr.innerHTML = `
+                    <td style="padding: 10px;">${entry.ip}</td>
+                    <td style="padding: 10px;">${entry.note}</td>
+                    <td style="padding: 10px;">
+                        <button onclick="removeIp(${index})" style="background: var(--error-color); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        
+        function addIp() {
+            const ipInput = document.getElementById('ipAddress');
+            const noteInput = document.getElementById('ipNote');
+            const ip = ipInput.value.trim();
+            const note = noteInput.value.trim();
+            
+            if (!ip) {
+                showToast('IP address is required', 'error');
+                return;
+            }
+            
+            if (ipAllowlist.length >= 20) {
+                showToast('Maximum of 20 IPs reached', 'error');
+                return;
+            }
+            
+            const ipRegex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+            if (!ipRegex.test(ip)) {
+                showToast('Invalid IP address format', 'error');
+                return;
+            }
+            
+            ipAllowlist.push({ ip: ip, note: note });
+            ipInput.value = '';
+            noteInput.value = '';
+            renderIpAllowlist();
+        }
+        
+        function removeIp(index) {
+            ipAllowlist.splice(index, 1);
+            renderIpAllowlist();
+        }
+        
+        function saveIpAllowlist() {
+            const btn = document.querySelector('button[onclick="saveIpAllowlist()"]');
+            btn.textContent = "Saving...";
+            btn.disabled = true;
+            
+            fetch('/api/ipAllowlist', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(ipAllowlist)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('IP Allowlist saved successfully!', 'success');
+                } else {
+                    showToast('Failed to save IP Allowlist', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Save error', err);
+                showToast('Error saving IP Allowlist', 'error');
+            })
+            .finally(() => {
+                btn.textContent = "Save IP List";
+                btn.disabled = false;
+            });
+        }
+
+        window.addEventListener('load', () => { loadConfig(0); loadIpAllowlist(0); });
     </script>
 </body>
 </html>

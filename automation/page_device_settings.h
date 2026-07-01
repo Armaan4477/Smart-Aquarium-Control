@@ -346,7 +346,7 @@ const char deviceSettingsPage[] PROGMEM = R"html(
 
             <h4 class="section-subtitle" style="margin-top: 20px;">Security & Services</h4>
             <div class="navigation-buttons">
-                <button class="nav-button" onclick="showAuthConfig()">Authentication Settings</button>
+                <button class="nav-button" onclick="showAuthConfig()">Device Access Management</button>
                 <button class="nav-button" onclick="showWifiConfig()">Wi-Fi Settings</button>
                 <button class="nav-button" onclick="showNtpConfig()">Time & NTP Settings</button>
                 <button class="nav-button" onclick="showEmailConfig()">Email Settings</button>

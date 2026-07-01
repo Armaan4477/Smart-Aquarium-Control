@@ -214,6 +214,12 @@ bool relay2State = false;
 bool relay3State = false;
 bool relay4State = false;
 
+struct AllowedIP {
+  char ip[16];
+  char note[16];
+};
+
+
 bool feedingModeActive = false;
 unsigned long feedingModeEndTime = 0;
 const uint16_t ERR_WIFI = 1 << 0;
@@ -263,22 +269,14 @@ volatile bool emailInProgress = false;
 std::vector<Schedule> schedules;
 std::vector<TemporarySchedule> temporarySchedules;
 int tempScheduleIdCounter = 0;
-const int EEPROM_SIZE = 1024;
+const int EEPROM_SIZE = 4096;
 const int SCHEDULE_SIZE = sizeof(Schedule);
 const int MAX_SCHEDULES = 10;
 const int SCHEDULE_START_ADDR = 0;
 const int TOGGLE_DELAY = 500;
 const int TOGGLE_COUNT = 3;
-const std::vector<String> allowedIPs = {
-  "192.168.29.3",   //Rpi
-  "192.168.29.4",   //A Mac
-  "192.168.29.5",   //A Ipad
-  "192.168.29.6",   //A Phone
-  "192.168.29.8",   //Acer
-  "192.168.29.9",   //N Phone
-  "192.168.29.10",  //F moto
-  "192.168.29.11"   //S moto
-};
+std::vector<AllowedIP> allowedIPs;
+const int MAX_ALLOWED_IPS = 20;
 unsigned long lastSwitch1Debounce = 0;
 unsigned long lastSwitch2Debounce = 0;
 const unsigned long DEBOUNCE_DELAY = 800;
@@ -332,6 +330,7 @@ AuthConfig authConfig = { 0xA1, "Admin", "Admin" };
 
 const int WIFI_CONFIG_ADDR = AUTH_CONFIG_ADDR + sizeof(AuthConfig) + 1;
 const int NTP_CONFIG_ADDR = WIFI_CONFIG_ADDR + sizeof(WifiConfig) + 1;
+const int IP_ALLOWLIST_ADDR = NTP_CONFIG_ADDR + sizeof(NtpConfig) + 1;
 
 bool oledPhysicalState = false;
 
@@ -582,6 +581,8 @@ void setup() {
   server.on("/authconfig", HTTP_GET, handleAuthConfigPage);
   server.on("/api/authConfig", HTTP_GET, handleGetAuthConfig);
   server.on("/api/authConfig", HTTP_POST, handleSaveAuthConfig);
+  server.on("/api/ipAllowlist", HTTP_GET, handleGetIpAllowlist);
+  server.on("/api/ipAllowlist", HTTP_POST, handleSaveIpAllowlist);
   server.on("/wifiConfig", HTTP_GET, handleWifiConfigPage);
   server.on("/api/wifi/scan", HTTP_GET, handleWifiScan);
   server.on("/api/wifi/config", HTTP_GET, handleGetWifiConfig);
@@ -634,6 +635,7 @@ void setup() {
   apiServer.on("/api/errors/clear", HTTP_POST, handleApiClearError);
   apiServer.begin();
   loadSchedulesFromEEPROM();
+  loadIpAllowlistFromEEPROM();
   loadCalibrationSettings();
   loadDisplaySchedule();
   loadEmailConfig();
@@ -742,6 +744,33 @@ void loadSchedulesFromEEPROM() {
     EEPROM.get(addr, schedule);
     schedules.push_back(schedule);
     addr += SCHEDULE_SIZE;
+  }
+}
+
+void saveIpAllowlistToEEPROM() {
+  int addr = IP_ALLOWLIST_ADDR;
+  EEPROM.write(addr, allowedIPs.size());
+  addr++;
+  
+  for (const AllowedIP& ip : allowedIPs) {
+    EEPROM.put(addr, ip);
+    addr += sizeof(AllowedIP);
+  }
+  EEPROM.commit();
+}
+
+void loadIpAllowlistFromEEPROM() {
+  allowedIPs.clear();
+  int addr = IP_ALLOWLIST_ADDR;
+  int count = EEPROM.read(addr);
+  if (count > MAX_ALLOWED_IPS) count = MAX_ALLOWED_IPS;
+  addr++;
+  
+  for (int i = 0; i < count; i++) {
+    AllowedIP ip;
+    EEPROM.get(addr, ip);
+    allowedIPs.push_back(ip);
+    addr += sizeof(AllowedIP);
   }
 }
 
@@ -1145,8 +1174,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
 
 bool checkAuthentication() {
   String clientIP = server.client().remoteIP().toString();
-  for (const auto& ip : allowedIPs) {
-    if (clientIP == ip) {
+  for (const auto& allowedIp : allowedIPs) {
+    if (clientIP == String(allowedIp.ip)) {
       return true;
     }
   }
@@ -2937,6 +2966,13 @@ void handleBackup() {
   JsonObject ntp = doc.createNestedObject("ntpConfig");
   ntp["server"] = ntpConfig.server;
   
+  JsonArray ips = doc.createNestedArray("allowedIPs");
+  for (const auto& ip : allowedIPs) {
+    JsonObject obj = ips.createNestedObject();
+    obj["ip"] = ip.ip;
+    obj["note"] = ip.note;
+  }
+  
   String output;
   serializeJson(doc, output);
   server.send(200, "application/json", output);
@@ -3047,6 +3083,19 @@ void handleRestore() {
     strlcpy(ntpConfig.server, doc["ntpConfig"]["server"] | fallbackNtpServer, sizeof(ntpConfig.server));
     EEPROM.put(NTP_CONFIG_ADDR, ntpConfig);
     EEPROM.commit();
+  }
+  
+  if (doc.containsKey("allowedIPs")) {
+    allowedIPs.clear();
+    JsonArray array = doc["allowedIPs"].as<JsonArray>();
+    for (JsonObject obj : array) {
+      if (allowedIPs.size() >= MAX_ALLOWED_IPS) break;
+      AllowedIP allowedIp;
+      strlcpy(allowedIp.ip, obj["ip"] | "", sizeof(allowedIp.ip));
+      strlcpy(allowedIp.note, obj["note"] | "", sizeof(allowedIp.note));
+      allowedIPs.push_back(allowedIp);
+    }
+    saveIpAllowlistToEEPROM();
   }
   
   storeLogEntry("Configuration completely restored from backup");
@@ -3170,6 +3219,48 @@ void handleSaveAuthConfig() {
           return;
         }
       }
+    }
+  }
+  server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+}
+
+void handleGetIpAllowlist() {
+  if (!checkAuthentication()) return;
+  DynamicJsonDocument doc(2048);
+  JsonArray array = doc.to<JsonArray>();
+  
+  for (const auto& ip : allowedIPs) {
+    JsonObject obj = array.createNestedObject();
+    obj["ip"] = ip.ip;
+    obj["note"] = ip.note;
+  }
+  
+  String output;
+  serializeJson(doc, output);
+  server.send(200, "application/json", output);
+}
+
+void handleSaveIpAllowlist() {
+  if (!checkAuthentication()) return;
+  
+  if (server.hasArg("plain")) {
+    DynamicJsonDocument doc(2048);
+    DeserializationError error = deserializeJson(doc, server.arg("plain"));
+    
+    if (!error && doc.is<JsonArray>()) {
+      allowedIPs.clear();
+      JsonArray array = doc.as<JsonArray>();
+      for (JsonObject obj : array) {
+        if (allowedIPs.size() >= MAX_ALLOWED_IPS) break;
+        AllowedIP allowedIp;
+        strlcpy(allowedIp.ip, obj["ip"] | "", sizeof(allowedIp.ip));
+        strlcpy(allowedIp.note, obj["note"] | "", sizeof(allowedIp.note));
+        allowedIPs.push_back(allowedIp);
+      }
+      saveIpAllowlistToEEPROM();
+      server.send(200, "application/json", "{\"success\":true}");
+      storeLogEntry("IP Allowlist updated");
+      return;
     }
   }
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
