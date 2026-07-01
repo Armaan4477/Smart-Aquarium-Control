@@ -301,7 +301,9 @@ const char authConfigPage[] PROGMEM = R"html(
             });
         });
 
-        function goBack() { window.location.href = '/devicesettings'; }
+        function goBack() {
+            window.history.back();
+        }
         
         function showToast(msg, type='success') {
             const t = document.getElementById('toast');

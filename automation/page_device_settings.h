@@ -479,7 +479,9 @@ const char deviceSettingsPage[] PROGMEM = R"html(
             }
         }
 
-        function goBack() { window.location.href = '/'; }
+        function goBack() {
+            window.history.back();
+        }
         
         function showTempControl() {
             window.location.href = '/tempcontrol';

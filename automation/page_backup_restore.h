@@ -307,7 +307,9 @@ const char page_backup_restore[] PROGMEM = R"html(
     <div id="toast"></div>
 
     <script>
-        function goBack() { window.history.back(); }
+        function goBack() {
+            window.history.back();
+        }
         
         function showToast(msg, type='success') {
             const t = document.getElementById('toast');

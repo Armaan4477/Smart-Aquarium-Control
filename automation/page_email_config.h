@@ -444,7 +444,9 @@ const char emailConfigPage[] PROGMEM = R"html(
             });
         });
 
-        function goBack() { window.history.back(); }
+        function goBack() {
+            window.history.back();
+        }
         
         function showToast(msg, type='success') {
             const t = document.getElementById('toast');

@@ -374,6 +374,10 @@ main {
     gap: 1rem;
 }
 
+.span-full {
+    grid-column: 1 / -1;
+}
+
 .glass-link-btn {
     display: flex;
     justify-content: space-between;

@@ -344,7 +344,9 @@ const char dockerConfigPage[] PROGMEM = R"html(
     <div id="toast"></div>
 
     <script>
-        function goBack() { window.history.back(); }
+        function goBack() {
+            window.history.back();
+        }
         
         function showToast(msg, type='success') {
             const t = document.getElementById('toast');

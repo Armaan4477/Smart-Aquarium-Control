@@ -173,12 +173,7 @@ async function initializeLinks() {
         // and the browser would otherwise open a direct link to 192.168.x.x.
         document.getElementById('link-main-sched').href = '/proxy/mainSchedules';
         document.getElementById('link-temp-sched').href = '/proxy/tempschedules';
-        document.getElementById('link-temp-ctrl').href  = '/proxy/tempcontrol';
-        document.getElementById('link-disp-ctrl').href  = '/proxy/displayctrl';
-        document.getElementById('link-email-cfg').href  = '/proxy/emailConfig';
-        document.getElementById('link-docker-cfg').href = '/proxy/dockerConfig';
-        document.getElementById('link-backup-restore').href = '/proxy/backuprestore';
-        document.getElementById('link-ota-update').href = '/proxy/ota';
+        document.getElementById('link-device-settings').href = '/proxy/devicesettings';
     } catch (e) {
         console.error("Could not initialize links:", e);
     }
