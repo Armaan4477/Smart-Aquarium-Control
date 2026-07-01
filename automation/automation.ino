@@ -3342,7 +3342,6 @@ void handleSetNtpConfig() {
     strlcpy(ntpConfig.server, doc["server"], sizeof(ntpConfig.server));
     saveNtpConfig();
     
-    // Attempt to sync time with new server
     configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
     struct tm timeinfo;
     if(getLocalTime(&timeinfo, 10000)) {
@@ -3353,6 +3352,42 @@ void handleSetNtpConfig() {
   } else {
     server.send(400, "application/json", "{\"error\":\"Missing server parameter\"}");
   }
+}
+
+bool testNtpServerPing(const char* ntpServerName) {
+    WiFiUDP udp;
+    if (!udp.begin(2390)) return false; 
+    
+    byte packetBuffer[48]; 
+    memset(packetBuffer, 0, 48);
+    packetBuffer[0] = 0b11100011;   
+    packetBuffer[1] = 0;     
+    packetBuffer[2] = 6;     
+    packetBuffer[3] = 0xEC;  
+    packetBuffer[12] = 49;
+    packetBuffer[13] = 0x4E;
+    packetBuffer[14] = 49;
+    packetBuffer[15] = 52;
+    
+    if (udp.beginPacket(ntpServerName, 123) == 0) {
+        udp.stop();
+        return false;
+    }
+    udp.write(packetBuffer, 48);
+    udp.endPacket();
+    
+    unsigned long startMs = millis();
+    while (millis() - startMs < 5000) {
+        int size = udp.parsePacket();
+        if (size >= 48) {
+            udp.stop();
+            return true;
+        }
+        delay(10);
+    }
+    
+    udp.stop();
+    return false;
 }
 
 void handleTestNtp() {
@@ -3372,16 +3407,10 @@ void handleTestNtp() {
   
   if (doc.containsKey("server")) {
     const char* serverStr = doc["server"];
-    // Test NTP by configuring it temporarily
-    configTime(gmtOffset_sec, daylightOffset_sec, serverStr);
-    struct tm timeinfo;
-    if(getLocalTime(&timeinfo, 10000)) { // 10 second timeout for test
-        // Restore actual configuration
-        configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
+    
+    if (testNtpServerPing(serverStr)) {
         server.send(200, "application/json", "{\"success\":true}");
     } else {
-        // Restore actual configuration
-        configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
         server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to reach NTP server\"}");
     }
   } else {
