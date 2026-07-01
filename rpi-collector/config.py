@@ -10,8 +10,8 @@ ESP32_PORT = 82   # Dedicated collector API server (Core 0 / emailLoop)
 # HTTP Basic Auth credentials (only used if the caller IP is NOT in the
 # ESP32 allowedIPs list; the RPi IP 192.168.29.3 is already whitelisted
 # so these won't normally be needed, but set them for safety).
-ESP32_USER = "armaan"
-ESP32_PASS = "Armaan1234"
+ESP32_USER = "Admin"
+ESP32_PASS = "Admin"
 
 # ── Polling intervals ──────────────────────────────────────────────────────
 POLL_STATUS_INTERVAL = 60   # seconds  — temperature + relay/uptime (db save)
