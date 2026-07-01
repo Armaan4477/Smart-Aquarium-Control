@@ -508,7 +508,7 @@ const char tempctrl[] PROGMEM = R"html(
     </header>
     <div class="container">
         <div class="header-actions">
-            <button onclick="goBack()" class="button">Back to Dashboard</button>
+            <button onclick="goBack()" class="button">Back to Device Settings</button>
         </div>
 
         <div class="raw-data-section">

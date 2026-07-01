@@ -32,6 +32,7 @@
 #include "page_device_settings.h"
 #include "page_auth_config.h"
 #include "page_wifi_config.h"
+#include "page_ntp_config.h"
 #include <Update.h>
 
 #define OLED_SDA 21
@@ -231,6 +232,14 @@ struct WifiConfig {
   char apPassword[64];
 };
 WifiConfig wifiConfig;
+
+struct NtpConfig {
+  uint8_t magic;
+  char server[64];
+};
+NtpConfig ntpConfig;
+const char* fallbackNtpServer = "pool.ntp.org";
+
 const char* fallbackApSsid = "ESP32_Aquarium";
 const char* fallbackApPassword = "aquarium123";
 bool isApActive = false;
@@ -322,6 +331,7 @@ const int AUTH_CONFIG_ADDR = THEME_CONFIG_ADDR + sizeof(ThemeConfig) + 1;
 AuthConfig authConfig = { 0xA1, "Admin", "Admin" };
 
 const int WIFI_CONFIG_ADDR = AUTH_CONFIG_ADDR + sizeof(AuthConfig) + 1;
+const int NTP_CONFIG_ADDR = WIFI_CONFIG_ADDR + sizeof(WifiConfig) + 1;
 
 bool oledPhysicalState = false;
 
@@ -344,7 +354,6 @@ WebSocketsServer webSocket = WebSocketsServer(81);
 const int MAX_TEMP_FAILURES = 5;
 int consecutiveTempFailures = 0;
 
-const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 19800;  // 5 hours 30 minutes offset for IST
 const int daylightOffset_sec = 0;  // 0 for no daylight saving time
 unsigned long lastNtpRetry = 0;
@@ -484,6 +493,7 @@ void setup() {
 
   EEPROM.begin(EEPROM_SIZE);
   loadWifiConfig();
+  loadNtpConfig();
   
   WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
@@ -577,6 +587,11 @@ void setup() {
   server.on("/api/wifi/config", HTTP_GET, handleGetWifiConfig);
   server.on("/api/wifi/config", HTTP_POST, handleSaveWifiConfig);
   server.on("/api/wifi/status", HTTP_GET, handleGetWifiStatus);
+  
+  server.on("/ntp_settings", HTTP_GET, handleNtpSettingsPage);
+  server.on("/api/ntpConfig", HTTP_GET, handleGetNtpConfig);
+  server.on("/api/ntpConfig", HTTP_POST, handleSetNtpConfig);
+  server.on("/api/testNtp", HTTP_POST, handleTestNtp);
 
   server.on("/ota", HTTP_GET, handleOtaPage);
   server.on("/api/rollback", HTTP_POST, handleRollback);
@@ -678,7 +693,7 @@ void setup() {
 }
 
 void attemptTimeSync() {
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
 
   struct tm timeinfo;
   bool synced = getLocalTime(&timeinfo, 10000);
@@ -2919,6 +2934,9 @@ void handleBackup() {
   JsonObject theme = doc.createNestedObject("themeConfig");
   theme["isDarkMode"] = themeConfig.isDarkMode;
   
+  JsonObject ntp = doc.createNestedObject("ntpConfig");
+  ntp["server"] = ntpConfig.server;
+  
   String output;
   serializeJson(doc, output);
   server.send(200, "application/json", output);
@@ -3021,6 +3039,13 @@ void handleRestore() {
     themeConfig.magic = 0xDC;
     themeConfig.isDarkMode = doc["themeConfig"]["isDarkMode"];
     EEPROM.put(THEME_CONFIG_ADDR, themeConfig);
+    EEPROM.commit();
+  }
+  
+  if (doc.containsKey("ntpConfig")) {
+    ntpConfig.magic = 0xA2;
+    strlcpy(ntpConfig.server, doc["ntpConfig"]["server"] | fallbackNtpServer, sizeof(ntpConfig.server));
+    EEPROM.put(NTP_CONFIG_ADDR, ntpConfig);
     EEPROM.commit();
   }
   
@@ -3171,6 +3196,24 @@ void saveWifiConfig() {
   EEPROM.commit();
 }
 
+void loadNtpConfig() {
+  NtpConfig stored;
+  EEPROM.get(NTP_CONFIG_ADDR, stored);
+  if (stored.magic == 0xA2) {
+    ntpConfig = stored;
+  } else {
+    ntpConfig.magic = 0xA2;
+    strlcpy(ntpConfig.server, fallbackNtpServer, sizeof(ntpConfig.server));
+    saveNtpConfig();
+  }
+}
+
+void saveNtpConfig() {
+  ntpConfig.magic = 0xA2;
+  EEPROM.put(NTP_CONFIG_ADDR, ntpConfig);
+  EEPROM.commit();
+}
+
 void handleWifiConfigPage() {
   if (!checkAuthentication()) return;
   server.sendHeader("Connection", "close");
@@ -3266,4 +3309,82 @@ void handleGetWifiStatus() {
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
+}
+
+void handleNtpSettingsPage() {
+  if (!checkAuthentication()) return;
+  server.sendHeader("Connection", "close");
+  server.send_P(200, "text/html", ntpConfigPage);
+}
+
+void handleGetNtpConfig() {
+  if (!checkAuthentication()) return;
+  String json = "{\"server\":\"" + String(ntpConfig.server) + "\"}";
+  server.send(200, "application/json", json);
+}
+
+void handleSetNtpConfig() {
+  if (!checkAuthentication()) return;
+  if (server.hasArg("plain") == false) {
+    server.send(400, "application/json", "{\"error\":\"Body not received\"}");
+    return;
+  }
+  
+  String body = server.arg("plain");
+  StaticJsonDocument<256> doc;
+  DeserializationError error = deserializeJson(doc, body);
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  
+  if (doc.containsKey("server")) {
+    strlcpy(ntpConfig.server, doc["server"], sizeof(ntpConfig.server));
+    saveNtpConfig();
+    
+    // Attempt to sync time with new server
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
+    struct tm timeinfo;
+    if(getLocalTime(&timeinfo, 10000)) {
+        server.send(200, "application/json", "{\"success\":true}");
+    } else {
+        server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to sync time\"}");
+    }
+  } else {
+    server.send(400, "application/json", "{\"error\":\"Missing server parameter\"}");
+  }
+}
+
+void handleTestNtp() {
+  if (!checkAuthentication()) return;
+  if (server.hasArg("plain") == false) {
+    server.send(400, "application/json", "{\"error\":\"Body not received\"}");
+    return;
+  }
+  
+  String body = server.arg("plain");
+  StaticJsonDocument<256> doc;
+  DeserializationError error = deserializeJson(doc, body);
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  
+  if (doc.containsKey("server")) {
+    const char* serverStr = doc["server"];
+    // Test NTP by configuring it temporarily
+    configTime(gmtOffset_sec, daylightOffset_sec, serverStr);
+    struct tm timeinfo;
+    if(getLocalTime(&timeinfo, 10000)) { // 10 second timeout for test
+        // Restore actual configuration
+        configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
+        server.send(200, "application/json", "{\"success\":true}");
+    } else {
+        // Restore actual configuration
+        configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
+        server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to reach NTP server\"}");
+    }
+  } else {
+    server.send(400, "application/json", "{\"error\":\"Missing server parameter\"}");
+  }
 }

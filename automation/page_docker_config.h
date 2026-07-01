@@ -327,7 +327,7 @@ const char dockerConfigPage[] PROGMEM = R"html(
 
     <div class="container">
         <div class="header-actions">
-            <button onclick="goBack()" class="button">Back to Dashboard</button>
+            <button onclick="goBack()" class="button">Back to Device Settings</button>
         </div>
 
         <div class="card">

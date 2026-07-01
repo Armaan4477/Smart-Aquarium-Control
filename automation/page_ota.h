@@ -256,7 +256,7 @@ const char otaPage[] PROGMEM = R"html(
     </header>
     <div class="container">
         <div class="header-actions">
-            <button id="backBtn" onclick="goBack()" class="button">Back to Dashboard</button>
+            <button id="backBtn" onclick="goBack()" class="button">Back to Device Settings</button>
         </div>
         <div class="card">
             <h2>Select Firmware</h2>

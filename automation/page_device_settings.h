@@ -350,6 +350,7 @@ const char deviceSettingsPage[] PROGMEM = R"html(
                 <button class="nav-button" onclick="showWifiConfig()">Wi-Fi Settings</button>
                 <button class="nav-button" onclick="showEmailConfig()">Email Settings</button>
                 <button class="nav-button" onclick="showDockerConfig()">Docker Settings</button>
+                <button class="nav-button" onclick="showNtpConfig()">Time & NTP Settings</button>
             </div>
 
             <h4 class="section-subtitle" style="margin-top: 20px;">System Maintenance</h4>
@@ -503,6 +504,9 @@ const char deviceSettingsPage[] PROGMEM = R"html(
         }
         function showWifiConfig() {
             window.location.href = '/wifiConfig';
+        }
+        function showNtpConfig() {
+            window.location.href = '/ntp_settings';
         }
     </script>
 </body>
