@@ -34,6 +34,8 @@ Before building or running the container, ensure the variables in [`config.py`](
 |---|---|---|
 | `ESP32_IP` | `192.168.29.7` | Static IP of the ESP32 Controller |
 | `ESP32_PORT` | `82` | Dedicated API server port on ESP32 |
+| `ESP32_USER` | `Admin` | HTTP Basic Auth username (default unless changed in ESP32 WebUI) |
+| `ESP32_PASS` | `Admin` | HTTP Basic Auth password (default unless changed in ESP32 WebUI) |
 | `POLL_STATUS_INTERVAL` | `60` | Seconds between temperature + relay status polls |
 | `POLL_LOGS_INTERVAL` | `60` | Seconds between retrieving system logs |
 | `POLL_ERROR_INTERVAL` | `30` | Seconds between error checks & email alerts |
@@ -136,4 +138,4 @@ The data collector interacts with two dedicated endpoints on the ESP32 firmware 
 - `GET /api/status`: Returns calibrated temps, relay states, override flags, error bitmasks (`active_errors`, `acknowledged_errors`) and time sync state.
 - `GET /api/logs`: Returns system logs.
 
-**Security**: Ensure your Raspberry Pi's IP address (e.g., `192.168.29.3`) is included in the `allowedIPs` whitelist within the ESP32 code so the collector can poll without authentication.
+**Security**: Ensure your Raspberry Pi's IP address (e.g., `192.168.29.3`) is included in the `allowedIPs` whitelist within the ESP32 code so the collector can poll without authentication. If the IP is not whitelisted, the collector will use the `ESP32_USER` and `ESP32_PASS` credentials configured in `config.py` for HTTP Basic Authentication.

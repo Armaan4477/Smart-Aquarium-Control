@@ -12,13 +12,13 @@ This repository is split into two primary components:
    The core hardware controller built on the ESP32 platform. It handles all real-time sensor monitoring (temperature), equipment scheduling (wave makers, lights, air pumps), physical overrides and serves the local web-based control dashboard.
 
 2. **[Raspberry Pi Collector (`/rpi-collector`)](./rpi-collector/README.md)**
-   A complementary data logging service running on a Raspberry Pi via Docker. It acts as a secure reverse-proxy for the ESP32 WebUI (bypassing browser cross-origin restrictions), routinely polls the ESP32 for sensor readings and system states, stores them in a local SQLite database and provides a RESTful API for historical data querying.
+   A complementary data logging service running on a Raspberry Pi via Docker. It routinely polls the ESP32 for sensor readings and system states, stores them in a local SQLite database and provides a RESTful API for historical data querying.
 
 ## Key System Features
 
-- **Automated Equipment Scheduling:** Manage wave makers, lights and air pumps through weekly recurring and temporary one-time schedules.
+- **Automated Equipment Scheduling:** Manage wave makers, primary/secondary lights and air pumps through weekly recurring and temporary one-time schedules. Includes a dedicated one-click **Feeding Mode** to temporarily pause water circulation.
 - **Maintenance Mode:** Temporarily pause automated background polling and email alerts via the data collector to safely perform tank maintenance without triggering false alarms.
-- **Configuration & Firmware Management:** Built-in Backup/Restore functionality for device settings and Over-The-Air (OTA) update support for seamless firmware upgrades directly from the dashboard.
+- **Configuration & Firmware Management:** Built-in Backup/Restore functionality, custom NTP time synchronization and Over-The-Air (OTA) update support for seamless firmware upgrades directly from the dashboard.
 - **Wi-Fi Provisioning System:** Built-in fallback Access Point (AP) mode for initial network setup and recovery, allowing easy Wi-Fi configuration without hardcoding credentials.
 - **Persistent Dark Mode:** A modern, customizable Web UI with a built-in dark mode that remembers your preference.
 - **Precision Temperature Monitoring:** Dual-sensor setup for tracking both water and ambient temperatures.

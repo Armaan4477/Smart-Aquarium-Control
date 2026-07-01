@@ -102,6 +102,7 @@ The intuitive web dashboard provides complete control over your aquarium (includ
 - **WiFi Config**: Manage Wi-Fi credentials and connection settings directly from the web interface. Features network scanning and dynamic AP fallback management.
 - **Auth Config**: Update Web UI login credentials (default is `Admin` / `Admin`, saved persistently to EEPROM).
 - **Email Config**: Manage SMTP email credentials directly from the web interface (saved persistently to EEPROM).
+- **NTP Config**: Configure custom time synchronization (NTP) servers and test connectivity directly from the web interface.
 - **Docker Config**: Configure connection settings for the Raspberry Pi data collector.
 - **Display Control**: Configure OLED screen behavior, including operating hours and manual overrides.
 - **System Logs**: Review historical events, errors and system warnings.
