@@ -763,12 +763,17 @@ void loadIpAllowlistFromEEPROM() {
   allowedIPs.clear();
   int addr = IP_ALLOWLIST_ADDR;
   int count = EEPROM.read(addr);
-  if (count > MAX_ALLOWED_IPS) count = MAX_ALLOWED_IPS;
+  
+  if (count == 255 || count < 0 || count > MAX_ALLOWED_IPS) {
+    count = 0;
+  }
   addr++;
   
   for (int i = 0; i < count; i++) {
     AllowedIP ip;
     EEPROM.get(addr, ip);
+    ip.ip[15] = '\0';
+    ip.note[15] = '\0';
     allowedIPs.push_back(ip);
     addr += sizeof(AllowedIP);
   }
