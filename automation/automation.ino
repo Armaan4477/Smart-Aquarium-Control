@@ -2899,8 +2899,11 @@ void handleBackup() {
   JsonObject wifi = doc.createNestedObject("wifiConfig");
   wifi["ssid"] = wifiConfig.ssid;
   wifi["password"] = wifiConfig.password;
-  wifi["apSsid"] = wifiConfig.apSsid;
-  wifi["apPassword"] = wifiConfig.apPassword;
+  wifi["apSsid"] = strlen(wifiConfig.apSsid) > 0 ? wifiConfig.apSsid : fallbackApSsid;
+  wifi["apPassword"] = strlen(wifiConfig.apPassword) > 0 ? wifiConfig.apPassword : fallbackApPassword;
+  
+  JsonObject theme = doc.createNestedObject("themeConfig");
+  theme["isDarkMode"] = themeConfig.isDarkMode;
   
   String output;
   serializeJson(doc, output);
@@ -2966,7 +2969,7 @@ void handleRestore() {
   }
   
   if (doc.containsKey("emailConfig")) {
-    emailConfig.magic = 0xEC;
+    emailConfig.magic = 0xE2;
     emailConfig.enabled = doc["emailConfig"]["enabled"];
     strlcpy(emailConfig.senderAccount, doc["emailConfig"]["senderAccount"] | "", sizeof(emailConfig.senderAccount));
     strlcpy(emailConfig.senderPassword, doc["emailConfig"]["senderPassword"] | "", sizeof(emailConfig.senderPassword));
@@ -2976,7 +2979,7 @@ void handleRestore() {
   }
   
   if (doc.containsKey("dockerConfig")) {
-    dockerConfig.magic = 0xDC;
+    dockerConfig.magic = 0xD1;
     dockerConfig.enabled = doc["dockerConfig"]["enabled"];
     EEPROM.put(DOCKER_CONFIG_ADDR, dockerConfig);
     EEPROM.commit();
@@ -3000,8 +3003,17 @@ void handleRestore() {
     EEPROM.commit();
   }
   
+  if (doc.containsKey("themeConfig")) {
+    themeConfig.magic = 0xDC;
+    themeConfig.isDarkMode = doc["themeConfig"]["isDarkMode"];
+    EEPROM.put(THEME_CONFIG_ADDR, themeConfig);
+    EEPROM.commit();
+  }
+  
   storeLogEntry("Configuration completely restored from backup");
   server.send(200, "application/json", "{\"status\":\"success\"}");
+  delay(1000);
+  ESP.restart();
 }
 
 void handleReboot() {

@@ -354,8 +354,8 @@ const char page_backup_restore[] PROGMEM = R"html(
                 })
                 .then(res => res.ok ? res.json() : res.json().then(data => { throw new Error(data.error || 'Unknown error'); }))
                 .then(data => {
-                    showToast('Configuration restored successfully', 'success');
-                    setTimeout(() => window.location.href = '/', 2000);
+                    showToast('Configuration restored successfully. Device is restarting...', 'success');
+                    setTimeout(() => window.location.href = '/', 5000);
                 })
                 .catch(err => {
                     console.error('Restore error', err);
