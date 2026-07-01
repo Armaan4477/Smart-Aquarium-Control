@@ -269,8 +269,17 @@ async function fetchLatestStatus() {
     const data = await res.json();
     
     // Temps
-    els.valIntTemp.textContent = data.internal_c !== null ? `${data.internal_c.toFixed(1)}°C` : '--°C';
-    els.valExtTemp.textContent = data.external_c !== null ? `${data.external_c.toFixed(1)}°C` : '--°C';
+    els.valIntTemp.innerHTML = data.internal_c !== null ? `${data.internal_c.toFixed(1)}°C` : '--°C';
+    els.valExtTemp.innerHTML = data.external_c !== null ? `${data.external_c.toFixed(1)}°C` : '--°C';
+
+    if (data.is_offline) {
+        if (data.internal_c !== null) {
+            els.valIntTemp.innerHTML += '<div style="font-size: 0.85rem; font-weight: 500; color: var(--accent-orange); margin-top: -5px;">(last known)</div>';
+        }
+        if (data.external_c !== null) {
+            els.valExtTemp.innerHTML += '<div style="font-size: 0.85rem; font-weight: 500; color: var(--accent-orange); margin-top: -5px;">(last known)</div>';
+        }
+    }
     
     // Uptime
     // Show '--' when offline OR when the container just restarted and hasn't

@@ -81,6 +81,13 @@ def _rewrite_esp32_html(html: str) -> str:
         html
     )
 
+    # 7. Rewrite src="/path" attributes → src="/proxy/path"
+    html = re.sub(
+        r'(src=["\'])/((?!proxy/)[^"\'])',
+        r'\g<1>/proxy/\2',
+        html
+    )
+
     return html
 
 
