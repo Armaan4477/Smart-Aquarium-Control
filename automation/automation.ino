@@ -486,6 +486,7 @@ void setup() {
   loadWifiConfig();
   
   WiFi.mode(WIFI_AP_STA);
+  WiFi.setSleep(false);
   const char* currentApSsid = strlen(wifiConfig.apSsid) > 0 ? wifiConfig.apSsid : fallbackApSsid;
   const char* currentApPassword = strlen(wifiConfig.apPassword) > 0 ? wifiConfig.apPassword : fallbackApPassword;
   WiFi.softAP(currentApSsid, currentApPassword);
@@ -865,6 +866,7 @@ void handleThemeJS() {
   String js = "document.documentElement.setAttribute('data-theme', '";
   js += themeConfig.isDarkMode ? "dark" : "light";
   js += "');";
+  server.sendHeader("Connection", "close");
   server.send(200, "application/javascript", js);
 }
 
@@ -941,11 +943,13 @@ extern const char dockerConfigPage[] PROGMEM;
 
 void handleDisplayCtrlPage() {
   if (!checkAuthentication()) return;
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", displayCtrlPage);
 }
 
 void handleEmailConfigPage() {
   if (!checkAuthentication()) return;
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", emailConfigPage);
 }
 
@@ -987,6 +991,7 @@ void handleSaveEmailConfig() {
 
 void handleDockerConfigPage() {
   if (!checkAuthentication()) return;
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", dockerConfigPage);
 }
 
@@ -1148,22 +1153,27 @@ unsigned long apShutdownTime = 0;
 bool pendingApShutdown = false;
 
 void handleLogsPage() {
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", logsPage);
 }
 
 void handleDeviceSettingsPage() {
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", deviceSettingsPage);
 }
 
 void handleTempCtrlPage() {
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", tempctrl);
 }
 
 void handleTempSchedulesPage() {
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", tempschedules);
 }
 
 void handleSchedulesPage() {
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", mainSchedules);
 }
 
@@ -1204,6 +1214,7 @@ void networkLoop(void* parameter) {
 
       if (!isApActive) {
         WiFi.mode(WIFI_AP_STA);
+        WiFi.setSleep(false);
         const char* currentApSsid = strlen(wifiConfig.apSsid) > 0 ? wifiConfig.apSsid : fallbackApSsid;
         const char* currentApPassword = strlen(wifiConfig.apPassword) > 0 ? wifiConfig.apPassword : fallbackApPassword;
         WiFi.softAP(currentApSsid, currentApPassword);
@@ -1232,6 +1243,7 @@ void networkLoop(void* parameter) {
         } else if (millis() > apShutdownTime) {
           WiFi.softAPdisconnect(true);
           WiFi.mode(WIFI_STA);
+          WiFi.setSleep(false);
           isApActive = false;
           pendingApShutdown = false;
           storeLogEntry("Fallback AP stopped");
@@ -1820,6 +1832,7 @@ void handleUpdateSchedule() {
 
 void handleRoot() {
   if (!checkAuthentication()) return;
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", mainPage);
 }
 
@@ -2851,6 +2864,7 @@ void handleFeedingModeToggle() {
 }
 
 void handleBackupRestorePage() {
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", page_backup_restore);
 }
 
@@ -3048,6 +3062,7 @@ void handleOtaPage() {
   if (!checkAuthentication()) {
     return;
   }
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", otaPage);
 }
 
@@ -3075,6 +3090,7 @@ void handleAuthConfigPage() {
   if (!checkAuthentication()) {
     return;
   }
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", authConfigPage);
 }
 
@@ -3157,6 +3173,7 @@ void saveWifiConfig() {
 
 void handleWifiConfigPage() {
   if (!checkAuthentication()) return;
+  server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", wifiConfigPage);
 }
 
