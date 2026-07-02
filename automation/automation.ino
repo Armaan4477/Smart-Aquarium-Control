@@ -805,6 +805,7 @@ void handleGetCalibrationSettings() {
   json += "\"internalOffset\":" + String(sensorCalibration.internalOffset, 2) + ",";
   json += "\"externalOffset\":" + String(sensorCalibration.externalOffset, 2);
   json += "}";
+  server.sendHeader("Connection", "close");
   server.send(200, "application/json", json);
 }
 
@@ -924,6 +925,7 @@ void handleGetThemeConfig() {
   doc["isDarkMode"] = themeConfig.isDarkMode;
   String response;
   serializeJson(doc, response);
+  server.sendHeader("Connection", "close");
   server.send(200, "application/json", response);
 }
 
@@ -1084,6 +1086,7 @@ void handleGetDisplaySchedule() {
   json += "\"enabled\":" + String(displaySchedule.enabled ? "true" : "false") + ",";
   json += "\"displayOn\":" + String(oledPhysicalState ? "true" : "false");
   json += "}";
+  server.sendHeader("Connection", "close");
   server.send(200, "application/json", json);
 }
 
@@ -1193,6 +1196,7 @@ bool checkAuthentication() {
 
 void handleFavicon() {
   server.sendHeader("Cache-Control", "max-age=31536000");
+  server.sendHeader("Connection", "close");
   server.send_P(200, "image/png", (const char*)favicon_png, favicon_png_len);
 }
 
@@ -1653,6 +1657,7 @@ void handleGetSchedules() {
     json += "}";
   }
   json += "]";
+  server.sendHeader("Connection", "close");
   server.send(200, "application/json", json);
 }
 
@@ -1888,13 +1893,16 @@ void handleRoot() {
 void handleRelay1() {
   if (server.method() == HTTP_POST) {
     if (overrideRelay1) {
+      server.sendHeader("Connection", "close");
       server.send(403, "application/json", "{\"error\":\"Physical override active\"}");
       return;
     }
     if (relay1State) deactivateRelay(1, true);
     else activateRelay(1, true);
+    server.sendHeader("Connection", "close");
     server.send(200, "application/json", "{\"state\":" + String(relay1State) + "}");
   } else if (server.method() == HTTP_GET) {
+    server.sendHeader("Connection", "close");
     server.send(200, "application/json", "{\"state\":" + String(relay1State) + "}");
   }
 }
@@ -1902,6 +1910,7 @@ void handleRelay1() {
 void handleRelay2() {
   if (server.method() == HTTP_POST) {
     if (overrideRelay2) {
+      server.sendHeader("Connection", "close");
       server.send(403, "application/json", "{\"error\":\"Physical override active\"}");
       return;
     }
@@ -1909,8 +1918,10 @@ void handleRelay2() {
     if (relay2State) deactivateRelay(2, true);
     else activateRelay(2, true);
 
+    server.sendHeader("Connection", "close");
     server.send(200, "application/json", "{\"state\":" + String(relay2State) + "}");
   } else if (server.method() == HTTP_GET) {
+    server.sendHeader("Connection", "close");
     server.send(200, "application/json", "{\"state\":" + String(relay2State) + "}");
   }
 }
@@ -1918,13 +1929,16 @@ void handleRelay2() {
 void handleRelay3() {
   if (server.method() == HTTP_POST) {
     if (overrideRelay1) {
+      server.sendHeader("Connection", "close");
       server.send(403, "application/json", "{\"error\":\"Physical override active\"}");
       return;
     }
     if (relay3State) deactivateRelay(3, true);
     else activateRelay(3, true);
+    server.sendHeader("Connection", "close");
     server.send(200, "application/json", "{\"state\":" + String(relay3State) + "}");
   } else if (server.method() == HTTP_GET) {
+    server.sendHeader("Connection", "close");
     server.send(200, "application/json", "{\"state\":" + String(relay3State) + "}");
   }
 }
@@ -1933,12 +1947,14 @@ void handleRelay3() {
 
 void handleTime() {
   if (!validTimeSync) {
+    server.sendHeader("Connection", "close");
     server.send(503, "text/plain", "Time not synced");
     return;
   }
 
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo, 10)) {
+    server.sendHeader("Connection", "close");
     server.send(500, "text/plain", "Error getting time");
     return;
   }
@@ -1953,6 +1969,7 @@ void handleTime() {
                          String(timeinfo.tm_year + 1900);
 
   String response = formattedTime + " " + currentDayName + " " + formattedDate;
+  server.sendHeader("Connection", "close");
   server.send(200, "text/plain", response);
 }
 
@@ -2001,6 +2018,7 @@ void handleRelayStatus() {
   json += "\"feedingModeActive\":" + String(feedingModeActive ? "true" : "false") + ",";
   json += "\"feedingModeTimeRemaining\":" + String(timeRemaining) + ",";
   json += "\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + "}";
+  server.sendHeader("Connection", "close");
   server.send(200, "application/json", json);
 }
 
@@ -2053,6 +2071,7 @@ void handleGetErrorStatus() {
   doc["time_synced"] = validTimeSync;
   String response;
   serializeJson(doc, response);
+  server.sendHeader("Connection", "close");
   server.send(200, "application/json", response);
 }
 
@@ -2420,6 +2439,7 @@ void handleGetTemporarySchedules() {
     json += "}";
   }
   json += "]";
+  server.sendHeader("Connection", "close");
   server.send(200, "application/json", json);
 }
 
@@ -2733,14 +2753,17 @@ void tempTemperature() {
 // Collector API handlers — served via apiServer (port 82) on Core 0 (networkLoop)
 void handleApiPing() {
   if (!dockerConfig.enabled) {
+    apiServer.sendHeader("Connection", "close");
     apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
     return;
   }
+  apiServer.sendHeader("Connection", "close");
   apiServer.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
 void handleApiStatus() {
   if (!dockerConfig.enabled) {
+    apiServer.sendHeader("Connection", "close");
     apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
     return;
   }
@@ -2770,20 +2793,24 @@ void handleApiStatus() {
   json += "\"timestamp\":" + ts;
   json += "}";
 
+  apiServer.sendHeader("Connection", "close");
   apiServer.send(200, "application/json", json);
 }
 
 void handleApiLogs() {
   if (!dockerConfig.enabled) {
+    apiServer.sendHeader("Connection", "close");
     apiServer.send(403, "application/json", "{\"error\":\"Docker integration disabled\"}");
     return;
   }
   if (!spiffsInitialized) {
+    apiServer.sendHeader("Connection", "close");
     apiServer.send(500, "application/json", "{\"error\":\"LittleFS not initialized!\"}");
     return;
   }
   if (littleFsMutex != NULL) {
     if (xSemaphoreTake(littleFsMutex, pdMS_TO_TICKS(1000)) != pdTRUE) {
+      apiServer.sendHeader("Connection", "close");
       apiServer.send(503, "application/json", "{\"error\":\"Filesystem busy, try again\"}");
       return;
     }
@@ -2793,6 +2820,7 @@ void handleApiLogs() {
   File file = LittleFS.open("/logs.json", "r");
   if (!file) {
     if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
+    apiServer.sendHeader("Connection", "close");
     apiServer.send(404, "application/json", "{\"logs\":[]}");
     return;
   }
@@ -2800,11 +2828,13 @@ void handleApiLogs() {
   file.close();
   if (littleFsMutex != NULL) xSemaphoreGive(littleFsMutex);
   if (error) {
+    apiServer.sendHeader("Connection", "close");
     apiServer.send(500, "application/json", "{\"error\":\"Failed to parse logs!\"}");
     return;
   }
   String response;
   serializeJson(doc, response);
+  apiServer.sendHeader("Connection", "close");
   apiServer.send(200, "application/json", response);
 }
 
@@ -2847,6 +2877,7 @@ void handleGetRawTemperatureData() {
   json += "\"externalRaw\":" + String(externalRaw, 2);
   json += "}";
 
+  server.sendHeader("Connection", "close");
   server.send(200, "application/json", json);
 }
 
