@@ -441,6 +441,16 @@ const char mainPage[] PROGMEM = R"html(
                 background-color: #111111 !important;
             }
         }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            padding-bottom: 20px;
+            font-size: 0.85rem;
+            color: var(--text-light);
+            letter-spacing: 1px;
+            opacity: 0.7;
+        }
     </style>
 </head>
 <body>
@@ -495,6 +505,10 @@ const char mainPage[] PROGMEM = R"html(
                 <button class="button nav-button nav-full" onclick="showDeviceSettings()">Device Settings</button>
                 <button class="button nav-button nav-full" onclick="showLogs()">System Logs</button>
             </div>
+        </div>
+        
+        <div class="footer">
+            )html" FIRMWARE_VERSION R"html( &bull; )html" FIRMWARE_DATE R"html(
         </div>
     </div>
     <div id="toast"></div>

@@ -19,6 +19,10 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+
+#define FIRMWARE_VERSION "V19.2"
+#define FIRMWARE_DATE "02/07/2026"
+
 #include "page_main.h"
 #include "page_email_config.h"
 #include "page_docker_config.h"
