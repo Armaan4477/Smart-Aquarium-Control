@@ -356,7 +356,7 @@ const char deviceSettingsPage[] PROGMEM = R"html(
             <h4 class="section-subtitle" style="margin-top: 20px;">System Maintenance</h4>
             <div class="navigation-buttons">
                 <button class="nav-button" onclick="showBackupRestore()">Backup / Restore</button>
-                <button class="nav-button" onclick="showOTAUpdate()">OTA Update</button>
+                <button class="nav-button" onclick="showOTAUpdate()">Firmware Update</button>
             </div>
             <div class="navigation-buttons" style="margin-top: 15px;">
                 <button class="nav-button nav-full" onclick="factoryResetDevice()" style="background-color: var(--error-color);">Factory Reset</button>
