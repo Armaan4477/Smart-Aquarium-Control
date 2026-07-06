@@ -20,8 +20,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define FIRMWARE_VERSION "V19.2"
-#define FIRMWARE_DATE "02/07/2026"
+#define FIRMWARE_VERSION "V20.0"
+#define FIRMWARE_DATE "06/07/2026"
 
 #include "page_main.h"
 #include "page_email_config.h"
@@ -37,6 +37,7 @@
 #include "page_auth_config.h"
 #include "page_wifi_config.h"
 #include "page_ntp_config.h"
+#include "page_auto_reboot.h"
 #include <Update.h>
 
 #define OLED_SDA 21
@@ -123,6 +124,11 @@ void saveThemeConfig();
 void handleThemeJS();
 void handleGetThemeConfig();
 void handleSaveThemeConfig();
+void handleAutoRebootConfigPage();
+void handleGetAutoRebootConfig();
+void handleSaveAutoRebootConfig();
+void loadAutoRebootConfig();
+void saveAutoRebootConfig();
 void handleOtaPage();
 void handleRollback();
 void handleReboot();
@@ -250,6 +256,16 @@ struct NtpConfig {
 NtpConfig ntpConfig;
 const char* fallbackNtpServer = "pool.ntp.org";
 
+struct AutoRebootConfig {
+  uint8_t magic;
+  bool enabled;
+  uint8_t hour;
+  uint8_t minute;
+  bool days[7];
+};
+AutoRebootConfig autoRebootConfig;
+int lastRebootCheckDay = -1;
+
 const char* fallbackApSsid = "ESP32_Aquarium";
 const char* fallbackApPassword = "aquarium123";
 bool isApActive = false;
@@ -335,6 +351,7 @@ AuthConfig authConfig = { 0xA1, "Admin", "Admin" };
 const int WIFI_CONFIG_ADDR = AUTH_CONFIG_ADDR + sizeof(AuthConfig) + 1;
 const int NTP_CONFIG_ADDR = WIFI_CONFIG_ADDR + sizeof(WifiConfig) + 1;
 const int IP_ALLOWLIST_ADDR = NTP_CONFIG_ADDR + sizeof(NtpConfig) + 1;
+const int AUTO_REBOOT_CONFIG_ADDR = IP_ALLOWLIST_ADDR + 1 + (MAX_ALLOWED_IPS * sizeof(AllowedIP));
 
 bool oledPhysicalState = false;
 
@@ -497,6 +514,7 @@ void setup() {
   EEPROM.begin(EEPROM_SIZE);
   loadWifiConfig();
   loadNtpConfig();
+  loadAutoRebootConfig();
   
   WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
@@ -576,6 +594,11 @@ void setup() {
   server.on("/emailConfig", HTTP_GET, handleEmailConfigPage);
   server.on("/api/emailConfig", HTTP_GET, handleGetEmailConfig);
   server.on("/api/emailConfig", HTTP_POST, handleSaveEmailConfig);
+
+  server.on("/auto_reboot", HTTP_GET, handleAutoRebootConfigPage);
+  server.on("/api/auto_reboot", HTTP_GET, handleGetAutoRebootConfig);
+  server.on("/api/auto_reboot", HTTP_POST, handleSaveAutoRebootConfig);
+
   server.on("/dockerConfig", HTTP_GET, handleDockerConfigPage);
   server.on("/api/dockerConfig", HTTP_GET, handleGetDockerConfig);
   server.on("/api/dockerConfig", HTTP_POST, handleSaveDockerConfig);
@@ -950,6 +973,71 @@ void handleSaveThemeConfig() {
   server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
 }
 
+void handleAutoRebootConfigPage() {
+  if (!checkAuthentication()) return;
+  server.send_P(200, "text/html", autoRebootPage);
+}
+
+void handleGetAutoRebootConfig() {
+  if (!checkAuthentication()) return;
+  
+  DynamicJsonDocument doc(512);
+  doc["enabled"] = autoRebootConfig.enabled;
+  doc["hour"] = autoRebootConfig.hour;
+  doc["minute"] = autoRebootConfig.minute;
+  JsonArray daysArray = doc.createNestedArray("days");
+  for (int i = 0; i < 7; i++) {
+    daysArray.add(autoRebootConfig.days[i]);
+  }
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
+}
+
+void handleSaveAutoRebootConfig() {
+  if (!checkAuthentication()) return;
+  
+  if (server.hasArg("enabled")) {
+    autoRebootConfig.enabled = server.arg("enabled") == "1";
+  }
+  if (server.hasArg("hour")) {
+    autoRebootConfig.hour = server.arg("hour").toInt();
+  }
+  if (server.hasArg("minute")) {
+    autoRebootConfig.minute = server.arg("minute").toInt();
+  }
+  for (int i = 0; i < 7; i++) {
+    String argName = "day" + String(i);
+    if (server.hasArg(argName)) {
+      autoRebootConfig.days[i] = server.arg(argName) == "1";
+    }
+  }
+  
+  saveAutoRebootConfig();
+  
+  server.send(200, "application/json", "{\"status\":\"success\"}");
+}
+
+void loadAutoRebootConfig() {
+  EEPROM.get(AUTO_REBOOT_CONFIG_ADDR, autoRebootConfig);
+  if (autoRebootConfig.magic != 0xA2) {
+    autoRebootConfig.magic = 0xA2;
+    autoRebootConfig.enabled = false;
+    autoRebootConfig.hour = 3;
+    autoRebootConfig.minute = 0;
+    for (int i = 0; i < 7; i++) {
+      autoRebootConfig.days[i] = (i == 0); // Default to Sunday
+    }
+  }
+}
+
+void saveAutoRebootConfig() {
+  autoRebootConfig.magic = 0xA2;
+  EEPROM.put(AUTO_REBOOT_CONFIG_ADDR, autoRebootConfig);
+  EEPROM.commit();
+}
+
 void applyOledSchedule() {
   if (!validTimeSync) {
     if (oledPhysicalState) {
@@ -995,6 +1083,7 @@ void applyOledSchedule() {
 extern const char displayCtrlPage[] PROGMEM;
 extern const char emailConfigPage[] PROGMEM;
 extern const char dockerConfigPage[] PROGMEM;
+extern const char autoRebootPage[] PROGMEM;
 
 void handleDisplayCtrlPage() {
   if (!checkAuthentication()) return;
@@ -1388,6 +1477,21 @@ void mainLoop(void* parameter) {
             storeLogEntry("Day changed to: " + String(timeinfo.tm_mday));
             prevDay = timeinfo.tm_mday;
             last90MinCheck = 0;
+          }
+
+          if (autoRebootConfig.enabled && millis() > 60000) {
+            if (autoRebootConfig.days[timeinfo.tm_wday] && 
+                timeinfo.tm_hour == autoRebootConfig.hour && 
+                timeinfo.tm_min == autoRebootConfig.minute) {
+              
+              if (lastRebootCheckDay != timeinfo.tm_mday) {
+                storeLogEntry("Scheduled Auto-Reboot triggering...");
+                delay(1000);
+                ESP.restart();
+              }
+            } else {
+              lastRebootCheckDay = -1;
+            }
           }
         }
       }

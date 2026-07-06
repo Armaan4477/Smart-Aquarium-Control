@@ -332,6 +332,7 @@ const char deviceSettingsPage[] PROGMEM = R"html(
             <div class="navigation-buttons">
                 <button class="nav-button" onclick="rebootDevice()" style="background-color: var(--error-color);">Reboot Device</button>
                 <button class="nav-button" onclick="openSyncModal()">Sync Time</button>
+                <button class="nav-button" onclick="showAutoReboot()">Scheduled Auto-Reboot</button>
             </div>
         </div>
 
@@ -500,6 +501,9 @@ const char deviceSettingsPage[] PROGMEM = R"html(
         }
         function showOTAUpdate() {
             window.location.href = '/ota';
+        }
+        function showAutoReboot() {
+            window.location.href = '/auto_reboot';
         }
         function showAuthConfig() {
             window.location.href = '/authconfig';
