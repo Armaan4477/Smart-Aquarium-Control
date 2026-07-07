@@ -255,6 +255,30 @@ const char page_backup_restore[] PROGMEM = R"html(
         input[type="file"] {
             display: none;
         }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.show { display: flex; }
+        .modal-content {
+            background-color: var(--card-color);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+        
         @media (max-width: 768px) {
             [data-theme="dark"] {
                 --background-color: #000000;
@@ -305,6 +329,18 @@ const char page_backup_restore[] PROGMEM = R"html(
     </div>
     
     <div id="toast"></div>
+    
+    <div id="versionModal" class="modal">
+        <div class="modal-content">
+            <h3 style="color: var(--warning-color); border-bottom: none; margin-bottom: 10px;">Version Mismatch Warning</h3>
+            <p id="modalMessage" style="margin-bottom: 15px;"></p>
+            <div id="modalDetails" style="text-align: left; background: var(--background-color); padding: 15px; border-radius: var(--border-radius); margin-bottom: 20px; font-size: 0.9em; max-height: 200px; overflow-y: auto;"></div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-block" onclick="closeModal()">Cancel</button>
+                <button class="btn-block danger" onclick="proceedWithRestore()">Proceed Anyway</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         function goBack() {
@@ -342,6 +378,40 @@ const char page_backup_restore[] PROGMEM = R"html(
             document.getElementById('fileInput').click();
         }
         
+        let pendingRestoreContent = null;
+
+        function closeModal() {
+            document.getElementById('versionModal').classList.remove('show');
+            pendingRestoreContent = null;
+            document.getElementById('fileInput').value = '';
+        }
+
+        function proceedWithRestore() {
+            document.getElementById('versionModal').classList.remove('show');
+            if (pendingRestoreContent) {
+                executeRestore(pendingRestoreContent);
+            }
+        }
+        
+        function executeRestore(content) {
+            fetch('/api/restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: content
+            })
+            .then(res => res.ok ? res.json() : res.json().then(data => { throw new Error(data.error || 'Unknown error'); }))
+            .then(data => {
+                showToast('Configuration restored successfully. Device is restarting...', 'success');
+                setTimeout(() => window.location.href = '/', 5000);
+            })
+            .catch(err => {
+                console.error('Restore error', err);
+                showToast('Failed to restore: ' + err.message, 'error');
+            });
+            pendingRestoreContent = null;
+            document.getElementById('fileInput').value = '';
+        }
+        
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -349,19 +419,39 @@ const char page_backup_restore[] PROGMEM = R"html(
             const reader = new FileReader();
             reader.onload = function(e) {
                 const content = e.target.result;
-                fetch('/api/restore', {
+                fetch('/api/restore/check', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: content
                 })
                 .then(res => res.ok ? res.json() : res.json().then(data => { throw new Error(data.error || 'Unknown error'); }))
                 .then(data => {
-                    showToast('Configuration restored successfully. Device is restarting...', 'success');
-                    setTimeout(() => window.location.href = '/', 5000);
+                    if (data.versionMismatch) {
+                        pendingRestoreContent = content;
+                        const msg = `You are trying to restore a backup from version <strong>${data.backupVersion}</strong> onto firmware version <strong>${data.currentVersion}</strong>.`;
+                        document.getElementById('modalMessage').innerHTML = msg;
+                        
+                        let detailsHtml = '';
+                        if (data.ignoredFields && data.ignoredFields.length > 0) {
+                            detailsHtml += '<strong>The following fields from the backup are unknown and will be ignored:</strong><ul style="margin-bottom: 10px; padding-left: 20px;">';
+                            data.ignoredFields.forEach(f => detailsHtml += `<li>${f}</li>`);
+                            detailsHtml += '</ul>';
+                        }
+                        if (data.missingFields && data.missingFields.length > 0) {
+                            detailsHtml += '<strong>The following fields are missing from the backup and will retain their current values:</strong><ul style="margin-bottom: 10px; padding-left: 20px;">';
+                            data.missingFields.forEach(f => detailsHtml += `<li>${f}</li>`);
+                            detailsHtml += '</ul>';
+                        }
+                        document.getElementById('modalDetails').innerHTML = detailsHtml;
+                        document.getElementById('versionModal').classList.add('show');
+                    } else {
+                        executeRestore(content);
+                    }
                 })
                 .catch(err => {
-                    console.error('Restore error', err);
-                    showToast('Failed to restore: ' + err.message, 'error');
+                    console.error('Check error', err);
+                    showToast('Failed to parse backup file: ' + err.message, 'error');
+                    document.getElementById('fileInput').value = '';
                 });
             };
             reader.readAsText(file);

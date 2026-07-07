@@ -20,7 +20,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define FIRMWARE_VERSION "V20.1.0"
+#define FIRMWARE_VERSION "V20.2.0"
 #define FIRMWARE_DATE "07/07/2026"
 
 #include "page_main.h"
@@ -61,6 +61,7 @@ void handleSyncNTP();
 void handleFeedingModeToggle();
 void handleBackup();
 void handleRestore();
+void handleRestoreCheck();
 void handleBackupRestorePage();
 void handleGetSchedules();
 void handleAddSchedule();
@@ -571,6 +572,7 @@ void setup() {
   server.on("/api/feeding_mode", HTTP_POST, handleFeedingModeToggle);
   server.on("/backuprestore", HTTP_GET, handleBackupRestorePage);
   server.on("/api/backup", HTTP_GET, handleBackup);
+  server.on("/api/restore/check", HTTP_POST, handleRestoreCheck);
   server.on("/api/restore", HTTP_POST, handleRestore);
   server.on("/time", HTTP_GET, handleTime);
   server.on("/api/sync_time", HTTP_POST, handleSyncTime);
@@ -3086,6 +3088,7 @@ void handleBackupRestorePage() {
 
 void handleBackup() {
   DynamicJsonDocument doc(4096);
+  doc["version"] = FIRMWARE_VERSION;
   
   JsonArray scheds = doc.createNestedArray("schedules");
   for (const Schedule& schedule : schedules) {
@@ -3137,6 +3140,15 @@ void handleBackup() {
   
   JsonObject ntp = doc.createNestedObject("ntpConfig");
   ntp["server"] = ntpConfig.server;
+  
+  JsonObject autoReboot = doc.createNestedObject("autoRebootConfig");
+  autoReboot["enabled"] = autoRebootConfig.enabled;
+  autoReboot["hour"] = autoRebootConfig.hour;
+  autoReboot["minute"] = autoRebootConfig.minute;
+  JsonArray arDays = autoReboot.createNestedArray("days");
+  for (int i = 0; i < 7; i++) {
+    arDays.add(autoRebootConfig.days[i]);
+  }
   
   JsonArray ips = doc.createNestedArray("allowedIPs");
   for (const auto& ip : allowedIPs) {
@@ -3257,6 +3269,19 @@ void handleRestore() {
     EEPROM.commit();
   }
   
+  if (doc.containsKey("autoRebootConfig")) {
+    autoRebootConfig.magic = 0xA2;
+    autoRebootConfig.enabled = doc["autoRebootConfig"]["enabled"];
+    autoRebootConfig.hour = doc["autoRebootConfig"]["hour"];
+    autoRebootConfig.minute = doc["autoRebootConfig"]["minute"];
+    JsonArray arDays = doc["autoRebootConfig"]["days"].as<JsonArray>();
+    for (int i = 0; i < 7 && i < arDays.size(); i++) {
+      autoRebootConfig.days[i] = arDays[i];
+    }
+    EEPROM.put(AUTO_REBOOT_CONFIG_ADDR, autoRebootConfig);
+    EEPROM.commit();
+  }
+  
   if (doc.containsKey("allowedIPs")) {
     allowedIPs.clear();
     JsonArray array = doc["allowedIPs"].as<JsonArray>();
@@ -3274,6 +3299,67 @@ void handleRestore() {
   server.send(200, "application/json", "{\"status\":\"success\"}");
   delay(1000);
   ESP.restart();
+}
+
+void handleRestoreCheck() {
+  if (server.method() != HTTP_POST) {
+    server.send(405, "text/plain", "Method Not Allowed");
+    return;
+  }
+  if (!server.hasArg("plain")) {
+    server.send(400, "text/plain", "Bad Request");
+    return;
+  }
+  
+  DynamicJsonDocument doc(4096);
+  DeserializationError error = deserializeJson(doc, server.arg("plain"));
+  
+  if (error) {
+    server.send(400, "application/json", "{\"error\":\"Failed to parse JSON\"}");
+    return;
+  }
+  
+  String backupVersion = doc["version"] | "Unknown";
+  String currentVersion = FIRMWARE_VERSION;
+  bool versionMismatch = (backupVersion != currentVersion);
+  
+  DynamicJsonDocument responseDoc(1024);
+  responseDoc["versionMismatch"] = versionMismatch;
+  responseDoc["backupVersion"] = backupVersion;
+  responseDoc["currentVersion"] = currentVersion;
+  
+  const char* expected[] = {
+    "version", "schedules", "sensorCalibration", "displaySchedule", "emailConfig", 
+    "dockerConfig", "authConfig", "wifiConfig", "themeConfig", "ntpConfig", 
+    "autoRebootConfig", "allowedIPs"
+  };
+  int expectedCount = sizeof(expected) / sizeof(expected[0]);
+  
+  JsonArray ignoredFields = responseDoc.createNestedArray("ignoredFields");
+  JsonObject obj = doc.as<JsonObject>();
+  for (JsonPair kv : obj) {
+    bool found = false;
+    for (int i = 0; i < expectedCount; i++) {
+      if (strcmp(kv.key().c_str(), expected[i]) == 0) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      ignoredFields.add(kv.key().c_str());
+    }
+  }
+  
+  JsonArray missingFields = responseDoc.createNestedArray("missingFields");
+  for (int i = 1; i < expectedCount; i++) {
+    if (!doc.containsKey(expected[i])) {
+      missingFields.add(expected[i]);
+    }
+  }
+  
+  String output;
+  serializeJson(responseDoc, output);
+  server.send(200, "application/json", output);
 }
 
 void handleReboot() {
