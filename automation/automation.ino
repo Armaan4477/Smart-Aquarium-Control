@@ -1,5 +1,9 @@
 #include <WiFi.h>
 #include <WebServer.h>
+#include <DNSServer.h>
+
+const byte DNS_PORT = 53;
+DNSServer dnsServer;
 #include <WebSocketsServer.h>
 #include <WiFiUdp.h>
 #include <vector>
@@ -20,7 +24,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define FIRMWARE_VERSION "V20.2.1"
+#define FIRMWARE_VERSION "V20.3.0"
 #define FIRMWARE_DATE "07/07/2026"
 
 #include "page_main.h"
@@ -525,6 +529,7 @@ void setup() {
   const char* currentApPassword = strlen(wifiConfig.apPassword) > 0 ? wifiConfig.apPassword : fallbackApPassword;
   WiFi.softAP(currentApSsid, currentApPassword);
   isApActive = true;
+  dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
   storeLogEntry("AP started: " + String(currentApSsid));
   
   if (wifiConfig.magic == 0xA1 && strlen(wifiConfig.ssid) > 0) {
@@ -630,6 +635,20 @@ void setup() {
   server.on("/api/rollback", HTTP_POST, handleRollback);
   server.on("/api/reboot", HTTP_POST, handleReboot);
   server.on("/api/reset", HTTP_POST, handleFactoryReset);
+
+  server.onNotFound([]() {
+    if (isApActive) {
+      if (wifiConfig.magic == 0xA1 && strlen(wifiConfig.ssid) > 0) {
+        server.sendHeader("Location", String("http://") + WiFi.softAPIP().toString() + "/", true);
+      } else {
+        server.sendHeader("Location", String("http://") + WiFi.softAPIP().toString() + "/wifiConfig", true);
+      }
+      server.send(302, "text/plain", "");
+    } else {
+      server.send(404, "text/plain", "Not Found");
+    }
+  });
+
   server.on("/update", HTTP_POST, []() {
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
@@ -1345,6 +1364,9 @@ void networkLoop(void* parameter) {
   unsigned long lastOledScheduleCheck = 0;
   for (;;) {
     resetWatchdog();
+    if (isApActive) {
+      dnsServer.processNextRequest();
+    }
     apiServer.handleClient();
     handleTemperature();
     handleExternalTemperature();
@@ -1375,6 +1397,7 @@ void networkLoop(void* parameter) {
         const char* currentApPassword = strlen(wifiConfig.apPassword) > 0 ? wifiConfig.apPassword : fallbackApPassword;
         WiFi.softAP(currentApSsid, currentApPassword);
         isApActive = true;
+        dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
         storeLogEntry("Fallback AP started");
       }
 
@@ -1402,6 +1425,7 @@ void networkLoop(void* parameter) {
           WiFi.setSleep(false);
           isApActive = false;
           pendingApShutdown = false;
+          dnsServer.stop();
           storeLogEntry("Fallback AP stopped");
         }
       }
@@ -2023,6 +2047,11 @@ void handleUpdateSchedule() {
 }
 
 void handleRoot() {
+  if (!(wifiConfig.magic == 0xA1 && strlen(wifiConfig.ssid) > 0)) {
+    server.sendHeader("Location", "/wifiConfig", true);
+    server.send(302, "text/plain", "");
+    return;
+  }
   if (!checkAuthentication()) return;
   server.sendHeader("Connection", "close");
   server.send_P(200, "text/html", mainPage);
