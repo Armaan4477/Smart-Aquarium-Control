@@ -339,8 +339,16 @@ const char otaPage[] PROGMEM = R"html(
             uploadBtnSchedule.disabled = true;
             document.getElementById('backBtn').disabled = true;
             document.getElementById('rollbackBtn').disabled = true;
-            uploadBtnNow.innerText = 'Uploading...';
-            uploadBtnSchedule.innerText = 'Uploading...';
+            
+            if (isScheduled) {
+                uploadBtnSchedule.style.backgroundColor = 'var(--text-light)';
+                uploadBtnNow.style.backgroundColor = 'var(--primary-color)';
+                uploadBtnSchedule.innerText = 'Uploading...';
+            } else {
+                uploadBtnNow.style.backgroundColor = 'var(--text-light)';
+                uploadBtnSchedule.style.backgroundColor = '#2196F3';
+                uploadBtnNow.innerText = 'Uploading...';
+            }
             progressContainer.style.display = 'block';
             statusMessage.style.display = 'none';
             progressBar.style.width = '0%';
@@ -355,8 +363,11 @@ const char otaPage[] PROGMEM = R"html(
                     const percentComplete = Math.round((e.loaded / e.total) * 100);
                     progressBar.style.width = percentComplete + '%';
                     if (percentComplete === 100) {
-                        uploadBtnNow.innerText = 'Flashing...';
-                        uploadBtnSchedule.innerText = 'Flashing...';
+                        if (isScheduled) {
+                            uploadBtnSchedule.innerText = 'Flashing...';
+                        } else {
+                            uploadBtnNow.innerText = 'Flashing...';
+                        }
                     }
                 }
             });
@@ -399,6 +410,8 @@ const char otaPage[] PROGMEM = R"html(
         function resetForm() {
             uploadBtnNow.disabled = false;
             uploadBtnSchedule.disabled = false;
+            uploadBtnNow.style.backgroundColor = '';
+            uploadBtnSchedule.style.backgroundColor = '#2196F3';
             document.getElementById('backBtn').disabled = false;
             document.getElementById('rollbackBtn').disabled = false;
             uploadBtnNow.innerText = 'Update Now';
