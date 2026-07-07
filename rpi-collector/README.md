@@ -134,8 +134,10 @@ The collector exposes a local API for data visualization and querying. All endpo
 
 ## ESP32 Integration
 
-The data collector interacts with two dedicated endpoints on the ESP32 firmware (`automation.ino`):
+The data collector interacts with two dedicated endpoints on the ESP32 firmware (`automation.ino`) for background data aggregation:
 - `GET /api/status`: Returns calibrated temps, relay states, override flags, error bitmasks (`active_errors`, `acknowledged_errors`) and time sync state.
 - `GET /api/logs`: Returns system logs.
+
+Additionally, the `/proxy/<path>` endpoint seamlessly routes all interactive WebUI features—such as firmware OTA updates, scheduled reboots, and configuration restores—directly to the ESP32. This ensures all management tasks can be performed securely through the Docker host without triggering browser CORS or Private Network Access (PNA) blocks.
 
 **Security**: Ensure your Raspberry Pi's IP address (e.g., `192.168.29.3`) is included in the `allowedIPs` whitelist within the ESP32 code so the collector can poll without authentication. If the IP is not whitelisted, the collector will use the `ESP32_USER` and `ESP32_PASS` credentials configured in `config.py` for HTTP Basic Authentication.

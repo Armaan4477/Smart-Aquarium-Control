@@ -96,6 +96,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 ### Web Interface
 The intuitive web dashboard provides complete control over your aquarium (including a built-in Dark Mode toggle). Navigate through dedicated pages to:
 - **Dashboard**: View live sensor readings and manually toggle equipment. Relay buttons automatically turn **yellow** to clearly indicate when a physical or manual override is active. Also features a **Feeding Mode** button to temporarily pause water circulation for 5 minutes.
+- **Device Settings**: A central hub to manage system configuration, hardware setup, security, and maintenance, including syncing time, scheduled auto-reboots, and factory resets.
 - **Schedules**: Create and manage recurring weekly schedules.
 - **Temp Schedules**: Set up one-time, expiring temporary schedules.
 - **Temp Control**: Monitor raw temperature data and calibrate internal/external sensors.
@@ -106,8 +107,8 @@ The intuitive web dashboard provides complete control over your aquarium (includ
 - **Docker Config**: Configure connection settings for the Raspberry Pi data collector.
 - **Display Control**: Configure OLED screen behavior, including operating hours and manual overrides.
 - **System Logs**: Review historical events, errors and system warnings.
-- **Backup & Restore**: Easily backup and restore the full EEPROM configuration (schedules, settings) to a JSON file.
-- **OTA Updates**: Securely perform Over-The-Air (OTA) firmware updates directly from the dashboard without needing physical access to the ESP32.
+- **Backup & Restore**: Easily backup and restore the full EEPROM configuration (schedules, settings) to a JSON file. The system will automatically reboot after a successful restore to apply configurations seamlessly.
+- **OTA Updates**: Securely perform Over-The-Air (OTA) firmware updates directly from the dashboard without needing physical access to the ESP32. Features an intelligent update-in-progress state (disabling UI elements like the rollback button to prevent errors) and supports **Scheduled Firmware Updates** to safely apply updates automatically at midnight.
 
 ### Physical Manual Overrides
 Physical switches allow you to instantly override automated schedules without accessing the web interface:
