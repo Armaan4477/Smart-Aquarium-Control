@@ -258,6 +258,11 @@ const char otaPage[] PROGMEM = R"html(
         <div class="header-actions">
             <button id="backBtn" onclick="goBack()" class="button">Back to Device Settings</button>
         </div>
+        
+        <div id="pendingUpdateBanner" style="display: none; background-color: var(--warning-color); color: #000; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold;">
+            An update is currently scheduled to be applied at midnight. To cancel this update, click the 'Revert to Previous Firmware' button below.
+        </div>
+
         <div class="card">
             <h2>Select Firmware</h2>
             
@@ -277,7 +282,10 @@ const char otaPage[] PROGMEM = R"html(
                 
                 <div id="statusMessage"></div>
                 
-                <button type="submit" class="button upload-btn" id="uploadBtn">Upload and Update</button>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button type="button" class="button upload-btn" id="uploadBtnNow" onclick="startUpload(false)" style="flex: 1;">Update Now</button>
+                    <button type="button" class="button" id="uploadBtnSchedule" onclick="startUpload(true)" style="flex: 1; background-color: #2196F3;">Schedule for Midnight</button>
+                </div>
                 <span class="warning-text">Do not close this page or turn off the device during update!</span>
             </form>
         </div>
@@ -300,9 +308,21 @@ const char otaPage[] PROGMEM = R"html(
         const progressContainer = document.getElementById('progressContainer');
         const progressBar = document.getElementById('progressBar');
         const statusMessage = document.getElementById('statusMessage');
+        const uploadBtnNow = document.getElementById('uploadBtnNow');
+        const uploadBtnSchedule = document.getElementById('uploadBtnSchedule');
 
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('/api/ota_status')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.pendingUpdate) {
+                        document.getElementById('pendingUpdateBanner').style.display = 'block';
+                    }
+                })
+                .catch(err => console.error('Failed to fetch OTA status:', err));
+        });
+
+        function startUpload(isScheduled) {
             
             const file = fileInput.files[0];
             if (!file) {
@@ -315,9 +335,11 @@ const char otaPage[] PROGMEM = R"html(
                 return;
             }
 
-            uploadBtn.disabled = true;
+            uploadBtnNow.disabled = true;
+            uploadBtnSchedule.disabled = true;
             document.getElementById('backBtn').disabled = true;
-            uploadBtn.innerText = 'Uploading...';
+            uploadBtnNow.innerText = 'Uploading...';
+            uploadBtnSchedule.innerText = 'Uploading...';
             progressContainer.style.display = 'block';
             statusMessage.style.display = 'none';
             progressBar.style.width = '0%';
@@ -332,18 +354,26 @@ const char otaPage[] PROGMEM = R"html(
                     const percentComplete = Math.round((e.loaded / e.total) * 100);
                     progressBar.style.width = percentComplete + '%';
                     if (percentComplete === 100) {
-                        uploadBtn.innerText = 'Flashing... (Please wait)';
+                        uploadBtnNow.innerText = 'Flashing...';
+                        uploadBtnSchedule.innerText = 'Flashing...';
                     }
                 }
             });
 
             xhr.addEventListener('load', function() {
                 if (xhr.status === 200 && xhr.responseText.trim() === 'OK') {
-                    showStatus('Update Successful! The device is rebooting. You will be redirected shortly.', 'success');
-                    progressBar.style.backgroundColor = 'var(--success-color)';
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 10000); // Wait 10 seconds before redirecting
+                    if (isScheduled) {
+                        showStatus('Update successfully scheduled for midnight!', 'success');
+                        progressBar.style.backgroundColor = 'var(--success-color)';
+                        document.getElementById('pendingUpdateBanner').style.display = 'block';
+                        resetForm();
+                    } else {
+                        showStatus('Update Successful! The device is rebooting. You will be redirected shortly.', 'success');
+                        progressBar.style.backgroundColor = 'var(--success-color)';
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 10000); // Wait 10 seconds before redirecting
+                    }
                 } else {
                     showStatus('Update Failed: ' + (xhr.responseText || 'Unknown error'), 'error');
                     resetForm();
@@ -355,9 +385,9 @@ const char otaPage[] PROGMEM = R"html(
                 resetForm();
             });
 
-            xhr.open('POST', '/update', true);
+            xhr.open('POST', '/update?schedule=' + (isScheduled ? 'true' : 'false'), true);
             xhr.send(formData);
-        });
+        }
         
         function showStatus(msg, type) {
             statusMessage.innerText = msg;
@@ -366,9 +396,11 @@ const char otaPage[] PROGMEM = R"html(
         }
         
         function resetForm() {
-            uploadBtn.disabled = false;
+            uploadBtnNow.disabled = false;
+            uploadBtnSchedule.disabled = false;
             document.getElementById('backBtn').disabled = false;
-            uploadBtn.innerText = 'Upload and Update';
+            uploadBtnNow.innerText = 'Update Now';
+            uploadBtnSchedule.innerText = 'Schedule for Midnight';
             progressBar.style.backgroundColor = 'var(--error-color)';
         }
 

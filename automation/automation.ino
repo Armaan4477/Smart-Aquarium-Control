@@ -20,8 +20,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define FIRMWARE_VERSION "V20.0"
-#define FIRMWARE_DATE "06/07/2026"
+#define FIRMWARE_VERSION "V20.1.0"
+#define FIRMWARE_DATE "07/07/2026"
 
 #include "page_main.h"
 #include "page_email_config.h"
@@ -130,6 +130,7 @@ void handleSaveAutoRebootConfig();
 void loadAutoRebootConfig();
 void saveAutoRebootConfig();
 void handleOtaPage();
+void handleOtaStatus();
 void handleRollback();
 void handleReboot();
 void handleFactoryReset();
@@ -271,6 +272,7 @@ const char* fallbackApPassword = "aquarium123";
 bool isApActive = false;
 std::vector<LogEntry> logBuffer;
 bool spiffsInitialized = false;
+bool pendingScheduledUpdate = false;
 WiFiUDP ntpUDP;
 unsigned long lastTimeUpdate = 0;
 const long timeUpdateInterval = 1000;
@@ -622,6 +624,7 @@ void setup() {
   server.on("/api/testNtp", HTTP_POST, handleTestNtp);
 
   server.on("/ota", HTTP_GET, handleOtaPage);
+  server.on("/api/ota_status", HTTP_GET, handleOtaStatus);
   server.on("/api/rollback", HTTP_POST, handleRollback);
   server.on("/api/reboot", HTTP_POST, handleReboot);
   server.on("/api/reset", HTTP_POST, handleFactoryReset);
@@ -629,8 +632,13 @@ void setup() {
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
     if (!Update.hasError()) {
-      delay(100);
-      ESP.restart();
+      if (server.hasArg("schedule") && server.arg("schedule") == "true") {
+        pendingScheduledUpdate = true;
+        storeLogEntry("Firmware update scheduled for midnight");
+      } else {
+        delay(100);
+        ESP.restart();
+      }
     }
   }, []() {
     HTTPUpload& upload = server.upload();
@@ -1477,6 +1485,11 @@ void mainLoop(void* parameter) {
             storeLogEntry("Day changed to: " + String(timeinfo.tm_mday));
             prevDay = timeinfo.tm_mday;
             last90MinCheck = 0;
+            if (pendingScheduledUpdate) {
+              storeLogEntry("Executing scheduled firmware switch...");
+              delay(1000);
+              ESP.restart();
+            }
           }
 
           if (autoRebootConfig.enabled && millis() > 60000) {
@@ -3299,6 +3312,15 @@ void handleOtaPage() {
   server.send_P(200, "text/html", otaPage);
 }
 
+void handleOtaStatus() {
+  if (!checkAuthentication()) {
+    return;
+  }
+  server.sendHeader("Connection", "close");
+  String json = "{\"pendingUpdate\": " + String(pendingScheduledUpdate ? "true" : "false") + "}";
+  server.send(200, "application/json", json);
+}
+
 void handleRollback() {
   if (!checkAuthentication()) {
     return;
@@ -3306,6 +3328,7 @@ void handleRollback() {
 
   if (Update.canRollBack()) {
     if (Update.rollBack()) {
+      pendingScheduledUpdate = false;
       storeLogEntry("Firmware Rollback Successful");
       server.send(200, "text/plain", "OK");
       delay(500);
