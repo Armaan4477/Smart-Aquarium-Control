@@ -1597,10 +1597,13 @@ void checkScheduleslaunch() {
     }
   }
 
+  bool didTurnOn = false;
+
   if (!overrideRelay1) {
     if (relay1ShouldBeOn) {
       if (!relay1State) {
         activateRelay(1, false);
+        didTurnOn = true;
         //storeLogEntry("Relay 1 activated by startup schedule check");
       }
     } else {
@@ -1610,9 +1613,16 @@ void checkScheduleslaunch() {
       }
     }
 
+    if (didTurnOn) {
+      delay(1000);
+      resetWatchdog();
+      didTurnOn = false;
+    }
+
     if (relay3ShouldBeOn) {
       if (!relay3State) {
         activateRelay(3, false);
+        didTurnOn = true;
         // storeLogEntry("Relay 3 activated by startup schedule check");
       }
     } else {
@@ -1621,6 +1631,11 @@ void checkScheduleslaunch() {
         // storeLogEntry("Relay 3 deactivated by startup schedule check");
       }
     }
+  }
+
+  if (didTurnOn) {
+    delay(1000);
+    resetWatchdog();
   }
 
   if (!overrideRelay2) {
