@@ -4,9 +4,32 @@ This document outlines the major version rewrites, feature additions and histori
 
 ---
 
+## v20.x (Jul 2026)
+
+### v20.3.1 (07 Jul 2026) *(Current)*
+- **Bug Fixes**: Minor UI layout fixes and API query adjustments.
+
+### v20.3.0 (07 Jul 2026)
+- **Self-Hosted AP DNS Block**: Added DNS blocking for the self-hosting Access Point to improve captive portal routing.
+
+### v20.2.1 (07 Jul 2026)
+- **OTA Safeguards**: Disabled the rollback button during active OTA uploads to prevent state inconsistencies.
+
+### v20.2.0 (07 Jul 2026)
+- **Restore Validation**: Added firmware version compatibility and missing field validation checks before restoring configurations.
+
+### v20.1.0 (07 Jul 2026)
+- **Scheduled OTA Updates**: Added support for scheduling firmware updates to install automatically at a designated time.
+
+### v20.0 (06 Jul 2026)
+- **Auto-Reboot**: Added an automated reboot scheduling system.
+- **Staggered Relay Startup**: Implemented staggered relay initialization during system startup to prevent power surges.
+
+---
+
 ## v19.x (Jul 2026)
 
-### v19.2 (02 Jul 2026) *(Current)*
+### v19.2 (02 Jul 2026)
 - Bug fixes and minor stability enhancements.
 
 ### v19.1 (01 Jul 2026)
