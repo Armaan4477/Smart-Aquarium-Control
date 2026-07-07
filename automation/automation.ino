@@ -20,7 +20,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define FIRMWARE_VERSION "V20.2.0"
+#define FIRMWARE_VERSION "V20.2.1"
 #define FIRMWARE_DATE "07/07/2026"
 
 #include "page_main.h"
