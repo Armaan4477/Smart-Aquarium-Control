@@ -12,8 +12,8 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 - **Advanced Scheduling System**:
   - **Regular Schedules**: Recurring day-of-week ON/OFF schedules with automatic conflict detection, safely stored in EEPROM.
   - **Temporary Schedules**: One-time, auto-expiring schedules (up to 2 per relay) for ad-hoc equipment control.
-- **Precision Dual-Temperature Monitoring**:
-  - Internal and External DS18B20 sensors ensure water and ambient temperatures are constantly tracked.
+- **Precision Temperature and Humidity Monitoring**:
+  - Internal DS18B20 sensor for water temperature and External DHT22 sensor for ambient temperature and humidity tracking.
   - Software-based sensor calibration with offsets saved to EEPROM for high accuracy.
 - **4-Channel Relay Control**:
   - **Relay 1**: Wave Maker
@@ -38,7 +38,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 
 - **Microcontroller**: ESP32 Development Board
 - **Relays**: 4-Channel Relay Module (5V/3.3V compatible)
-- **Sensors**: 2x DS18B20 Temperature Sensors (Waterproof recommended for internal)
+- **Sensors**: 1x DS18B20 Temperature Sensor (Waterproof recommended for internal) and 1x DHT22 Temperature/Humidity Sensor
 - **Display**: 128x64 I2C OLED Display (SSD1306)
 - **Inputs/Outputs**: 
   - 2x Physical Switches (for manual overrides)
@@ -60,7 +60,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 | **Switch 2 (Override 2)** | `GPIO 32` | Connect to GND via switch |
 | **Error LED** | `GPIO 2` | |
 | **Internal Temp Sensor** | `GPIO 26` | Requires 4.7kΩ pull-up resistor |
-| **External Temp Sensor** | `GPIO 27` | Requires 4.7kΩ pull-up resistor |
+| **External DHT22 Sensor** | `GPIO 27` | Measures ambient temp & humidity |
 | **OLED SDA** | `GPIO 21` | I2C Data |
 | **OLED SCL** | `GPIO 22` | I2C Clock |
 
@@ -78,6 +78,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
    - `ArduinoJson`, `EEPROM`, `LittleFS`, `WiFiClientSecure`
    - `ReadyMail` (for SMTP emails)
    - `OneWire`, `DallasTemperature`
+   - `DHT sensor library`, `Adafruit Unified Sensor`
    - `TimeLib`, `Ticker`
    - `Adafruit GFX Library`, `Adafruit SSD1306` (for OLED)
    - `Update` (for OTA updates)
@@ -122,4 +123,4 @@ Physical switches allow you to instantly override automated schedules without ac
 - **Sensor Polling**: Internal temps update every 20s, external every 60s.
 - **Health Checks**: Schedule verification runs every second.
 - **Email Reporting**: Automated status emails are dispatched periodically and upon critical sensor failures.
-- **Fallback Access Point**: If WiFi fails to connect, the ESP32 hosts a fallback AP (`ESP32_Aquarium` / `aquarium123`). This mode provides full Web UI access and allows for safe OTA updates even when the local network is down.
+- **Fallback Access Point**: If WiFi fails to connect, the ESP32 hosts a fallback AP (`ESP32_Aquarium` / `aquarium123`). This mode provides full Web UI access and allows for safe OTA updates even when the local network is down. When connected to this AP, the Web UI automatically bypasses login authentication for seamless access.

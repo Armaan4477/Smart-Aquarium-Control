@@ -36,7 +36,7 @@ Before building or running the container, ensure the variables in [`config.py`](
 | `ESP32_PORT` | `82` | Dedicated API server port on ESP32 |
 | `ESP32_USER` | `Admin` | HTTP Basic Auth username (default unless changed in ESP32 WebUI) |
 | `ESP32_PASS` | `Admin` | HTTP Basic Auth password (default unless changed in ESP32 WebUI) |
-| `POLL_STATUS_INTERVAL` | `60` | Seconds between temperature + relay status polls |
+| `POLL_STATUS_INTERVAL` | `60` | Seconds between temperature, humidity + relay status polls |
 | `POLL_LOGS_INTERVAL` | `60` | Seconds between retrieving system logs |
 | `POLL_ERROR_INTERVAL` | `30` | Seconds between error checks & email alerts |
 | `PING_INTERVAL` | `10` | Seconds between health check pings |
@@ -72,9 +72,9 @@ The collector exposes a local API for data visualization and querying. All endpo
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/temperature/latest` | Most recent reading (temps + relays + errors) |
+| `GET` | `/temperature/latest` | Most recent reading (temps, humidity + relays + errors) |
 | `GET` | `/temperature?limit=N&since=ISO` | Historical readings |
-| `GET` | `/temperature/range?hours=N` | Min / max / avg over last N hours |
+| `GET` | `/temperature/range?hours=N` | Min / max / avg temps & humidity over last N hours |
 
 **Example response – `/temperature/latest`**
 ```json
@@ -84,6 +84,7 @@ The collector exposes a local API for data visualization and querying. All endpo
   "esp32_time": "25/05/2026 19:25:00",
   "internal_c": 26.50,
   "external_c": 24.10,
+  "external_hum": 60.5,
   "relay1": 1,
   "relay2": 1,
   "relay3": 0,
@@ -100,7 +101,7 @@ The collector exposes a local API for data visualization and querying. All endpo
 }
 ```
 
-*Note: If a temperature sensor is in an active error state, `internal_c` or `external_c` will be returned as `null` to prevent displaying stale data.*
+*Note: If a sensor is in an active error state, `internal_c`, `external_c`, or `external_hum` will be returned as `null` to prevent displaying stale data.*
 
 ### Relays, Overrides & Errors
 
@@ -135,7 +136,7 @@ The collector exposes a local API for data visualization and querying. All endpo
 ## ESP32 Integration
 
 The data collector interacts with two dedicated endpoints on the ESP32 firmware (`automation.ino`) for background data aggregation:
-- `GET /api/status`: Returns calibrated temps, relay states, override flags, error bitmasks (`active_errors`, `acknowledged_errors`) and time sync state.
+- `GET /api/status`: Returns calibrated temps, humidity, relay states, override flags, error bitmasks (`active_errors`, `acknowledged_errors`) and time sync state.
 - `GET /api/logs`: Returns system logs.
 
 Additionally, the `/proxy/<path>` endpoint seamlessly routes all interactive WebUI features—such as firmware OTA updates, scheduled reboots, and configuration restores—directly to the ESP32. This ensures all management tasks can be performed securely through the Docker host without triggering browser CORS or Private Network Access (PNA) blocks.

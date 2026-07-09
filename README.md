@@ -19,9 +19,9 @@ This repository is split into two primary components:
 - **Automated Equipment Scheduling:** Manage wave makers, primary/secondary lights and air pumps through weekly recurring and temporary one-time schedules. Includes a dedicated one-click **Feeding Mode** to temporarily pause water circulation.
 - **Maintenance Mode:** Temporarily pause automated background polling and email alerts via the data collector to safely perform tank maintenance without triggering false alarms.
 - **Configuration & Firmware Management:** Built-in Backup/Restore functionality with auto-reboot, custom NTP time synchronization, scheduled firmware updates, and robust Over-The-Air (OTA) update support with seamless UI state management for firmware upgrades directly from the dashboard.
-- **Wi-Fi Provisioning System:** Built-in fallback Access Point (AP) mode for initial network setup and recovery, allowing easy Wi-Fi configuration without hardcoding credentials.
+- **Wi-Fi Provisioning System:** Built-in fallback Access Point (AP) mode for initial network setup and recovery. Features frictionless, open AP connectivity without forced captive portal redirection, allowing easy Wi-Fi configuration without hardcoding credentials.
 - **Persistent Dark Mode:** A modern, customizable Web UI with a built-in dark mode that remembers your preference.
-- **Precision Temperature Monitoring:** Dual-sensor setup for tracking both water and ambient temperatures.
+- **Precision Environmental Monitoring:** Dual-sensor setup for tracking water temperature, alongside ambient temperature and humidity (via DHT22).
 - **Robust Hardware Controls:** Local OLED status display and physical override switches for immediate, web-free access.
 - **Historical Data Logging:** Automated data collection every 60 seconds, stored in an SQLite database for trend analysis.
 - **Reliable Alerting & Error Tracking:** Features dynamic UI pop-ups for immediate visual feedback, alongside automated email notifications for system startups, sensor failures and periodic health checks.
