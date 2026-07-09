@@ -6,7 +6,13 @@ This document outlines the major version rewrites, feature additions and histori
 
 ## v20.x (Jul 2026)
 
-### v20.3.1 (07 Jul 2026) *(Current)*
+### v20.4.0 (09 Jul 2026) *(Current)*
+- **Sensor Upgrades**: Upgraded the external sensor to DHT22 and integrated a humidity tracking system.
+- **AP Connectivity**: Improved self-hosted AP connectivity by removing authentication requirements and disabling forced captive portal redirection.
+- **OLED Display**: Improved internal OLED display by centering the data for a better visual layout.
+- **Documentation**: Comprehensive updates to the main automation and RPi Collector documentation.
+
+### v20.3.1 (07 Jul 2026)
 - **Bug Fixes**: Minor UI layout fixes and API query adjustments.
 
 ### v20.3.0 (07 Jul 2026)
