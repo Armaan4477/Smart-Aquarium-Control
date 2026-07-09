@@ -26,6 +26,7 @@ def init_db():
                 esp32_time     TEXT,                      -- timestamp from ESP32 (may be null)
                 internal_c     REAL,
                 external_c     REAL,
+                external_hum   REAL,                      -- DHT22 relative humidity (%)
                 relay1         INTEGER NOT NULL DEFAULT 0,
                 relay2         INTEGER NOT NULL DEFAULT 0,
                 relay3         INTEGER NOT NULL DEFAULT 0,
@@ -57,6 +58,17 @@ def init_db():
             );
         """)
 
+    # ── Migration: add external_hum column to existing databases ──────────
+    # ALTER TABLE is a no-op-safe pattern — we catch the OperationalError that
+    # SQLite raises when the column already exists.
+    try:
+        with get_conn() as conn:
+            conn.execute(
+                "ALTER TABLE status_readings ADD COLUMN external_hum REAL"
+            )
+        log.info("Migration applied: added external_hum column to status_readings.")
+    except sqlite3.OperationalError:
+        pass  # Column already exists — nothing to do.
 
     log.info("Database initialised at %s", DB_PATH)
 

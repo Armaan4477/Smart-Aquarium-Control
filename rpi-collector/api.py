@@ -262,12 +262,13 @@ def get_temperature_latest():
     
     result = _row_to_dict(row)
     
-    # If sensors are in an error state, do not return the stale temperature
+    # If sensors are in an error state, do not return the stale temperature/humidity
     active_errs = result.get("active_errors") or 0
     if active_errs & (1 << 2):
         result["internal_c"] = None
     if active_errs & (1 << 3):
         result["external_c"] = None
+        result["external_hum"] = None
 
     result["is_offline"]     = collector.uptime_state.get("is_offline", False)
     result["uptime_pending"] = collector.uptime_state.get("uptime_pending", False)
@@ -278,7 +279,7 @@ def get_temperature_latest():
 @app.get("/temperature/range")
 def get_temperature_range():
     """
-    Return min/max/avg temperatures over a time window.
+    Return min/max/avg temperatures and humidity over a time window.
     Query params:
       hours=N    look-back window in hours (default 24, max 720)
     """
@@ -295,7 +296,10 @@ def get_temperature_range():
                    AVG(internal_c)   AS internal_avg,
                    MIN(external_c)   AS external_min,
                    MAX(external_c)   AS external_max,
-                   AVG(external_c)   AS external_avg
+                   AVG(external_c)   AS external_avg,
+                   MIN(external_hum) AS humidity_min,
+                   MAX(external_hum) AS humidity_max,
+                   AVG(external_hum) AS humidity_avg
                FROM status_readings
                WHERE collected_at > ?""",
             (since,),
@@ -303,8 +307,8 @@ def get_temperature_range():
     result = _row_to_dict(row)
     result["window_hours"] = hours
     # round averages
-    for key in ("internal_avg", "external_avg"):
-        if result[key] is not None:
+    for key in ("internal_avg", "external_avg", "humidity_avg"):
+        if result.get(key) is not None:
             result[key] = round(result[key], 2)
     return jsonify(result)
 

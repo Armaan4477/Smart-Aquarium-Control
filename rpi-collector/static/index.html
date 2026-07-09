@@ -42,66 +42,84 @@
         <main>
             <!-- Current Status Cards -->
             <section class="cards-grid">
-                <div class="glass-panel card">
-                    <div class="card-icon temp-icon"></div>
-                    <div class="card-content">
-                        <h3>Internal Temp</h3>
-                        <p class="value" id="val-int-temp">--°C</p>
+                <!-- Internal Sensor -->
+
+                <div class="glass-panel sensor-card">
+                    <div class="sensor-card-header">
+                        <div class="sensor-card-icon temp-icon"></div>
+                        <span class="sensor-card-label">Internal Sensor</span>
+                    </div>
+                    <div class="sensor-card-body">
+                        <p class="sensor-value" id="val-int-temp">--°C</p>
                     </div>
                 </div>
-                <div class="glass-panel card">
-                    <div class="card-icon temp-icon-alt"></div>
-                    <div class="card-content">
-                        <h3>External Temp</h3>
-                        <p class="value" id="val-ext-temp">--°C</p>
+
+                <!-- External Sensor -->
+                <div class="glass-panel sensor-card">
+                    <div class="sensor-card-header">
+                        <div class="sensor-card-icon temp-icon-alt"></div>
+                        <span class="sensor-card-label">External Sensor</span>
+                    </div>
+                    <div class="sensor-card-body">
+                        <p class="sensor-value" id="val-ext-temp">--°C</p>
+                        <div class="sensor-sub-row">
+                            <span class="sensor-sub-label">💧 Humidity</span>
+                            <span class="sensor-sub-value" id="val-ext-hum">--%</span>
+                        </div>
                     </div>
                 </div>
-                <div class="glass-panel card">
-                    <div class="card-icon relay-icon" style="align-self: start;"></div>
-                    <div class="card-content">
-                        <h3>Relays</h3>
-                        <div class="relays-container" id="val-relays">
-                            <div class="relay-row">
-                                <span class="relay-name">WaveMaker</span>
-                                <div class="relay-status-group">
-                                    <button class="relay-toggle" id="relay-toggle-1" onclick="toggleRelay(1)">OFF</button>
-                                    <span class="override-badge hidden" id="override-1">OVERRIDE</span>
-                                </div>
+
+                <!-- Relays -->
+                <div class="glass-panel relays-card">
+                    <div class="sensor-card-header">
+                        <div class="sensor-card-icon relay-icon"></div>
+                        <span class="sensor-card-label">Relays</span>
+                    </div>
+                    <div class="relays-list" id="val-relays">
+                        <div class="relay-row">
+                            <span class="relay-name">WaveMaker</span>
+                            <div class="relay-status-group">
+                                <button class="relay-toggle" id="relay-toggle-1" onclick="toggleRelay(1)">OFF</button>
+                                <span class="override-badge hidden" id="override-1">OVR</span>
                             </div>
-                            <div class="relay-row">
-                                <span class="relay-name">Light</span>
-                                <div class="relay-status-group">
-                                    <button class="relay-toggle" id="relay-toggle-2" onclick="toggleRelay(2)">OFF</button>
-                                    <span class="override-badge hidden" id="override-2">OVERRIDE</span>
-                                </div>
+                        </div>
+                        <div class="relay-row">
+                            <span class="relay-name">Light</span>
+                            <div class="relay-status-group">
+                                <button class="relay-toggle" id="relay-toggle-2" onclick="toggleRelay(2)">OFF</button>
+                                <span class="override-badge hidden" id="override-2">OVR</span>
                             </div>
-                            <div class="relay-row">
-                                <span class="relay-name">Air Pump</span>
-                                <div class="relay-status-group">
-                                    <button class="relay-toggle" id="relay-toggle-3" onclick="toggleRelay(3)">OFF</button>
-                                    <span class="override-badge hidden" id="override-3">OVERRIDE</span>
-                                </div>
-                            </div> 
-                            <div class="relay-row">
-                                <span class="relay-name">Change Light</span>
-                                <div class="relay-status-group">
-                                    <button class="relay-toggle" id="btn-light-mode" onclick="changeLight()">TOGGLE</button>
-                                </div>
+                        </div>
+                        <div class="relay-row">
+                            <span class="relay-name">Air Pump</span>
+                            <div class="relay-status-group">
+                                <button class="relay-toggle" id="relay-toggle-3" onclick="toggleRelay(3)">OFF</button>
+                                <span class="override-badge hidden" id="override-3">OVR</span>
                             </div>
-                            <div class="relay-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
-                                <span class="relay-name">Feeding Mode</span>
-                                <div class="relay-status-group">
-                                    <button class="relay-toggle" id="btn-feeding" onclick="toggleFeedingMode()">ACTIVATE</button>
-                                </div>
+                        </div>
+                        <div class="relay-row">
+                            <span class="relay-name">Change Light</span>
+                            <div class="relay-status-group">
+                                <button class="relay-toggle" id="btn-light-mode" onclick="changeLight()">TOGGLE</button>
+                            </div>
+                        </div>
+                        <div class="relay-row relay-row-sep">
+                            <span class="relay-name">Feeding Mode</span>
+                            <div class="relay-status-group">
+                                <button class="relay-toggle" id="btn-feeding" onclick="toggleFeedingMode()">ACTIVATE</button>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="glass-panel card">
-                    <div class="card-icon uptime-icon"></div>
-                    <div class="card-content">
-                        <h3>Uptime</h3>
-                        <p class="value value-small" id="val-uptime">--</p>
+
+                <!-- Uptime -->
+                <div class="glass-panel sensor-card">
+                    <div class="sensor-card-header">
+                        <div class="sensor-card-icon uptime-icon"></div>
+                        <span class="sensor-card-label">Uptime</span>
+                    </div>
+                    <div class="sensor-card-body">
+                        <p class="sensor-value sensor-value-sm" id="val-uptime">--</p>
                     </div>
                 </div>
             </section>

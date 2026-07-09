@@ -263,10 +263,12 @@ def send_email_report(trigger: str, status_data: dict) -> None:
     now_str      = _now_str()
     internal_c   = status_data.get("internal_c")
     external_c   = status_data.get("external_c")
+    external_hum = status_data.get("external_hum")
     active_errs  = int(status_data.get("active_errors", 0))
 
     int_temp_str = "--" if (active_errs & (1 << 2)) else (f"{internal_c:.1f}" if internal_c is not None else "--")
     ext_temp_str = "--" if (active_errs & (1 << 3)) else (f"{external_c:.1f}" if external_c is not None else "--")
+    hum_str      = "--" if (active_errs & (1 << 3)) else (f"{external_hum:.1f}" if external_hum is not None else "--")
 
     relay1       = "ON"     if status_data.get("relay1")         else "OFF"
     relay2       = "ON"     if status_data.get("relay2")         else "OFF"
@@ -311,7 +313,7 @@ def send_email_report(trigger: str, status_data: dict) -> None:
 
     content_html = f"""
     <div class="section">
-      <div class="section-title">Temperature</div>
+      <div class="section-title">Temperature &amp; Humidity</div>
       <div style="text-align:center">
         <div class="temp-row">
           <div class="temp-big">{int_temp_str}<span class="temp-unit"> °C</span></div>
@@ -320,6 +322,10 @@ def send_email_report(trigger: str, status_data: dict) -> None:
         <div class="temp-row">
           <div class="temp-big">{ext_temp_str}<span class="temp-unit"> °C</span></div>
           <div class="temp-label">External</div>
+        </div>
+        <div class="temp-row">
+          <div class="temp-big" style="color:#fb923c">{hum_str}<span class="temp-unit" style="color:#fdba74"> %</span></div>
+          <div class="temp-label">💧 Humidity</div>
         </div>
       </div>
       <div style="margin-top:12px;text-align:center">{temp_flags_html}</div>
@@ -394,6 +400,7 @@ def send_email_report(trigger: str, status_data: dict) -> None:
         f"System Status:\n"
         f"  Internal Temperature : {int_temp_str} °C\n"
         f"  External Temperature : {ext_temp_str} °C\n"
+        f"  Humidity             : {hum_str} %\n"
         f"  Relay 1 (WaveMaker)  : {relay1}\n"
         f"  Relay 2 (Light)      : {relay2}\n"
         f"  Relay 3 (Air Pump)   : {relay3}\n"

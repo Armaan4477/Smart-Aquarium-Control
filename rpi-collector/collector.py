@@ -104,17 +104,18 @@ def _poll_status():
             conn.execute(
                 """INSERT INTO status_readings
                        (collected_at, esp32_time,
-                        internal_c, external_c,
+                        internal_c, external_c, external_hum,
                         relay1, relay2, relay3,
                         override1, override2,
                         active_errors, acknowledged_errors,
                         uptime_seconds, uptime_days, time_synced)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     data.get("timestamp"),
                     data.get("internal_c"),
                     data.get("external_c"),
+                    data.get("external_hum"),
                     1 if data.get("relay1")         else 0,
                     1 if data.get("relay2")         else 0,
                     1 if data.get("relay3")         else 0,
@@ -128,8 +129,9 @@ def _poll_status():
                 ),
             )
         last_status_poll = {"time": now, "ok": True, "error": None}
-        log.debug("Status stored: %.2f°C int / %.2f°C ext",
-                  data.get("internal_c", 0), data.get("external_c", 0))
+        log.debug("Status stored: %.2f°C int / %.2f°C ext / %.1f%% hum",
+                  data.get("internal_c", 0), data.get("external_c", 0),
+                  data.get("external_hum", 0))
 
     except Exception as exc:
         log.error("DB write error (status): %s", exc)

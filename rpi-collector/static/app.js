@@ -8,6 +8,7 @@ const els = {
     connText: document.getElementById('conn-text'),
     valIntTemp: document.getElementById('val-int-temp'),
     valExtTemp: document.getElementById('val-ext-temp'),
+    valExtHum: document.getElementById('val-ext-hum'),
     relay1: document.getElementById('relay-toggle-1'),
     relay2: document.getElementById('relay-toggle-2'),
     relay3: document.getElementById('relay-toggle-3'),
@@ -272,14 +273,32 @@ async function fetchLatestStatus() {
     els.valIntTemp.innerHTML = data.internal_c !== null ? `${data.internal_c.toFixed(1)}°C` : '--°C';
     els.valExtTemp.innerHTML = data.external_c !== null ? `${data.external_c.toFixed(1)}°C` : '--°C';
 
-    if (data.is_offline) {
-        if (data.internal_c !== null) {
-            els.valIntTemp.innerHTML += '<div style="font-size: 0.85rem; font-weight: 500; color: var(--accent-orange); margin-top: -5px;">(last known)</div>';
-        }
-        if (data.external_c !== null) {
-            els.valExtTemp.innerHTML += '<div style="font-size: 0.85rem; font-weight: 500; color: var(--accent-orange); margin-top: -5px;">(last known)</div>';
+    // Humidity
+    if (els.valExtHum) {
+        if (data.external_hum !== null && data.external_hum !== undefined) {
+            els.valExtHum.textContent = `${data.external_hum.toFixed(1)}%`;
+            els.valExtHum.style.color = '';
+        } else {
+            els.valExtHum.textContent = '--%';
+            els.valExtHum.style.color = '';
         }
     }
+
+    if (data.is_offline) {
+        // Append "(last known)" hint inline for temp values
+        const offlineHint = ' <span style="font-size:0.7rem;font-weight:600;color:var(--accent-orange);vertical-align:middle;">(last known)</span>';
+        if (data.internal_c !== null) {
+            els.valIntTemp.innerHTML += offlineHint;
+        }
+        if (data.external_c !== null) {
+            els.valExtTemp.innerHTML += offlineHint;
+        }
+        // Tint humidity value orange when offline
+        if (els.valExtHum && data.external_hum !== null && data.external_hum !== undefined) {
+            els.valExtHum.style.color = 'var(--accent-orange)';
+        }
+    }
+
     
     // Uptime
     // Show '--' when offline OR when the container just restarted and hasn't
@@ -448,6 +467,7 @@ function initChart() {
                     pointHoverRadius: 6,
                     fill: true,
                     tension: 0.4,
+                    yAxisID: 'y',
                     data: []
                 },
                 {
@@ -460,6 +480,20 @@ function initChart() {
                     pointHoverRadius: 6,
                     fill: false,
                     tension: 0.4,
+                    yAxisID: 'y',
+                    data: []
+                },
+                {
+                    label: 'Humidity %',
+                    borderColor: '#fb923c', // accent-orange
+                    backgroundColor: 'rgba(251, 146, 60, 0.05)',
+                    borderWidth: 2,
+                    borderDash: [3, 4],
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    fill: false,
+                    tension: 0.4,
+                    yAxisID: 'yHum',
                     data: []
                 }
             ]
@@ -484,11 +518,13 @@ function initChart() {
                     callbacks: {
                         label: function(context) {
                             let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
-                            }
+                            if (label) label += ': ';
                             if (context.parsed.y !== null) {
-                                label += context.parsed.y.toFixed(2) + '°C';
+                                if (context.dataset.yAxisID === 'yHum') {
+                                    label += context.parsed.y.toFixed(1) + '%';
+                                } else {
+                                    label += context.parsed.y.toFixed(2) + '°C';
+                                }
                             }
                             return label;
                         }
@@ -531,6 +567,17 @@ function initChart() {
                             const decimals = range < 1 ? 2 : 1;
                             return value.toFixed(decimals) + '°C';
                         }
+                    }
+                },
+                yHum: {
+                    position: 'right',
+                    min: 0,
+                    max: 100,
+                    grid: { display: false },
+                    border: { display: false },
+                    ticks: {
+                        color: '#fb923c',
+                        callback: function(value) { return value.toFixed(0) + '%'; }
                     }
                 }
             }
@@ -723,8 +770,17 @@ async function fetchChartData() {
     tempChart.options.scales.x.time.unit     = xUnit;
     tempChart.options.scales.x.time.stepSize = xStepSize;
 
+    // ── Build humidity point array ──
+    const rawHumidity = [];
+    data.forEach(row => {
+        const t = new Date(row.collected_at);
+        rawHumidity.push({ x: t, y: row.external_hum });
+    });
+    const humidityData = _downsample(rawHumidity, MAX_POINTS);
+
     tempChart.data.datasets[0].data = internalData;
     tempChart.data.datasets[1].data = externalData;
+    tempChart.data.datasets[2].data = humidityData;
     tempChart.update();
 }
 
