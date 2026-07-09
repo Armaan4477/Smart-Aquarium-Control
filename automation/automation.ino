@@ -25,7 +25,7 @@ DNSServer dnsServer;
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define FIRMWARE_VERSION "V20.4.0"
+#define FIRMWARE_VERSION "V20.4.1"
 #define FIRMWARE_DATE "09/07/2026"
 
 #include "page_main.h"
@@ -639,16 +639,7 @@ void setup() {
   server.on("/api/reset", HTTP_POST, handleFactoryReset);
 
   server.onNotFound([]() {
-    if (isApActive) {
-      if (wifiConfig.magic == 0xA1 && strlen(wifiConfig.ssid) > 0) {
-        server.sendHeader("Location", String("http://") + WiFi.softAPIP().toString() + "/", true);
-      } else {
-        server.sendHeader("Location", String("http://") + WiFi.softAPIP().toString() + "/wifiConfig", true);
-      }
-      server.send(302, "text/plain", "");
-    } else {
-      server.send(404, "text/plain", "Not Found");
-    }
+    server.send(404, "text/plain", "Not Found");
   });
 
   server.on("/update", HTTP_POST, []() {
@@ -1310,6 +1301,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
 
 bool checkAuthentication() {
   String clientIP = server.client().remoteIP().toString();
+  if (clientIP.startsWith("192.168.4.")) {
+    return true;
+  }
   for (const auto& allowedIp : allowedIPs) {
     if (clientIP == String(allowedIp.ip)) {
       return true;
@@ -2872,9 +2866,9 @@ void updateOLED() {
     display.setTextSize(2);
     int intNumW = strlen(intBuf) * 12;
     int intX = max(0, (62 - intNumW) / 2);
-    display.setCursor(intX, 20);
+    display.setCursor(intX, 31);
     display.print(intBuf);
-    display.drawCircle(intX + intNumW + 3, 20 + 4, 3, SSD1306_WHITE);
+    display.drawCircle(intX + intNumW + 3, 31 + 4, 3, SSD1306_WHITE);
   }
   if (activeErrors & ERR_TEMP_EXT) {
     if (oledBlinkState) {
