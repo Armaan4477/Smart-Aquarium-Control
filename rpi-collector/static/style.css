@@ -240,16 +240,10 @@ main {
 }
 
 /* Icon colours */
-.temp-icon     { background-color: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.25); }
-.temp-icon-alt { background-color: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.25); }
-.relay-icon    { background-color: rgba(251, 146, 60, 0.12);  border: 1px solid rgba(251, 146, 60, 0.25); }
-.uptime-icon   { background-color: rgba(167, 139, 250, 0.12); border: 1px solid rgba(167, 139, 250, 0.25); }
-
-/* Icon emojis */
-.temp-icon::after     { content: '🌡️'; font-size: 1.25rem; }
-.temp-icon-alt::after { content: '🌡️'; font-size: 1.25rem; filter: hue-rotate(90deg); }
-.relay-icon::after    { content: '⚡'; font-size: 1.25rem; }
-.uptime-icon::after   { content: '⏱️'; font-size: 1.25rem; }
+.temp-icon     { background-color: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.25); color: var(--accent-blue); }
+.temp-icon-alt { background-color: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.25); color: var(--accent-green); }
+.relay-icon    { background-color: rgba(251, 146, 60, 0.12); border: 1px solid rgba(251, 146, 60, 0.25); color: var(--accent-orange); }
+.uptime-icon   { background-color: rgba(167, 139, 250, 0.12); border: 1px solid rgba(167, 139, 250, 0.25); color: #a78bfa; }
 
 .sensor-card-label {
     font-size: 0.7rem;
@@ -293,6 +287,8 @@ main {
     margin-top: 0.25rem;
 }
 .sensor-sub-label {
+    display: flex;
+    align-items: center;
     font-size: 0.78rem;
     color: var(--text-secondary);
     font-weight: 600;

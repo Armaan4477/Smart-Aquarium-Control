@@ -35,7 +35,7 @@
 
         <!-- System Error Banner (Hidden by default) -->
         <div id="system-error-banner" class="error-banner hidden">
-            <span class="error-icon">⚠️</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="error-icon"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             <span id="system-error-text">System Error Active</span>
         </div>
 
@@ -46,7 +46,9 @@
 
                 <div class="glass-panel sensor-card">
                     <div class="sensor-card-header">
-                        <div class="sensor-card-icon temp-icon"></div>
+                        <div class="sensor-card-icon temp-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>
+                        </div>
                         <span class="sensor-card-label">Internal Sensor</span>
                     </div>
                     <div class="sensor-card-body">
@@ -57,13 +59,18 @@
                 <!-- External Sensor -->
                 <div class="glass-panel sensor-card">
                     <div class="sensor-card-header">
-                        <div class="sensor-card-icon temp-icon-alt"></div>
+                        <div class="sensor-card-icon temp-icon-alt">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path></svg>
+                        </div>
                         <span class="sensor-card-label">External Sensor</span>
                     </div>
                     <div class="sensor-card-body">
                         <p class="sensor-value" id="val-ext-temp">--°C</p>
                         <div class="sensor-sub-row">
-                            <span class="sensor-sub-label">💧 Humidity</span>
+                            <span class="sensor-sub-label">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px; vertical-align:text-bottom;"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
+                                Humidity
+                            </span>
                             <span class="sensor-sub-value" id="val-ext-hum">--%</span>
                         </div>
                     </div>
@@ -72,7 +79,9 @@
                 <!-- Relays -->
                 <div class="glass-panel relays-card">
                     <div class="sensor-card-header">
-                        <div class="sensor-card-icon relay-icon"></div>
+                        <div class="sensor-card-icon relay-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        </div>
                         <span class="sensor-card-label">Relays</span>
                     </div>
                     <div class="relays-list" id="val-relays">
@@ -115,7 +124,9 @@
                 <!-- Uptime -->
                 <div class="glass-panel sensor-card">
                     <div class="sensor-card-header">
-                        <div class="sensor-card-icon uptime-icon"></div>
+                        <div class="sensor-card-icon uptime-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        </div>
                         <span class="sensor-card-label">Uptime</span>
                     </div>
                     <div class="sensor-card-body">
@@ -155,15 +166,15 @@
                 <div class="external-links-grid">
                     <a href="#" target="_blank" rel="noopener noreferrer" class="glass-link-btn" id="link-temp-sched">
                         <span class="link-title">Temporary Schedules</span>
-                        <span class="link-icon">↗</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="link-icon"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
                     </a>
                     <a href="#" target="_blank" rel="noopener noreferrer" class="glass-link-btn" id="link-main-sched">
                         <span class="link-title">Main Schedules</span>
-                        <span class="link-icon">↗</span>    
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="link-icon"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
                     </a>
                     <a href="#" target="_blank" rel="noopener noreferrer" class="glass-link-btn span-full" id="link-device-settings">
                         <span class="link-title">Device Settings</span>
-                        <span class="link-icon">↗</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="link-icon"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
                     </a>
                 </div>
             </section>

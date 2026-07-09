@@ -151,7 +151,6 @@ _BASE_STYLE = """
   .header { padding:28px 32px 24px;
             background:linear-gradient(135deg,#0e3460 0%,#1a5276 100%);
             border-bottom:1px solid #1e3a5f; }
-  .header-fish { font-size:28px; }
   .header h1 { margin:8px 0 4px; font-size:20px; font-weight:700;
                color:#e0f2fe; letter-spacing:0.3px; }
   .header p  { margin:0; font-size:13px; color:#94a3b8; }
@@ -191,7 +190,6 @@ _BASE_STYLE = """
   /* ── Attachment notice ── */
   .attach-notice { background:#081428; border:1px solid #1e3a5f; border-radius:8px;
                    padding:14px 18px; display:flex; align-items:center; gap:12px; }
-  .attach-icon { font-size:22px; flex-shrink:0; }
   .attach-text { font-size:13px; color:#94a3b8; line-height:1.6; }
   .attach-text strong { color:#e2e8f0; }
   /* ── Footer ── */
@@ -228,7 +226,7 @@ def _html_wrap(header_html: str, content_html: str, footer_note: str = "") -> st
         {header_html}
         {content_html}
         <div class="footer">
-          🐠 Smart Aquarium Control System &nbsp;·&nbsp; Automated notification
+          Smart Aquarium Control System &nbsp;·&nbsp; Automated notification
           {"&nbsp;·&nbsp; " + footer_note if footer_note else ""}
         </div>
       </div>
@@ -305,7 +303,6 @@ def send_email_report(trigger: str, status_data: dict) -> None:
     # ── HTML body ──
     header_html = f"""
     <div class="header">
-      <div class="header-fish">🐠</div>
       <h1>Aquarium Control System</h1>
       <p>Status Report &nbsp;·&nbsp; {now_str}</p>
       <span class="badge {badge_cls}">{trigger}</span>
@@ -325,7 +322,7 @@ def send_email_report(trigger: str, status_data: dict) -> None:
         </div>
         <div class="temp-row">
           <div class="temp-big" style="color:#fb923c">{hum_str}<span class="temp-unit" style="color:#fdba74"> %</span></div>
-          <div class="temp-label">💧 Humidity</div>
+          <div class="temp-label">Humidity</div>
         </div>
       </div>
       <div style="margin-top:12px;text-align:center">{temp_flags_html}</div>
@@ -382,7 +379,6 @@ def send_email_report(trigger: str, status_data: dict) -> None:
     <div class="section">
       <div class="section-title">System Logs</div>
       <div class="attach-notice">
-        <div class="attach-icon">📎</div>
         <div class="attach-text">
           <strong>logs.txt</strong> is attached to this email.<br>
           It contains the latest 40 log entries from the ESP32 in chronological order.
@@ -423,7 +419,6 @@ def send_offline_email() -> None:
 
     header_html = f"""
     <div class="header">
-      <div class="header-fish">⚠️</div>
       <h1>Aquarium Control System</h1>
       <p>Connectivity Alert &nbsp;·&nbsp; {now_str}</p>
       <span class="badge badge-offline">ESP32 Offline</span>
@@ -448,7 +443,6 @@ def send_offline_email() -> None:
       </div>
     </div>
     <div class="section" style="text-align:center;padding:32px;">
-      <div style="font-size:48px;margin-bottom:12px;">🔌</div>
       <div style="font-size:15px;color:#94a3b8;line-height:1.7;">
         The Aquarium Control System (ESP32) has stopped responding.<br>
         Please check the device and its network connection.
@@ -475,7 +469,6 @@ def send_online_email() -> None:
 
     header_html = f"""
     <div class="header">
-      <div class="header-fish">✅</div>
       <h1>Aquarium Control System</h1>
       <p>Connectivity Update &nbsp;·&nbsp; {now_str}</p>
       <span class="badge badge-ok">ESP32 Back Online</span>
@@ -496,7 +489,6 @@ def send_online_email() -> None:
       </div>
     </div>
     <div class="section" style="text-align:center;padding:32px;">
-      <div style="font-size:48px;margin-bottom:12px;">🐠</div>
       <div style="font-size:15px;color:#94a3b8;line-height:1.7;">
         The Aquarium Control System (ESP32) is back online<br>and responding to health pings normally.
       </div>
