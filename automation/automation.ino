@@ -19,13 +19,14 @@ DNSServer dnsServer;
 #include <ReadyMail.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <DHT.h>
 #include <time.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-#define FIRMWARE_VERSION "V20.3.1"
-#define FIRMWARE_DATE "07/07/2026"
+#define FIRMWARE_VERSION "V20.4.0"
+#define FIRMWARE_DATE "09/07/2026"
 
 #include "page_main.h"
 #include "page_email_config.h"
@@ -179,6 +180,7 @@ struct TemporarySchedule {
 struct CalibrationData {
   float internalOffset;
   float externalOffset;
+  float externalHumidityOffset;
 };
 
 struct DisplaySchedule {
@@ -322,21 +324,21 @@ const unsigned long BLINK_INTERVAL = 1000;
 bool blinkState = false;
 
 #define ONE_WIRE_BUS 26
-#define EXTERNAL_ONE_WIRE_BUS 27
+#define EXTERNAL_DHT_PIN 27
+#define EXTERNAL_DHT_TYPE DHT22
 OneWire oneWire(ONE_WIRE_BUS);
-OneWire externalOneWire(EXTERNAL_ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
-DallasTemperature externalSensors(&externalOneWire);
+DHT externalSensors(EXTERNAL_DHT_PIN, EXTERNAL_DHT_TYPE);
 DeviceAddress sensorAddress = { 0x28, 0x59, 0x71, 0x80, 0xE3, 0xE1, 0x3C, 0x50 };
-DeviceAddress externalSensorAddress = { 0x28, 0xCB, 0xBA, 0x57, 0x04, 0xE1, 0x3C, 0xE7 };
 unsigned long lastTemp = 0;
 unsigned long lastExternalTemp = 0;
 float lastValidTemperature = 0;
 float lastValidExternalTemperature = 0;
+float lastValidExternalHumidity = 0;
 const int MAX_EXTERNAL_TEMP_FAILURES = 3;
 int consecutiveExternalTempFailures = 0;
 
-CalibrationData sensorCalibration = { 0.0, 0.0 };
+CalibrationData sensorCalibration = { 0.0, 0.0, 0.0 };
 const int CALIBRATION_START_ADDR = SCHEDULE_START_ADDR + (MAX_SCHEDULES * SCHEDULE_SIZE) + 1;
 const int CALIBRATION_SIZE = sizeof(CalibrationData);
 
@@ -839,12 +841,13 @@ void loadCalibrationSettings() {
   CalibrationData storedData;
   EEPROM.get(CALIBRATION_START_ADDR, storedData);
 
-  if (storedData.internalOffset >= -10.0 && storedData.internalOffset <= 10.0 && storedData.externalOffset >= -10.0 && storedData.externalOffset <= 10.0) {
+  if (storedData.internalOffset >= -10.0 && storedData.internalOffset <= 10.0 && storedData.externalOffset >= -10.0 && storedData.externalOffset <= 10.0 && storedData.externalHumidityOffset >= -100.0 && storedData.externalHumidityOffset <= 100.0) {
     sensorCalibration = storedData;
     //storeLogEntry("Sensor calibration loaded from EEPROM");
   } else {
     sensorCalibration.internalOffset = 0.0;
     sensorCalibration.externalOffset = 0.0;
+    sensorCalibration.externalHumidityOffset = 0.0;
     storeLogEntry("Using default sensor calibration settings");
     saveCalibrationSettings();
   }
@@ -859,7 +862,8 @@ void saveCalibrationSettings() {
 void handleGetCalibrationSettings() {
   String json = "{";
   json += "\"internalOffset\":" + String(sensorCalibration.internalOffset, 2) + ",";
-  json += "\"externalOffset\":" + String(sensorCalibration.externalOffset, 2);
+  json += "\"externalOffset\":" + String(sensorCalibration.externalOffset, 2) + ",";
+  json += "\"externalHumidityOffset\":" + String(sensorCalibration.externalHumidityOffset, 2);
   json += "}";
   server.sendHeader("Connection", "close");
   server.send(200, "application/json", json);
@@ -874,16 +878,18 @@ void handleSaveCalibrationSettings() {
     if (!error) {
       float internalOffset = doc["internalOffset"];
       float externalOffset = doc["externalOffset"];
+      float externalHumidityOffset = doc.containsKey("externalHumidityOffset") ? (float)doc["externalHumidityOffset"] : 0.0;
 
-      if (internalOffset >= -10.0 && internalOffset <= 10.0 && externalOffset >= -10.0 && externalOffset <= 10.0) {
+      if (internalOffset >= -10.0 && internalOffset <= 10.0 && externalOffset >= -10.0 && externalOffset <= 10.0 && externalHumidityOffset >= -100.0 && externalHumidityOffset <= 100.0) {
 
         sensorCalibration.internalOffset = internalOffset;
         sensorCalibration.externalOffset = externalOffset;
+        sensorCalibration.externalHumidityOffset = externalHumidityOffset;
 
         saveCalibrationSettings();
 
         server.send(200, "application/json", "{\"status\":\"success\"}");
-        storeLogEntry("Sensor calibration updated: Internal=" + String(internalOffset, 2) + "°C, External=" + String(externalOffset, 2) + "°C");
+        storeLogEntry("Sensor calibration updated: Internal=" + String(internalOffset, 2) + "°C, External=" + String(externalOffset, 2) + "°C, Hum Offset=" + String(externalHumidityOffset, 2) + "%");
         return;
       } else {
         server.send(400, "application/json", "{\"error\":\"Calibration offsets must be between -10°C and +10°C\"}");
@@ -1276,7 +1282,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
 
         float internalRaw = lastValidTemperature - sensorCalibration.internalOffset;
         float externalRaw = lastValidExternalTemperature - sensorCalibration.externalOffset;
-        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
+        String message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"externalHumidity\":" + String(lastValidExternalHumidity, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
         message += ",\"override1\":" + String(overrideRelay1 ? "true" : "false");
         message += ",\"override2\":" + String(overrideRelay2 ? "true" : "false");
         long timeRemaining = 0;
@@ -1776,7 +1782,7 @@ void broadcastRelayStates() {
 
   String message;
   message.reserve(300);
-  message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
+  message = "{\"relay1\":" + String(relay1State || overrideRelay1) + ",\"relay2\":" + String(relay2State || overrideRelay2) + ",\"relay3\":" + String(relay3State || overrideRelay1) + ",\"temperature\":" + String(lastValidTemperature, 1) + ",\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",\"externalHumidity\":" + String(lastValidExternalHumidity, 1) + ",\"internalRawTemp\":" + String(internalRaw, 2) + ",\"externalRawTemp\":" + String(externalRaw, 2);
   message += ",\"override1\":" + String(overrideRelay1 ? "true" : "false");
   message += ",\"override2\":" + String(overrideRelay2 ? "true" : "false");
 
@@ -2184,7 +2190,8 @@ void handleRelayStatus() {
   }
   json += "\"feedingModeActive\":" + String(feedingModeActive ? "true" : "false") + ",";
   json += "\"feedingModeTimeRemaining\":" + String(timeRemaining) + ",";
-  json += "\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + "}";
+  json += "\"externalTemperature\":" + String(lastValidExternalTemperature, 1) + ",";
+  json += "\"externalHumidity\":" + String(lastValidExternalHumidity, 1) + "}";
   server.sendHeader("Connection", "close");
   server.send(200, "application/json", json);
 }
@@ -2473,6 +2480,7 @@ void sendEmailWithLogs(const String& trigger) {
   textMsg += "System Status:\n";
   textMsg += "Internal Temperature: " + String(lastValidTemperature, 1) + " °C\n";
   textMsg += "External Temperature: " + String(lastValidExternalTemperature, 1) + " °C\n";
+  textMsg += "External Humidity: " + String(lastValidExternalHumidity, 1) + " %\n";
   textMsg += "Relay 1 (WaveMaker): " + String(relay1State ? "ON" : "OFF") + "\n";
   textMsg += "Relay 2 (Light): " + String(relay2State ? "ON" : "OFF") + "\n";
   textMsg += "Relay 3 (Air Pump): " + String(relay3State ? "ON" : "OFF") + "\n";
@@ -2796,11 +2804,12 @@ void checkTemporarySchedules() {
 
 void handleExternalTemperature() {
   if (millis() - lastExternalTemp >= 60000) {
-    externalSensors.requestTemperatures();
-    float tempC = externalSensors.getTempC(externalSensorAddress);
+    float tempC = externalSensors.readTemperature();
+    float hum = externalSensors.readHumidity();
 
-    if (tempC != DEVICE_DISCONNECTED_C) {
+    if (!isnan(tempC) && !isnan(hum)) {
       lastValidExternalTemperature = tempC + sensorCalibration.externalOffset;
+      lastValidExternalHumidity = hum + sensorCalibration.externalHumidityOffset;
       broadcastRelayStates();
       updateOLED();
       consecutiveExternalTempFailures = 0;
@@ -2865,12 +2874,7 @@ void updateOLED() {
     int intX = max(0, (62 - intNumW) / 2);
     display.setCursor(intX, 20);
     display.print(intBuf);
-    display.setTextSize(2);
-    int unitTotalW = 9 + 12;
-    int unitX = max(0, (62 - unitTotalW) / 2);
-    display.drawCircle(unitX + 3, 43 + 4, 3, SSD1306_WHITE);
-    display.setCursor(unitX + 9, 43);
-    display.print("C");
+    display.drawCircle(intX + intNumW + 3, 20 + 4, 3, SSD1306_WHITE);
   }
   if (activeErrors & ERR_TEMP_EXT) {
     if (oledBlinkState) {
@@ -2890,12 +2894,15 @@ void updateOLED() {
     int extX = 65 + max(0, (62 - extNumW) / 2);
     display.setCursor(extX, 20);
     display.print(extBuf);
-    display.setTextSize(2);
-    int extUnitTotalW = 9 + 12;
-    int extUnitX = 65 + max(0, (62 - extUnitTotalW) / 2);
-    display.drawCircle(extUnitX + 3, 43 + 4, 3, SSD1306_WHITE);
-    display.setCursor(extUnitX + 9, 43);
-    display.print("C");
+    display.drawCircle(extX + extNumW + 3, 20 + 4, 3, SSD1306_WHITE);
+
+    char humBuf[8];
+    dtostrf(lastValidExternalHumidity, 4, 1, humBuf);
+    strcat(humBuf, "%");
+    int humNumW = strlen(humBuf) * 12;
+    int humX = 65 + max(0, (62 - humNumW) / 2);
+    display.setCursor(humX, 43);
+    display.print(humBuf);
   }
 
   display.display();
@@ -2909,11 +2916,14 @@ void tempTemperature() {
     lastValidTemperature = tempC + sensorCalibration.internalOffset;
   }
 
-  externalSensors.requestTemperatures();
-  float externalTempC = externalSensors.getTempC(externalSensorAddress);
+  float externalTempC = externalSensors.readTemperature();
+  float hum = externalSensors.readHumidity();
 
-  if (externalTempC != DEVICE_DISCONNECTED_C) {
+  if (!isnan(externalTempC)) {
     lastValidExternalTemperature = externalTempC + sensorCalibration.externalOffset;
+  }
+  if (!isnan(hum)) {
+    lastValidExternalHumidity = hum + sensorCalibration.externalHumidityOffset;
   }
 }
 
@@ -2948,6 +2958,7 @@ void handleApiStatus() {
   String json = "{";
   json += "\"internal_c\":" + String(lastValidTemperature, 2) + ",";
   json += "\"external_c\":" + String(lastValidExternalTemperature, 2) + ",";
+  json += "\"external_hum\":" + String(lastValidExternalHumidity, 2) + ",";
   json += "\"relay1\":" + String((relay1State || overrideRelay1) ? "true" : "false") + ",";
   json += "\"relay2\":" + String((relay2State || overrideRelay2) ? "true" : "false") + ",";
   json += "\"relay3\":" + String((relay3State || overrideRelay1) ? "true" : "false") + ",";
@@ -3027,21 +3038,25 @@ void syncRelayHardware() {
 
 void handleGetRawTemperatureData() {
   sensors.requestTemperatures();
-  externalSensors.requestTemperatures();
 
   float internalRaw = sensors.getTempC(sensorAddress);
-  float externalRaw = externalSensors.getTempC(externalSensorAddress);
+  float externalRaw = externalSensors.readTemperature();
+  float externalHumRaw = externalSensors.readHumidity();
 
   if (internalRaw == DEVICE_DISCONNECTED_C) {
     internalRaw = lastValidTemperature - sensorCalibration.internalOffset;
   }
-  if (externalRaw == DEVICE_DISCONNECTED_C) {
+  if (isnan(externalRaw)) {
     externalRaw = lastValidExternalTemperature - sensorCalibration.externalOffset;
+  }
+  if (isnan(externalHumRaw)) {
+    externalHumRaw = lastValidExternalHumidity - sensorCalibration.externalHumidityOffset;
   }
 
   String json = "{";
   json += "\"internalRaw\":" + String(internalRaw, 2) + ",";
-  json += "\"externalRaw\":" + String(externalRaw, 2);
+  json += "\"externalRaw\":" + String(externalRaw, 2) + ",";
+  json += "\"externalHumRaw\":" + String(externalHumRaw, 2);
   json += "}";
 
   server.sendHeader("Connection", "close");

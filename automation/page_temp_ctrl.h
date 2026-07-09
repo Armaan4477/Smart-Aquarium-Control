@@ -240,7 +240,7 @@ const char tempctrl[] PROGMEM = R"html(
 
         .calibration-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
             margin-bottom: 20px;
         }
@@ -301,7 +301,7 @@ const char tempctrl[] PROGMEM = R"html(
 
         .raw-data-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
             margin-bottom: 20px;
         }
@@ -522,6 +522,10 @@ const char tempctrl[] PROGMEM = R"html(
                     <div class="raw-data-label">External Sensor (Raw)</div>
                     <div class="raw-data-value" id="external-raw-temp">--</div>
                 </div>
+                <div class="raw-data-item external">
+                    <div class="raw-data-label">External Humidity (Raw)</div>
+                    <div class="raw-data-value" id="external-raw-hum">--</div>
+                </div>
             </div>
         </div>
 
@@ -540,6 +544,10 @@ const char tempctrl[] PROGMEM = R"html(
                 <div class="calibration-item">
                     <label for="external-calibration">External Sensor Offset (°C):</label>
                     <input type="number" id="external-calibration" min="-10" max="10" step="0.01" value="0.00">
+                </div>
+                <div class="calibration-item">
+                    <label for="external-hum-calibration">External Hum Offset (%):</label>
+                    <input type="number" id="external-hum-calibration" min="-100" max="100" step="0.01" value="0.00">
                 </div>
             </div>
             
@@ -595,10 +603,12 @@ const char tempctrl[] PROGMEM = R"html(
         function checkForCalibrationChanges() {
             const currentInternal = parseFloat(document.getElementById('internal-calibration').value);
             const currentExternal = parseFloat(document.getElementById('external-calibration').value);
+            const currentExternalHum = parseFloat(document.getElementById('external-hum-calibration').value);
             
             const hasChanges = (
                 Math.abs(currentInternal - lastSavedCalibration.internalOffset) > 0.001 ||
-                Math.abs(currentExternal - lastSavedCalibration.externalOffset) > 0.001
+                Math.abs(currentExternal - lastSavedCalibration.externalOffset) > 0.001 ||
+                Math.abs(currentExternalHum - (lastSavedCalibration.externalHumidityOffset || 0)) > 0.001
             );
             
             userChangedCalibration = hasChanges;
@@ -628,12 +638,16 @@ const char tempctrl[] PROGMEM = R"html(
                     if (!userChangedCalibration) {
                         document.getElementById('internal-calibration').value = data.internalOffset.toFixed(2);
                         document.getElementById('external-calibration').value = data.externalOffset.toFixed(2);
+                        if (data.externalHumidityOffset !== undefined) {
+                            document.getElementById('external-hum-calibration').value = data.externalHumidityOffset.toFixed(2);
+                        }
                     }
                     
                     // Always update the saved state
                     lastSavedCalibration = {
                         internalOffset: data.internalOffset,
-                        externalOffset: data.externalOffset
+                        externalOffset: data.externalOffset,
+                        externalHumidityOffset: data.externalHumidityOffset || 0
                     };
                 })
                 .catch(error => {
@@ -644,15 +658,17 @@ const char tempctrl[] PROGMEM = R"html(
         function saveCalibrationSettings() {
             const internalOffset = parseFloat(document.getElementById('internal-calibration').value);
             const externalOffset = parseFloat(document.getElementById('external-calibration').value);
+            const externalHumOffset = parseFloat(document.getElementById('external-hum-calibration').value);
             
-            if (internalOffset < -10 || internalOffset > 10 || externalOffset < -10 || externalOffset > 10) {
-                showToast('Calibration offsets must be between -10°C and +10°C!', 'error');
+            if (internalOffset < -10 || internalOffset > 10 || externalOffset < -10 || externalOffset > 10 || externalHumOffset < -100 || externalHumOffset > 100) {
+                showToast('Calibration offsets out of bounds!', 'error');
                 return;
             }
             
             const settings = {
                 internalOffset: internalOffset,
-                externalOffset: externalOffset
+                externalOffset: externalOffset,
+                externalHumidityOffset: externalHumOffset
             };
             
             fetch('/calibration/save', {
@@ -693,6 +709,9 @@ const char tempctrl[] PROGMEM = R"html(
                     }
                     if (data.externalRaw !== undefined) {
                         document.getElementById('external-raw-temp').textContent = data.externalRaw.toFixed(2) + ' °C';
+                    }
+                    if (data.externalHumRaw !== undefined) {
+                        document.getElementById('external-raw-hum').textContent = data.externalHumRaw.toFixed(2) + ' %';
                     }
                 })
                 .catch(error => {

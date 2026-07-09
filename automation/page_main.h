@@ -160,7 +160,7 @@ const char mainPage[] PROGMEM = R"html(
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 20px;
-            align-items: center;
+            align-items: stretch;
         }
 
         .temperature-item {
@@ -169,6 +169,9 @@ const char mainPage[] PROGMEM = R"html(
             background-color: #f8f9fa;
             border-radius: var(--border-radius);
             transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
         }
 
         .temperature-item:hover {
@@ -180,6 +183,24 @@ const char mainPage[] PROGMEM = R"html(
             color: var(--text-light);
             margin-bottom: 8px;
             font-weight: 500;
+        }
+
+        .sensor-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            padding: 0 10px;
+        }
+
+        .sensor-label {
+            font-size: 1rem;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        .sensor-row .temperature-value {
+            font-size: 1.4rem;
         }
 
         .temperature-value {
@@ -472,12 +493,22 @@ const char mainPage[] PROGMEM = R"html(
         <div class="temperature-container">
             <div class="temperature-grid">
                 <div class="temperature-item internal">
-                    <div class="temperature-label">Internal Temperature</div>
-                    <div class="temperature-value" id="temperature">-- °C</div>
+                    <div class="temperature-label">Internal Sensor</div>
+                    <div class="sensor-row">
+                        <span class="sensor-label">Temperature:</span>
+                        <span class="temperature-value" id="temperature">-- °C</span>
+                    </div>
                 </div>
                 <div class="temperature-item external">
-                    <div class="temperature-label">External Temperature</div>
-                    <div class="temperature-value" id="externalTemperature">-- °C</div>
+                    <div class="temperature-label">External Sensor</div>
+                    <div class="sensor-row">
+                        <span class="sensor-label">Temperature:</span>
+                        <span class="temperature-value" id="externalTemperature">-- °C</span>
+                    </div>
+                    <div class="sensor-row">
+                        <span class="sensor-label">Humidity:</span>
+                        <span class="temperature-value" id="externalHumidity">-- %</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -552,29 +583,39 @@ const char mainPage[] PROGMEM = R"html(
 
         let lastReceivedTemp = '--';
         let lastReceivedExtTemp = '--';
+        let lastReceivedExtHum = '--';
         let currentActiveErrors = 0;
         let currentAckErrors = 0;
 
         function updateTemperatureDisplay() {
             let tempEl = document.getElementById('temperature');
             let extTempEl = document.getElementById('externalTemperature');
+            let extHumEl = document.getElementById('externalHumidity');
             
             if (tempEl) {
+                let container = tempEl.closest('.temperature-item');
                 if ((currentActiveErrors & 4) || (currentAckErrors & 4)) { // ERR_TEMP_INT
                     tempEl.textContent = '-- °C';
-                    tempEl.parentElement.classList.add('error-state');
+                    if (container) container.classList.add('error-state');
                 } else {
                     tempEl.textContent = lastReceivedTemp + ' °C';
-                    tempEl.parentElement.classList.remove('error-state');
+                    if (container) container.classList.remove('error-state');
                 }
             }
             if (extTempEl) {
+                let extContainer = extTempEl.closest('.temperature-item');
                 if ((currentActiveErrors & 8) || (currentAckErrors & 8)) { // ERR_TEMP_EXT
                     extTempEl.textContent = '-- °C';
-                    extTempEl.parentElement.classList.add('error-state');
+                    if (extContainer) extContainer.classList.add('error-state');
+                    if (extHumEl) {
+                        extHumEl.textContent = '-- %';
+                    }
                 } else {
                     extTempEl.textContent = lastReceivedExtTemp + ' °C';
-                    extTempEl.parentElement.classList.remove('error-state');
+                    if (extContainer) extContainer.classList.remove('error-state');
+                    if (extHumEl) {
+                        extHumEl.textContent = lastReceivedExtHum + ' %';
+                    }
                 }
             }
         }
@@ -661,6 +702,9 @@ const char mainPage[] PROGMEM = R"html(
                     }
                     if (data.externalTemperature !== undefined) {
                         lastReceivedExtTemp = data.externalTemperature;
+                    }
+                    if (data.externalHumidity !== undefined) {
+                        lastReceivedExtHum = data.externalHumidity;
                     }
                     updateTemperatureDisplay();
                 } catch (e) {
@@ -807,6 +851,9 @@ const char mainPage[] PROGMEM = R"html(
                     }
                     if (data.externalTemperature !== undefined) {
                         lastReceivedExtTemp = data.externalTemperature;
+                    }
+                    if (data.externalHumidity !== undefined) {
+                        lastReceivedExtHum = data.externalHumidity;
                     }
                     updateTemperatureDisplay();
                 })
