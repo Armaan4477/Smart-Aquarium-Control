@@ -325,14 +325,14 @@ async function fetchLatestStatus() {
         if (data.active_errors > 0) {
             if (data.active_errors & 1) errs.push("WiFi Disconnected");
             if (data.active_errors & 2) errs.push("Time Sync Failed");
-            if (data.active_errors & 4) errs.push("Internal Temp Sensor Failed");
-            if (data.active_errors & 8) errs.push("External Temp Sensor Failed");
+            if (data.active_errors & 4) errs.push("Water Temp Sensor Failed");
+            if (data.active_errors & 8) errs.push("Ambient Temp Sensor Failed");
         }
         if (data.acknowledged_errors > 0) {
             if (data.acknowledged_errors & 1) ackErrs.push("WiFi Disconnected");
             if (data.acknowledged_errors & 2) ackErrs.push("Time Sync Failed");
-            if (data.acknowledged_errors & 4) ackErrs.push("Internal Temp Sensor Failed");
-            if (data.acknowledged_errors & 8) ackErrs.push("External Temp Sensor Failed");
+            if (data.acknowledged_errors & 4) ackErrs.push("Water Temp Sensor Failed");
+            if (data.acknowledged_errors & 8) ackErrs.push("Ambient Temp Sensor Failed");
         }
         
         let msgParts = [];
@@ -459,7 +459,7 @@ function initChart() {
         data: {
             datasets: [
                 {
-                    label: 'Internal Temp °C',
+                    label: 'Water Temp °C',
                     borderColor: '#38bdf8', // accent-blue
                     backgroundColor: 'rgba(56, 189, 248, 0.1)',
                     borderWidth: 2,
@@ -471,7 +471,7 @@ function initChart() {
                     data: []
                 },
                 {
-                    label: 'External Temp °C',
+                    label: 'Ambient Temp °C',
                     borderColor: '#34d399', // accent-green
                     backgroundColor: 'rgba(52, 211, 153, 0.05)',
                     borderWidth: 2,

@@ -515,15 +515,15 @@ const char tempctrl[] PROGMEM = R"html(
             <h3>Raw Sensor Data</h3>
             <div class="raw-data-grid">
                 <div class="raw-data-item internal">
-                    <div class="raw-data-label">Internal Sensor (Raw)</div>
+                    <div class="raw-data-label">Water Sensor (Raw)</div>
                     <div class="raw-data-value" id="internal-raw-temp">--</div>
                 </div>
                 <div class="raw-data-item external">
-                    <div class="raw-data-label">External Sensor (Raw)</div>
+                    <div class="raw-data-label">Ambient Sensor (Raw)</div>
                     <div class="raw-data-value" id="external-raw-temp">--</div>
                 </div>
                 <div class="raw-data-item external">
-                    <div class="raw-data-label">External Humidity (Raw)</div>
+                    <div class="raw-data-label">Ambient Humidity (Raw)</div>
                     <div class="raw-data-value" id="external-raw-hum">--</div>
                 </div>
             </div>
@@ -538,15 +538,15 @@ const char tempctrl[] PROGMEM = R"html(
             
             <div class="calibration-grid">
                 <div class="calibration-item">
-                    <label for="internal-calibration">Internal Sensor Offset (°C):</label>
+                    <label for="internal-calibration">Water Sensor Offset (°C):</label>
                     <input type="number" id="internal-calibration" min="-10" max="10" step="0.01" value="0.00">
                 </div>
                 <div class="calibration-item">
-                    <label for="external-calibration">External Sensor Offset (°C):</label>
+                    <label for="external-calibration">Ambient Sensor Offset (°C):</label>
                     <input type="number" id="external-calibration" min="-10" max="10" step="0.01" value="0.00">
                 </div>
                 <div class="calibration-item">
-                    <label for="external-hum-calibration">External Hum Offset (%):</label>
+                    <label for="external-hum-calibration">Ambient Hum Offset (%):</label>
                     <input type="number" id="external-hum-calibration" min="-100" max="100" step="0.01" value="0.00">
                 </div>
             </div>

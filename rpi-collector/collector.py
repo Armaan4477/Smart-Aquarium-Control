@@ -211,9 +211,9 @@ def _poll_errors():
         if new_errors & (1 << 1):
             mailer.send_email_report("Time Sync Error", email_data)
         if new_errors & (1 << 2):
-            mailer.send_email_report("Internal Temperature Sensor Error", email_data)
+            mailer.send_email_report("Water Temperature Sensor Error", email_data)
         if new_errors & (1 << 3):
-            mailer.send_email_report("External Temperature Sensor Error", email_data)
+            mailer.send_email_report("Ambient Temperature Sensor Error", email_data)
         
         if periodic_due:
             mailer.send_email_report("Status Check", email_data)

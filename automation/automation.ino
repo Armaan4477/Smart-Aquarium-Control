@@ -25,7 +25,7 @@ DNSServer dnsServer;
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 
-#define FIRMWARE_VERSION "V20.4.3"
+#define FIRMWARE_VERSION "V20.4.4"
 #define FIRMWARE_DATE "16/08/2026"
 
 #include "page_main.h"
@@ -2487,8 +2487,8 @@ void sendEmailWithLogs(const String& trigger) {
   textMsg += "Event: " + trigger + "\n";
   textMsg += "Timestamp: " + formattedTime + "\n\n";
   textMsg += "System Status:\n";
-  textMsg += "Internal Temperature: " + String(lastValidTemperature, 1) + " °C\n";
-  textMsg += "External Temperature: " + String(lastValidExternalTemperature, 1) + " °C\n";
+  textMsg += "Water Temperature: " + String(lastValidTemperature, 1) + " °C\n";
+  textMsg += "Ambient Temperature: " + String(lastValidExternalTemperature, 1) + " °C\n";
   textMsg += "External Humidity: " + String(lastValidExternalHumidity, 1) + " %\n";
   textMsg += "Relay 1 (WaveMaker): " + String(relay1State ? "ON" : "OFF") + "\n";
   textMsg += "Relay 2 (Light): " + String(relay2State ? "ON" : "OFF") + "\n";
@@ -2590,8 +2590,8 @@ void handleTemperature() {
       if (consecutiveTempFailures >= MAX_TEMP_FAILURES) {
         if (!(activeErrors & ERR_TEMP_INT) && !(acknowledgedErrors & ERR_TEMP_INT)) {
           activeErrors |= ERR_TEMP_INT;
-          storeLogEntry("Error: Internal Temperature sensor failed " + String(consecutiveTempFailures) + " times");
-          sendEmailWithLogs("Internal Temperature Sensor Error");
+          storeLogEntry("Error: Water Temperature sensor failed " + String(consecutiveTempFailures) + " times");
+          sendEmailWithLogs("Water Temperature Sensor Error");
         } else if (!(acknowledgedErrors & ERR_TEMP_INT)) {
           activeErrors |= ERR_TEMP_INT;
         }
@@ -2823,7 +2823,7 @@ void handleExternalTemperature() {
       updateOLED();
       consecutiveExternalTempFailures = 0;
       if ((activeErrors & ERR_TEMP_EXT) || (acknowledgedErrors & ERR_TEMP_EXT)) {
-        storeLogEntry("External temperature sensor restored");
+        storeLogEntry("Ambient temperature sensor restored");
         activeErrors &= ~ERR_TEMP_EXT;
         acknowledgedErrors &= ~ERR_TEMP_EXT;
       }
@@ -2832,8 +2832,8 @@ void handleExternalTemperature() {
       if (consecutiveExternalTempFailures >= MAX_EXTERNAL_TEMP_FAILURES) {
         if (!(activeErrors & ERR_TEMP_EXT) && !(acknowledgedErrors & ERR_TEMP_EXT)) {
           activeErrors |= ERR_TEMP_EXT;
-          storeLogEntry("Error: External Temperature sensor failed " + String(consecutiveExternalTempFailures) + " times");
-          sendEmailWithLogs("External Temperature Sensor Error");
+          storeLogEntry("Error: Ambient Temperature sensor failed " + String(consecutiveExternalTempFailures) + " times");
+          sendEmailWithLogs("Ambient Temperature Sensor Error");
         } else if (!(acknowledgedErrors & ERR_TEMP_EXT)) {
           activeErrors |= ERR_TEMP_EXT;
         }
@@ -2857,10 +2857,10 @@ void updateOLED() {
   display.setTextSize(1);
 
   display.setCursor(12, 0);
-  display.print("INTERNAL");
+  display.print("WATER");
 
   display.setCursor(74, 0);
-  display.print("EXTERNAL");
+  display.print("AMBIENT");
 
   display.drawFastHLine(0, 10, 63, SH110X_WHITE);
   display.drawFastHLine(65, 10, 63, SH110X_WHITE);

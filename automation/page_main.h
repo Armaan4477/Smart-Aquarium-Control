@@ -493,14 +493,14 @@ const char mainPage[] PROGMEM = R"html(
         <div class="temperature-container">
             <div class="temperature-grid">
                 <div class="temperature-item internal">
-                    <div class="temperature-label">Internal Sensor</div>
+                    <div class="temperature-label">Water Sensor</div>
                     <div class="sensor-row">
                         <span class="sensor-label">Temperature:</span>
                         <span class="temperature-value" id="temperature">-- °C</span>
                     </div>
                 </div>
                 <div class="temperature-item external">
-                    <div class="temperature-label">External Sensor</div>
+                    <div class="temperature-label">Ambient Sensor</div>
                     <div class="sensor-row">
                         <span class="sensor-label">Temperature:</span>
                         <span class="temperature-value" id="externalTemperature">-- °C</span>
@@ -880,16 +880,16 @@ const char mainPage[] PROGMEM = R"html(
                             html += '<h3>System Errors Detected</h3>';
                             if (activeErrors & 1) html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
                             if (activeErrors & 2) html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
-                            if (activeErrors & 4) html += '<p class="error-row"><span>Internal Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
-                            if (activeErrors & 8) html += '<p class="error-row"><span>External Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
+                            if (activeErrors & 4) html += '<p class="error-row"><span>Water Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
+                            if (activeErrors & 8) html += '<p class="error-row"><span>Ambient Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
                             html += '<div style="margin-top: 15px;"><button class="button dismiss-btn dismiss-all" onclick="clearError(\'all\')">Dismiss All</button></div>';
                         }
                         if (ackErrors > 0) {
                             html += '<h3 style="margin-top: ' + (activeErrors > 0 ? '20px' : '0') + ';">Acknowledged Errors</h3>';
                             if (ackErrors & 1) html += '<p class="error-row" style="opacity: 0.7;"><span>WiFi Disconnected</span></p>';
                             if (ackErrors & 2) html += '<p class="error-row" style="opacity: 0.7;"><span>Time Sync Failed</span></p>';
-                            if (ackErrors & 4) html += '<p class="error-row" style="opacity: 0.7;"><span>Internal Temperature Sensor Failed</span></p>';
-                            if (ackErrors & 8) html += '<p class="error-row" style="opacity: 0.7;"><span>External Temperature Sensor Failed</span></p>';
+                            if (ackErrors & 4) html += '<p class="error-row" style="opacity: 0.7;"><span>Water Temperature Sensor Failed</span></p>';
+                            if (ackErrors & 8) html += '<p class="error-row" style="opacity: 0.7;"><span>Ambient Temperature Sensor Failed</span></p>';
                         }
                         errSec.innerHTML = html;
                         errSec.style.display = 'block';

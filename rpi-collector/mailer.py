@@ -314,11 +314,11 @@ def send_email_report(trigger: str, status_data: dict) -> None:
       <div style="text-align:center">
         <div class="temp-row">
           <div class="temp-big">{int_temp_str}<span class="temp-unit"> °C</span></div>
-          <div class="temp-label">Internal</div>
+          <div class="temp-label">Water</div>
         </div>
         <div class="temp-row">
           <div class="temp-big">{ext_temp_str}<span class="temp-unit"> °C</span></div>
-          <div class="temp-label">External</div>
+          <div class="temp-label">Ambient</div>
         </div>
         <div class="temp-row">
           <div class="temp-big" style="color:#fb923c">{hum_str}<span class="temp-unit" style="color:#fdba74"> %</span></div>
@@ -394,8 +394,8 @@ def send_email_report(trigger: str, status_data: dict) -> None:
         f"Event: {trigger}\n"
         f"Timestamp: {now_str}\n\n"
         f"System Status:\n"
-        f"  Internal Temperature : {int_temp_str} °C\n"
-        f"  External Temperature : {ext_temp_str} °C\n"
+        f"  Water Temperature    : {int_temp_str} °C\n"
+        f"  Ambient Temperature  : {ext_temp_str} °C\n"
         f"  Humidity             : {hum_str} %\n"
         f"  Relay 1 (WaveMaker)  : {relay1}\n"
         f"  Relay 2 (Light)      : {relay2}\n"
