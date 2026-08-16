@@ -4,9 +4,17 @@ This document outlines the major version rewrites, feature additions and histori
 
 ---
 
-## v20.x (Jul 2026)
+## v20.x (Jul - Aug 2026)
 
-### v20.4.0 (09 Jul 2026) *(Current)*
+### v20.4.4 (16 Aug 2026) *(Current)*
+- **Terminology Update**: Refactored sensor terminology across the codebase, replacing "Internal" with "Water" and "External" with "Ambient" for clearer temperature context.
+
+### v20.4.3 (16 Aug 2026)
+- **System Stability**: Improved watchdog timer configuration during setup and Wi-Fi connection loops to prevent unexpected system crashes.
+- **Display Upgrade**: Migrated the OLED display driver to Adafruit SH110X and introduced I2C bus clearing routines for enhanced reliability.
+- **WebUI Enhancements**: Upgraded dashboard graphics by replacing standard emojis with scalable SVG icons.
+
+### v20.4.0 (09 Jul 2026)
 - **Sensor Upgrades**: Upgraded the external sensor to DHT22 and integrated a humidity tracking system.
 - **AP Connectivity**: Improved self-hosted AP connectivity by removing authentication requirements and disabling forced captive portal redirection.
 - **OLED Display**: Improved internal OLED display by centering the data for a better visual layout.
