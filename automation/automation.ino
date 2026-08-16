@@ -23,10 +23,10 @@ DNSServer dnsServer;
 #include <time.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_SH110X.h>
 
-#define FIRMWARE_VERSION "V20.4.1"
-#define FIRMWARE_DATE "09/07/2026"
+#define FIRMWARE_VERSION "V20.4.2"
+#define FIRMWARE_DATE "16/08/2026"
 
 #include "page_main.h"
 #include "page_email_config.h"
@@ -50,7 +50,7 @@ DNSServer dnsServer;
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 bool oledBlinkState = false;
 void updateOLED();
 
@@ -700,12 +700,12 @@ void setup() {
   Wire.begin(OLED_SDA, OLED_SCL);
   Wire.setClock(50000);
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+  if (!display.begin(0x3C, true)) {
     storeLogEntry("OLED init failed");
   } else {
     Wire.setClock(50000);
     display.clearDisplay();
-    display.setTextColor(SSD1306_WHITE);
+    display.setTextColor(SH110X_WHITE);
     updateOLED();
   }
 
@@ -2837,7 +2837,7 @@ void updateOLED() {
   }
   display.clearDisplay();
 
-  display.drawFastVLine(63, 0, SCREEN_HEIGHT, SSD1306_WHITE);
+  display.drawFastVLine(63, 0, SCREEN_HEIGHT, SH110X_WHITE);
 
   display.setTextSize(1);
 
@@ -2847,8 +2847,8 @@ void updateOLED() {
   display.setCursor(74, 0);
   display.print("EXTERNAL");
 
-  display.drawFastHLine(0, 10, 63, SSD1306_WHITE);
-  display.drawFastHLine(65, 10, 63, SSD1306_WHITE);
+  display.drawFastHLine(0, 10, 63, SH110X_WHITE);
+  display.drawFastHLine(65, 10, 63, SH110X_WHITE);
 
   if (activeErrors & ERR_TEMP_INT) {
     if (oledBlinkState) {
@@ -2868,7 +2868,7 @@ void updateOLED() {
     int intX = max(0, (62 - intNumW) / 2);
     display.setCursor(intX, 31);
     display.print(intBuf);
-    display.drawCircle(intX + intNumW + 3, 31 + 4, 3, SSD1306_WHITE);
+    display.drawCircle(intX + intNumW + 3, 31 + 4, 3, SH110X_WHITE);
   }
   if (activeErrors & ERR_TEMP_EXT) {
     if (oledBlinkState) {
@@ -2888,7 +2888,7 @@ void updateOLED() {
     int extX = 65 + max(0, (62 - extNumW) / 2);
     display.setCursor(extX, 20);
     display.print(extBuf);
-    display.drawCircle(extX + extNumW + 3, 20 + 4, 3, SSD1306_WHITE);
+    display.drawCircle(extX + extNumW + 3, 20 + 4, 3, SH110X_WHITE);
 
     char humBuf[8];
     dtostrf(lastValidExternalHumidity, 4, 1, humBuf);
