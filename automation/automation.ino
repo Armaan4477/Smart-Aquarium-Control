@@ -25,7 +25,7 @@ DNSServer dnsServer;
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 
-#define FIRMWARE_VERSION "V20.4.2"
+#define FIRMWARE_VERSION "V20.4.3"
 #define FIRMWARE_DATE "16/08/2026"
 
 #include "page_main.h"
@@ -504,6 +504,18 @@ TaskHandle_t networkTask;
 TaskHandle_t controlTask;
 
 void setup() {
+  const esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = 15000,  // 15 second timeout
+    .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
+    .trigger_panic = true
+  };
+  esp_err_t wdt_err = esp_task_wdt_reconfigure(&wdt_config);
+  if (wdt_err != ESP_OK) {
+    esp_task_wdt_deinit();
+    esp_task_wdt_init(&wdt_config);
+  }
+  esp_task_wdt_add(NULL);
+
   pinMode(relay1, OUTPUT);
   pinMode(relay2, OUTPUT);
   pinMode(relay3, OUTPUT);
@@ -540,6 +552,7 @@ void setup() {
     const unsigned long wifiTimeout = 20000;
 
     while (millis() - wifiStartTime < wifiTimeout) {
+      esp_task_wdt_reset();
       if (WiFi.status() == WL_CONNECTED) {
         storeLogEntry("Connected to WiFi");
         attemptTimeSync();
@@ -557,6 +570,7 @@ void setup() {
   }
 
   sensors.begin();
+  sensors.setWaitForConversion(false);
   externalSensors.begin();
 
   if (!LittleFS.begin(true)) {
@@ -697,7 +711,17 @@ void setup() {
 
   tempTemperature();
 
+  // I2C clear bus routine
+  pinMode(OLED_SDA, INPUT_PULLUP);
+  pinMode(OLED_SCL, OUTPUT);
+  for (int i = 0; i < 9; i++) {
+    digitalWrite(OLED_SCL, LOW);
+    delayMicroseconds(5);
+    digitalWrite(OLED_SCL, HIGH);
+    delayMicroseconds(5);
+  }
   Wire.begin(OLED_SDA, OLED_SCL);
+  Wire.setTimeOut(1000);
   Wire.setClock(50000);
 
   if (!display.begin(0x3C, true)) {
@@ -712,16 +736,6 @@ void setup() {
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
-  const esp_task_wdt_config_t wdt_config = {
-    .timeout_ms = 15000,  // 15 second timeout
-    .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
-    .trigger_panic = true
-  };
-  esp_err_t wdt_err = esp_task_wdt_reconfigure(&wdt_config);
-  if (wdt_err != ESP_OK) {
-    esp_task_wdt_deinit();
-    esp_task_wdt_init(&wdt_config);
-  }
   littleFsMutex = xSemaphoreCreateMutex();
 
   xTaskCreatePinnedToCore(
@@ -1353,6 +1367,7 @@ void handleSchedulesPage() {
 }
 
 void loop() {
+  esp_task_wdt_delete(NULL);
   vTaskDelete(NULL);
 }
 
