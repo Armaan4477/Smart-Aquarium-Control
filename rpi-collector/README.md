@@ -101,7 +101,7 @@ The collector exposes a local API for data visualization and querying. All endpo
 }
 ```
 
-*Note: If a sensor is in an active error state, `internal_c`, `external_c`, or `external_hum` will be returned as `null` to prevent displaying stale data.*
+*Note: In the API payload, `internal_c` represents the Water Temperature, and `external_c`/`external_hum` represent the Ambient Temperature and Humidity. If a sensor is in an active error state, these values will be returned as `null` to prevent displaying stale data.*
 
 ### Relays, Overrides & Errors
 

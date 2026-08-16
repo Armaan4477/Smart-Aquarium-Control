@@ -13,7 +13,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
   - **Regular Schedules**: Recurring day-of-week ON/OFF schedules with automatic conflict detection, safely stored in EEPROM.
   - **Temporary Schedules**: One-time, auto-expiring schedules (up to 2 per relay) for ad-hoc equipment control.
 - **Precision Temperature and Humidity Monitoring**:
-  - Internal DS18B20 sensor for water temperature and External DHT22 sensor for ambient temperature and humidity tracking.
+  - Water temperature sensor (DS18B20) and Ambient temperature/humidity sensor (DHT22).
   - Software-based sensor calibration with offsets saved to EEPROM for high accuracy.
 - **4-Channel Relay Control**:
   - **Relay 1**: Wave Maker
@@ -38,8 +38,8 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 
 - **Microcontroller**: ESP32 Development Board
 - **Relays**: 4-Channel Relay Module (5V/3.3V compatible)
-- **Sensors**: 1x DS18B20 Temperature Sensor (Waterproof recommended for internal) and 1x DHT22 Temperature/Humidity Sensor
-- **Display**: 128x64 I2C OLED Display (SSD1306)
+- **Sensors**: 1x DS18B20 Temperature Sensor (Waterproof recommended for water temperature) and 1x DHT22 Temperature/Humidity Sensor
+- **Display**: 128x64 I2C OLED Display (SH1106)
 - **Inputs/Outputs**: 
   - 2x Physical Switches (for manual overrides)
   - 1x Status/Error LED (with appropriate current-limiting resistor)
@@ -59,8 +59,8 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 | **Switch 1 (Override 1)** | `GPIO 33` | Connect to GND via switch |
 | **Switch 2 (Override 2)** | `GPIO 32` | Connect to GND via switch |
 | **Error LED** | `GPIO 2` | |
-| **Internal Temp Sensor** | `GPIO 26` | Requires 4.7kΩ pull-up resistor |
-| **External DHT22 Sensor** | `GPIO 27` | Measures ambient temp & humidity |
+| **Water Temp Sensor** | `GPIO 26` | Requires 4.7kΩ pull-up resistor |
+| **Ambient DHT22 Sensor** | `GPIO 27` | Measures ambient temp & humidity |
 | **OLED SDA** | `GPIO 21` | I2C Data |
 | **OLED SCL** | `GPIO 22` | I2C Clock |
 
@@ -74,13 +74,13 @@ This directory contains the firmware for the ESP32-based hardware controller. It
    ```
 2. **Open the Project**: Load this `automation` folder in the Arduino IDE or PlatformIO.
 3. **Install Dependencies**: Ensure the following libraries are installed:
-   - `WiFi`, `WebServer`, `WebSocketsServer`, `WiFiUDP`
+   - `WiFi`, `WebServer`, `DNSServer`, `WebSocketsServer`, `WiFiUDP`
    - `ArduinoJson`, `EEPROM`, `LittleFS`, `WiFiClientSecure`
    - `ReadyMail` (for SMTP emails)
    - `OneWire`, `DallasTemperature`
    - `DHT sensor library`, `Adafruit Unified Sensor`
    - `TimeLib`, `Ticker`
-   - `Adafruit GFX Library`, `Adafruit SSD1306` (for OLED)
+   - `Adafruit GFX Library`, `Adafruit SH110X` (for OLED)
    - `Update` (for OTA updates)
 4. **Review Deployment Settings**: 
    - Update the `allowedIPs` list to match your local network devices.
@@ -100,12 +100,13 @@ The intuitive web dashboard provides complete control over your aquarium (includ
 - **Device Settings**: A central hub to manage system configuration, hardware setup, security, and maintenance, including syncing time, scheduled auto-reboots, and factory resets.
 - **Schedules**: Create and manage recurring weekly schedules.
 - **Temp Schedules**: Set up one-time, expiring temporary schedules.
-- **Temp Control**: Monitor raw temperature data and calibrate internal/external sensors.
+- **Temp Control**: Monitor raw temperature data and calibrate water/ambient sensors.
 - **WiFi Config**: Manage Wi-Fi credentials and connection settings directly from the web interface. Features network scanning and dynamic AP fallback management.
 - **Auth Config**: Update Web UI login credentials (default is `Admin` / `Admin`, saved persistently to EEPROM).
 - **Email Config**: Manage SMTP email credentials directly from the web interface (saved persistently to EEPROM).
 - **NTP Config**: Configure custom time synchronization (NTP) servers and test connectivity directly from the web interface.
 - **Docker Config**: Configure connection settings for the Raspberry Pi data collector.
+- **Auto Reboot Config**: Configure scheduled automatic system reboots to maintain long-term stability.
 - **Display Control**: Configure OLED screen behavior, including operating hours and manual overrides.
 - **System Logs**: Review historical events, errors and system warnings.
 - **Backup & Restore**: Easily backup and restore the full EEPROM configuration (schedules, settings) to a JSON file. The system will automatically reboot after a successful restore to apply configurations seamlessly.
@@ -120,7 +121,7 @@ Physical switches allow you to instantly override automated schedules without ac
 
 ### Monitoring and Alerts
 - **Startup Sequence**: Reconciles current time with schedules upon successful NTP sync.
-- **Sensor Polling**: Internal temps update every 20s, external every 60s.
+- **Sensor Polling**: Water temps update every 20s, ambient every 60s.
 - **Health Checks**: Schedule verification runs every second.
 - **Email Reporting**: Automated status emails are dispatched periodically and upon critical sensor failures.
 - **Fallback Access Point**: If WiFi fails to connect, the ESP32 hosts a fallback AP (`ESP32_Aquarium` / `aquarium123`). This mode provides full Web UI access and allows for safe OTA updates even when the local network is down. When connected to this AP, the Web UI automatically bypasses login authentication for seamless access.
