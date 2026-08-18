@@ -25,8 +25,8 @@ DNSServer dnsServer;
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 
-#define FIRMWARE_VERSION "V20.4.4"
-#define FIRMWARE_DATE "16/08/2026"
+#define FIRMWARE_VERSION "V20.4.5"
+#define FIRMWARE_DATE "18/08/2026"
 
 #include "page_main.h"
 #include "page_email_config.h"
@@ -294,6 +294,7 @@ bool startupemail = false;
 bool pointemail = false;
 unsigned long logIdCounter = 0;
 SemaphoreHandle_t littleFsMutex = NULL;
+SemaphoreHandle_t sensorMutex = NULL;
 volatile bool emailInProgress = false;
 std::vector<Schedule> schedules;
 std::vector<TemporarySchedule> temporarySchedules;
@@ -737,6 +738,7 @@ void setup() {
   webSocket.onEvent(webSocketEvent);
 
   littleFsMutex = xSemaphoreCreateMutex();
+  sensorMutex = xSemaphoreCreateMutex();
 
   xTaskCreatePinnedToCore(
     networkLoop,
@@ -2573,8 +2575,10 @@ void sendEmailWithLogs(const String& trigger) {
 
 void handleTemperature() {
   if (millis() - lastTemp >= 20000) {
+    if (sensorMutex != NULL) xSemaphoreTake(sensorMutex, portMAX_DELAY);
     sensors.requestTemperatures();
     float tempC = sensors.getTempC(sensorAddress);
+    if (sensorMutex != NULL) xSemaphoreGive(sensorMutex);
 
     if (tempC != DEVICE_DISCONNECTED_C) {
       lastValidTemperature = tempC + sensorCalibration.internalOffset;
@@ -2813,8 +2817,10 @@ void checkTemporarySchedules() {
 
 void handleExternalTemperature() {
   if (millis() - lastExternalTemp >= 60000) {
+    if (sensorMutex != NULL) xSemaphoreTake(sensorMutex, portMAX_DELAY);
     float tempC = externalSensors.readTemperature();
     float hum = externalSensors.readHumidity();
+    if (sensorMutex != NULL) xSemaphoreGive(sensorMutex);
 
     if (!isnan(tempC) && !isnan(hum)) {
       lastValidExternalTemperature = tempC + sensorCalibration.externalOffset;
@@ -2918,15 +2924,17 @@ void updateOLED() {
 }
 
 void tempTemperature() {
+  if (sensorMutex != NULL) xSemaphoreTake(sensorMutex, portMAX_DELAY);
   sensors.requestTemperatures();
   float tempC = sensors.getTempC(sensorAddress);
+  
+  float externalTempC = externalSensors.readTemperature();
+  float hum = externalSensors.readHumidity();
+  if (sensorMutex != NULL) xSemaphoreGive(sensorMutex);
 
   if (tempC != DEVICE_DISCONNECTED_C) {
     lastValidTemperature = tempC + sensorCalibration.internalOffset;
   }
-
-  float externalTempC = externalSensors.readTemperature();
-  float hum = externalSensors.readHumidity();
 
   if (!isnan(externalTempC)) {
     lastValidExternalTemperature = externalTempC + sensorCalibration.externalOffset;
@@ -3046,11 +3054,13 @@ void syncRelayHardware() {
 }
 
 void handleGetRawTemperatureData() {
+  if (sensorMutex != NULL) xSemaphoreTake(sensorMutex, portMAX_DELAY);
   sensors.requestTemperatures();
 
   float internalRaw = sensors.getTempC(sensorAddress);
   float externalRaw = externalSensors.readTemperature();
   float externalHumRaw = externalSensors.readHumidity();
+  if (sensorMutex != NULL) xSemaphoreGive(sensorMutex);
 
   if (internalRaw == DEVICE_DISCONNECTED_C) {
     internalRaw = lastValidTemperature - sensorCalibration.internalOffset;
