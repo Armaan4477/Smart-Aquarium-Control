@@ -13,6 +13,7 @@ DNSServer dnsServer;
 #include <Ticker.h>
 #include <esp_task_wdt.h>
 #include <TimeLib.h>
+#include <RTClib.h>
 #include <LittleFS.h>
 #include <WiFiClientSecure.h>
 #define ENABLE_SMTP
@@ -22,11 +23,15 @@ DNSServer dnsServer;
 #include <DHT.h>
 #include <time.h>
 #include <Wire.h>
+// Disable ESP32 brownout detector — prevents boot-loop when I2C devices
+// (OLED + DS1307) cause a momentary current spike at startup.
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 
-#define FIRMWARE_VERSION "V20.4.5"
-#define FIRMWARE_DATE "18/08/2026"
+#define FIRMWARE_VERSION "V20.5.1"
+#define FIRMWARE_DATE "13/09/2026"
 
 #include "page_main.h"
 #include "page_email_config.h"
@@ -240,10 +245,11 @@ struct AllowedIP {
 
 bool feedingModeActive = false;
 unsigned long feedingModeEndTime = 0;
-const uint16_t ERR_WIFI = 1 << 0;
-const uint16_t ERR_NTP = 1 << 1;
+const uint16_t ERR_WIFI     = 1 << 0;
+const uint16_t ERR_NTP      = 1 << 1;
 const uint16_t ERR_TEMP_INT = 1 << 2;
 const uint16_t ERR_TEMP_EXT = 1 << 3;
+const uint16_t ERR_RTC      = 1 << 4;  // DS1307 external RTC not found / unavailable
 
 uint16_t activeErrors = 0;
 uint16_t acknowledgedErrors = 0;
@@ -281,6 +287,8 @@ std::vector<LogEntry> logBuffer;
 bool spiffsInitialized = false;
 bool pendingScheduledUpdate = false;
 WiFiUDP ntpUDP;
+RTC_DS1307 rtc;
+bool rtcAvailable = false;
 unsigned long lastTimeUpdate = 0;
 const long timeUpdateInterval = 1000;
 unsigned long lastNTPSync = 0;
@@ -442,7 +450,7 @@ void storeLogEntry(const String& msg) {
 
   String timeStr;
   struct tm timeinfo;
-  if (validTimeSync && getLocalTime(&timeinfo)) {
+  if (validTimeSync && getRTCTime(&timeinfo)) {
     char buffer[20];
     sprintf(buffer, "%02d/%02d/%d %02d:%02d:%02d",
             timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900,
@@ -505,6 +513,13 @@ TaskHandle_t networkTask;
 TaskHandle_t controlTask;
 
 void setup() {
+  // Disable brownout detector before any I2C/peripheral init to prevent
+  // boot-loop caused by momentary voltage drop from OLED + DS1307 current draw.
+  // NOTE: Use CLEAR_PERI_REG_MASK (read-modify-write) — NOT WRITE_PERI_REG with 0.
+  // Writing 0 to the full register clears RF power-domain bits that the WiFi
+  // stack depends on, which causes a TG1WDT crash during WiFi init.
+  CLEAR_PERI_REG_MASK(RTC_CNTL_BROWN_OUT_REG, RTC_CNTL_BROWN_OUT_ENA);
+
   const esp_task_wdt_config_t wdt_config = {
     .timeout_ms = 15000,  // 15 second timeout
     .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
@@ -734,6 +749,31 @@ void setup() {
     updateOLED();
   }
 
+  // --- DS1307 External RTC Init ---
+  esp_task_wdt_reset();  // pet watchdog before I2C device scan
+  if (!rtc.begin(&Wire)) {
+    storeLogEntry("DS1307 RTC not found! Check I2C wiring.");
+    activeErrors |= ERR_RTC;
+  } else {
+    rtcAvailable = true;
+    if (rtc.isrunning()) {
+      DateTime now = rtc.now();
+      if (now.year() >= 2000) {
+        validTimeSync = true;
+        validDateSync = true;
+        char buf[32];
+        sprintf(buf, "%02d/%02d/%04d %02d:%02d:%02d",
+                now.day(), now.month(), now.year(),
+                now.hour(), now.minute(), now.second());
+        storeLogEntry("Time loaded from DS1307: " + String(buf));
+      } else {
+        storeLogEntry("DS1307 time invalid (year < 2000), awaiting NTP sync.");
+      }
+    } else {
+      storeLogEntry("DS1307 not running (battery dead?), awaiting NTP sync.");
+    }
+  }
+
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 
@@ -759,6 +799,24 @@ void setup() {
     1);
 }
 
+// Reads current time from DS1307 and populates a struct tm.
+// This is the sole time source after boot; replaces all getLocalTime() calls.
+bool getRTCTime(struct tm* tm_info) {
+  if (!rtcAvailable) return false;
+  DateTime now = rtc.now();
+  if (now.year() < 2000) return false;
+  tm_info->tm_year = now.year() - 1900;
+  tm_info->tm_mon  = now.month() - 1;
+  tm_info->tm_mday = now.day();
+  tm_info->tm_hour = now.hour();
+  tm_info->tm_min  = now.minute();
+  tm_info->tm_sec  = now.second();
+  tm_info->tm_wday = now.dayOfTheWeek();  // 0 = Sunday
+  tm_info->tm_yday = 0;
+  tm_info->tm_isdst = 0;
+  return true;
+}
+
 void attemptTimeSync() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
 
@@ -775,8 +833,11 @@ void attemptTimeSync() {
     activeErrors &= ~ERR_NTP;
     acknowledgedErrors &= ~ERR_NTP;
 
-    setTime(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
-            timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+    // Write NTP time into DS1307 external RTC
+    if (rtcAvailable) {
+      rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                          timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec));
+    }
   } else {
     if (!(activeErrors & ERR_NTP) && !(acknowledgedErrors & ERR_NTP)) {
       storeLogEntry("Time sync failed.");
@@ -1103,7 +1164,7 @@ void applyOledSchedule() {
         newState = true;
       } else {
         struct tm timeinfo;
-        if (!getLocalTime(&timeinfo)) { return; }
+        if (!getRTCTime(&timeinfo)) { return; }
         int nowMins = timeinfo.tm_hour * 60 + timeinfo.tm_min;
         int onMins = displaySchedule.onHour * 60 + displaySchedule.onMinute;
         int offMins = displaySchedule.offHour * 60 + displaySchedule.offMinute;
@@ -1465,7 +1526,7 @@ void networkLoop(void* parameter) {
       startupemail = true;
 
       struct tm timeinfo;
-      if (getLocalTime(&timeinfo)) {
+      if (getRTCTime(&timeinfo)) {
         last90MinCheck = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
       }
     }
@@ -1505,7 +1566,7 @@ void mainLoop(void* parameter) {
         checkTemporarySchedules();
 
         struct tm timeinfo;
-        if (getLocalTime(&timeinfo)) {
+        if (getRTCTime(&timeinfo)) {
           unsigned long currentSeconds = timeinfo.tm_hour * 3600 + timeinfo.tm_min * 60 + timeinfo.tm_sec;
 
           // 90 minute check
@@ -1528,6 +1589,10 @@ void mainLoop(void* parameter) {
             storeLogEntry("Day changed to: " + String(timeinfo.tm_mday));
             prevDay = timeinfo.tm_mday;
             last90MinCheck = 0;
+            // Daily midnight NTP resync — keep DS1307 calibrated
+            if (WiFi.status() == WL_CONNECTED) {
+              attemptTimeSync();
+            }
             if (pendingScheduledUpdate) {
               storeLogEntry("Executing scheduled firmware switch...");
               delay(1000);
@@ -1570,7 +1635,7 @@ void mainLoop(void* parameter) {
 
 void checkSchedules() {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
+  if (!getRTCTime(&timeinfo)) {
     return;
   }
 
@@ -1616,7 +1681,7 @@ void checkSchedules() {
 
 void checkScheduleslaunch() {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
+  if (!getRTCTime(&timeinfo)) {
     return;
   }
 
@@ -2137,9 +2202,9 @@ void handleTime() {
   }
 
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo, 10)) {
+  if (!getRTCTime(&timeinfo)) {
     server.sendHeader("Connection", "close");
-    server.send(500, "text/plain", "Error getting time");
+    server.send(503, "text/plain", !rtcAvailable ? "RTC unavailable: DS1307 not found" : "RTC read failed");
     return;
   }
 
@@ -2161,11 +2226,11 @@ void handleSyncTime() {
   if (server.hasArg("timestamp")) {
     long timestamp = server.arg("timestamp").toInt();
     if (timestamp > 0) {
-      struct timeval tv;
-      tv.tv_sec = timestamp;
-      tv.tv_usec = 0;
-      settimeofday(&tv, NULL);
-      
+      // Write the provided timestamp directly to the DS1307 external RTC
+      if (rtcAvailable) {
+        rtc.adjust(DateTime((uint32_t)timestamp));
+      }
+
       validTimeSync = true;
       activeErrors &= ~ERR_NTP;
       acknowledgedErrors &= ~ERR_NTP;
@@ -2342,6 +2407,7 @@ void overrideLEDState() {
     unsigned long now = millis();
     uint16_t priorityError = 0;
     if (activeErrors & ERR_WIFI) priorityError = ERR_WIFI;
+    else if (activeErrors & ERR_RTC) priorityError = ERR_RTC;
     else if (activeErrors & ERR_TEMP_INT) priorityError = ERR_TEMP_INT;
     else if (activeErrors & ERR_TEMP_EXT) priorityError = ERR_TEMP_EXT;
     else if (activeErrors & ERR_NTP) priorityError = ERR_NTP;
@@ -2360,9 +2426,10 @@ void overrideLEDState() {
     }
 
     int targetBlinks = 0;
-    if (priorityError == ERR_TEMP_INT) targetBlinks = 2;
+    if      (priorityError == ERR_RTC)      targetBlinks = 5;
+    else if (priorityError == ERR_TEMP_INT) targetBlinks = 2;
     else if (priorityError == ERR_TEMP_EXT) targetBlinks = 3;
-    else if (priorityError == ERR_NTP) targetBlinks = 4;
+    else if (priorityError == ERR_NTP)      targetBlinks = 4;
     else targetBlinks = 1;
 
     if (isBlinking) {
@@ -2477,7 +2544,7 @@ void sendEmailWithLogs(const String& trigger) {
 
   struct tm timeinfo;
   String formattedTime = "Unknown";
-  if (getLocalTime(&timeinfo)) {
+  if (getRTCTime(&timeinfo)) {
     char timeStr[20];
     sprintf(timeStr, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
     formattedTime = String(timeStr);
@@ -2504,7 +2571,7 @@ void sendEmailWithLogs(const String& trigger) {
   message.text.body(textMsg);
   message.text.charset("utf-8");
   message.text.transferEncoding("quoted-printable");
-  message.timestamp = time(nullptr);
+  message.timestamp = rtcAvailable ? (time_t)rtc.now().unixtime() : 0;
 
   Attachment attachment;
   attachment.filename = "logs.json";
@@ -2735,7 +2802,7 @@ void handleDeleteTemporarySchedule() {
 
 void checkTemporarySchedules() {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo)) {
+  if (!getRTCTime(&timeinfo)) {
     return;
   }
 
@@ -2964,7 +3031,7 @@ void handleApiStatus() {
 
   String ts = "null";
   struct tm t;
-  if (validTimeSync && getLocalTime(&t)) {
+  if (validTimeSync && getRTCTime(&t)) {
     char buf[20];
     sprintf(buf, "%02d/%02d/%d %02d:%02d:%02d",
             t.tm_mday, t.tm_mon + 1, t.tm_year + 1900,
@@ -3767,6 +3834,13 @@ void handleSetNtpConfig() {
     configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
     struct tm timeinfo;
     if(getLocalTime(&timeinfo, 10000)) {
+        // Write NTP result to DS1307 external RTC
+        if (rtcAvailable) {
+          rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                              timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec));
+          validTimeSync = true;
+          validDateSync = true;
+        }
         server.send(200, "application/json", "{\"success\":true}");
     } else {
         server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to sync time\"}");

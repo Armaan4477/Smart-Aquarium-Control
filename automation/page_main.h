@@ -878,18 +878,20 @@ const char mainPage[] PROGMEM = R"html(
                         let html = '';
                         if (activeErrors > 0) {
                             html += '<h3>System Errors Detected</h3>';
-                            if (activeErrors & 1) html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
-                            if (activeErrors & 2) html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
-                            if (activeErrors & 4) html += '<p class="error-row"><span>Water Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
-                            if (activeErrors & 8) html += '<p class="error-row"><span>Ambient Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
+                            if (activeErrors & 1)  html += '<p class="error-row"><span>WiFi Disconnected</span> <button class="button dismiss-btn" onclick="clearError(1)">Dismiss</button></p>';
+                            if (activeErrors & 2)  html += '<p class="error-row"><span>Time Sync Failed</span> <button class="button dismiss-btn" onclick="clearError(2)">Dismiss</button></p>';
+                            if (activeErrors & 4)  html += '<p class="error-row"><span>Water Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(4)">Dismiss</button></p>';
+                            if (activeErrors & 8)  html += '<p class="error-row"><span>Ambient Temperature Sensor Failed</span> <button class="button dismiss-btn" onclick="clearError(8)">Dismiss</button></p>';
+                            if (activeErrors & 16) html += '<p class="error-row"><span>External RTC (DS1307) Not Found &mdash; Check I2C wiring</span> <button class="button dismiss-btn" onclick="clearError(16)">Dismiss</button></p>';
                             html += '<div style="margin-top: 15px;"><button class="button dismiss-btn dismiss-all" onclick="clearError(\'all\')">Dismiss All</button></div>';
                         }
                         if (ackErrors > 0) {
                             html += '<h3 style="margin-top: ' + (activeErrors > 0 ? '20px' : '0') + ';">Acknowledged Errors</h3>';
-                            if (ackErrors & 1) html += '<p class="error-row" style="opacity: 0.7;"><span>WiFi Disconnected</span></p>';
-                            if (ackErrors & 2) html += '<p class="error-row" style="opacity: 0.7;"><span>Time Sync Failed</span></p>';
-                            if (ackErrors & 4) html += '<p class="error-row" style="opacity: 0.7;"><span>Water Temperature Sensor Failed</span></p>';
-                            if (ackErrors & 8) html += '<p class="error-row" style="opacity: 0.7;"><span>Ambient Temperature Sensor Failed</span></p>';
+                            if (ackErrors & 1)  html += '<p class="error-row" style="opacity: 0.7;"><span>WiFi Disconnected</span></p>';
+                            if (ackErrors & 2)  html += '<p class="error-row" style="opacity: 0.7;"><span>Time Sync Failed</span></p>';
+                            if (ackErrors & 4)  html += '<p class="error-row" style="opacity: 0.7;"><span>Water Temperature Sensor Failed</span></p>';
+                            if (ackErrors & 8)  html += '<p class="error-row" style="opacity: 0.7;"><span>Ambient Temperature Sensor Failed</span></p>';
+                            if (ackErrors & 16) html += '<p class="error-row" style="opacity: 0.7;"><span>External RTC (DS1307) Not Found</span></p>';
                         }
                         errSec.innerHTML = html;
                         errSec.style.display = 'block';
