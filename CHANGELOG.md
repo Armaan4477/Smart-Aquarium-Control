@@ -4,9 +4,14 @@ This document outlines the major version rewrites, feature additions and histori
 
 ---
 
-## v20.x (Jul - Aug 2026)
+## v20.x (Jul - Sep 2026)
 
-### v20.4.4 (16 Aug 2026) *(Current)*
+### v20.5.2 (13 Sep 2026) *(Current)*
+- **External RTC Integration**: Migrated primary timekeeping to a DS1307 external RTC module (via I2C) for persistent, accurate offline time tracking and automated drift correction via NTP.
+- **OTA Auto-Rollback**: Implemented an automated firmware rollback safety mechanism that reverts to the previous stable firmware if a boot loop crash is detected after an OTA update.
+- **Error Handling**: Added UI and Docker collector support for detecting and alerting on RTC hardware failures.
+
+### v20.4.4 (16 Aug 2026)
 - **Terminology Update**: Refactored sensor terminology across the codebase, replacing "Internal" with "Water" and "External" with "Ambient" for clearer temperature context.
 
 ### v20.4.3 (16 Aug 2026)
