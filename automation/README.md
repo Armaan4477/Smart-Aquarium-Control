@@ -29,7 +29,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
   - Automated email notifications for system startups, periodic status checks and sensor errors (Email functionality is disabled by default to prevent startup errors until safely configured via the UI).
   - Dedicated hardware LED and WebUI pop-ups for immediate visual error indication.
 - **Modular Web Interface**: Web pages are compartmentalized into separate header files (`page_*.h`) for clean code organization and maintainability.
-- **Robust Timekeeping**: Automatic NTP time synchronization with built-in retry logic.
+- **Robust Timekeeping**: Hardware-backed time tracking using a DS1307 external RTC (Real-Time Clock) ensures time persists across power losses, paired with automatic daily NTP synchronization and drift correction.
 - **System Stability**: Optimized FreeRTOS task scheduling to prevent Watchdog Timer (WDT) resets, ensuring continuous and reliable long-term operation.
 
 ---
@@ -38,7 +38,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 
 - **Microcontroller**: ESP32 Development Board
 - **Relays**: 4-Channel Relay Module (5V/3.3V compatible)
-- **Sensors**: 1x DS18B20 Temperature Sensor (Waterproof recommended for water temperature) and 1x DHT22 Temperature/Humidity Sensor
+- **Sensors**: 1x DS18B20 Temperature Sensor (Waterproof recommended for water temperature), 1x DHT22 Temperature/Humidity Sensor, and 1x DS1307 RTC Module (I2C)
 - **Display**: 128x64 I2C OLED Display (SH1106)
 - **Inputs/Outputs**: 
   - 2x Physical Switches (for manual overrides)
@@ -61,8 +61,8 @@ This directory contains the firmware for the ESP32-based hardware controller. It
 | **Error LED** | `GPIO 2` | |
 | **Water Temp Sensor** | `GPIO 26` | Requires 4.7kΩ pull-up resistor |
 | **Ambient DHT22 Sensor** | `GPIO 27` | Measures ambient temp & humidity |
-| **OLED SDA** | `GPIO 21` | I2C Data |
-| **OLED SCL** | `GPIO 22` | I2C Clock |
+| **I2C SDA** | `GPIO 21` | I2C Data (Shared by OLED and DS1307 RTC) |
+| **I2C SCL** | `GPIO 22` | I2C Clock (Shared by OLED and DS1307 RTC) |
 
 ---
 
@@ -79,7 +79,7 @@ This directory contains the firmware for the ESP32-based hardware controller. It
    - `ReadyMail` (for SMTP emails)
    - `OneWire`, `DallasTemperature`
    - `DHT sensor library`, `Adafruit Unified Sensor`
-   - `TimeLib`, `Ticker`
+   - `TimeLib`, `Ticker`, `RTClib` (for DS1307 RTC)
    - `Adafruit GFX Library`, `Adafruit SH110X` (for OLED)
    - `Update` (for OTA updates)
 4. **Review Deployment Settings**: 
@@ -110,7 +110,7 @@ The intuitive web dashboard provides complete control over your aquarium (includ
 - **Display Control**: Configure OLED screen behavior, including operating hours and manual overrides.
 - **System Logs**: Review historical events, errors and system warnings.
 - **Backup & Restore**: Easily backup and restore the full EEPROM configuration (schedules, settings) to a JSON file. The system will automatically reboot after a successful restore to apply configurations seamlessly.
-- **OTA Updates**: Securely perform Over-The-Air (OTA) firmware updates directly from the dashboard without needing physical access to the ESP32. Features an intelligent update-in-progress state (disabling UI elements like the rollback button to prevent errors) and supports **Scheduled Firmware Updates** to safely apply updates automatically at midnight.
+- **OTA Updates**: Securely perform Over-The-Air (OTA) firmware updates directly from the dashboard without needing physical access to the ESP32. Features an intelligent update-in-progress state, **Scheduled Firmware Updates**, and an **Automatic Rollback Safety Mechanism** that detects boot loop crashes and safely reverts to the previous stable firmware.
 
 ### Physical Manual Overrides
 Physical switches allow you to instantly override automated schedules without accessing the web interface:

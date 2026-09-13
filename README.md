@@ -18,7 +18,7 @@ This repository is split into two primary components:
 
 - **Automated Equipment Scheduling:** Manage wave makers, primary/secondary lights and air pumps through weekly recurring and temporary one-time schedules. Includes a dedicated one-click **Feeding Mode** to temporarily pause water circulation.
 - **Maintenance Mode:** Temporarily pause automated background polling and email alerts via the data collector to safely perform tank maintenance without triggering false alarms.
-- **Configuration & Firmware Management:** Built-in Backup/Restore functionality (with version validation and auto-reboot), custom NTP time synchronization, scheduled firmware updates, and robust Over-The-Air (OTA) update support with seamless UI state management for firmware upgrades directly from the dashboard.
+- **Configuration & Firmware Management:** Built-in Backup/Restore functionality (with version validation and auto-reboot), custom NTP time synchronization paired with a robust DS1307 hardware RTC for persistent timekeeping, scheduled firmware updates, and robust Over-The-Air (OTA) update support with seamless UI state management and an automatic rollback mechanism on boot failures.
 - **Wi-Fi Provisioning System:** Built-in fallback Access Point (AP) mode for initial network setup and recovery. Features frictionless, open AP connectivity without forced captive portal redirection, allowing easy Wi-Fi configuration without hardcoding credentials.
 - **Persistent Dark Mode:** A modern, customizable Web UI with a built-in dark mode that remembers your preference.
 - **Precision Environmental Monitoring:** Dual-sensor setup for tracking water temperature, alongside ambient temperature and humidity (via DHT22).
