@@ -30,7 +30,7 @@ DNSServer dnsServer;
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 
-#define FIRMWARE_VERSION "V20.5.1"
+#define FIRMWARE_VERSION "V20.5.2"
 #define FIRMWARE_DATE "13/09/2026"
 
 #include "page_main.h"
@@ -49,6 +49,10 @@ DNSServer dnsServer;
 #include "page_ntp_config.h"
 #include "page_auto_reboot.h"
 #include <Update.h>
+#include <rom/rtc.h>
+
+RTC_DATA_ATTR int bootCrashCount = 0;
+RTC_DATA_ATTR uint32_t bootCrashMagic = 0;
 
 #define OLED_SDA 21
 #define OLED_SCL 22
@@ -513,6 +517,20 @@ TaskHandle_t networkTask;
 TaskHandle_t controlTask;
 
 void setup() {
+  if (bootCrashMagic != 0xAA55AA55) {
+    bootCrashMagic = 0xAA55AA55;
+    bootCrashCount = 0;
+  } else {
+    bootCrashCount++;
+    if (bootCrashCount >= 3) {
+      if (Update.canRollBack()) {
+        Update.rollBack();
+        bootCrashCount = 0;
+        ESP.restart();
+      }
+    }
+  }
+
   // Disable brownout detector before any I2C/peripheral init to prevent
   // boot-loop caused by momentary voltage drop from OLED + DS1307 current draw.
   // NOTE: Use CLEAR_PERI_REG_MASK (read-modify-write) — NOT WRITE_PERI_REG with 0.
@@ -681,6 +699,7 @@ void setup() {
         storeLogEntry("Firmware update scheduled for midnight");
       } else {
         delay(100);
+        bootCrashCount = 0;
         ESP.restart();
       }
     }
@@ -1442,6 +1461,9 @@ void networkLoop(void* parameter) {
   unsigned long lastOledScheduleCheck = 0;
   for (;;) {
     resetWatchdog();
+    if (bootCrashCount > 0 && millis() > 60000) {
+      bootCrashCount = 0;
+    }
     if (isApActive) {
       dnsServer.processNextRequest();
     }
@@ -1596,6 +1618,7 @@ void mainLoop(void* parameter) {
             if (pendingScheduledUpdate) {
               storeLogEntry("Executing scheduled firmware switch...");
               delay(1000);
+              bootCrashCount = 0;
               ESP.restart();
             }
           }
@@ -1608,6 +1631,7 @@ void mainLoop(void* parameter) {
               if (lastRebootCheckDay != timeinfo.tm_mday) {
                 storeLogEntry("Scheduled Auto-Reboot triggering...");
                 delay(1000);
+                bootCrashCount = 0;
                 ESP.restart();
               }
             } else {
@@ -3428,6 +3452,7 @@ void handleRestore() {
   storeLogEntry("Configuration completely restored from backup");
   server.send(200, "application/json", "{\"status\":\"success\"}");
   delay(1000);
+  bootCrashCount = 0;
   ESP.restart();
 }
 
@@ -3500,6 +3525,7 @@ void handleReboot() {
   storeLogEntry("System reboot initiated by user");
   server.send(200, "application/json", "{\"status\":\"success\"}");
   delay(1000);
+  bootCrashCount = 0;
   ESP.restart();
 }
 
@@ -3517,6 +3543,7 @@ void handleFactoryReset() {
   
   server.send(200, "application/json", "{\"status\":\"success\"}");
   delay(1000);
+  bootCrashCount = 0;
   ESP.restart();
 }
 
@@ -3548,6 +3575,7 @@ void handleRollback() {
       storeLogEntry("Firmware Rollback Successful");
       server.send(200, "text/plain", "OK");
       delay(500);
+      bootCrashCount = 0;
       ESP.restart();
     } else {
       storeLogEntry("Firmware Rollback Failed");
