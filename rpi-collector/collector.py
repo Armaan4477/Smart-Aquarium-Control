@@ -214,6 +214,8 @@ def _poll_errors():
             mailer.send_email_report("Water Temperature Sensor Error", email_data)
         if new_errors & (1 << 3):
             mailer.send_email_report("Ambient Temperature Sensor Error", email_data)
+        if new_errors & (1 << 4):
+            mailer.send_email_report("External RTC Error", email_data)
         
         if periodic_due:
             mailer.send_email_report("Status Check", email_data)

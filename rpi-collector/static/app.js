@@ -327,12 +327,14 @@ async function fetchLatestStatus() {
             if (data.active_errors & 2) errs.push("Time Sync Failed");
             if (data.active_errors & 4) errs.push("Water Temp Sensor Failed");
             if (data.active_errors & 8) errs.push("Ambient Temp Sensor Failed");
+            if (data.active_errors & 16) errs.push("External RTC Error");
         }
         if (data.acknowledged_errors > 0) {
             if (data.acknowledged_errors & 1) ackErrs.push("WiFi Disconnected");
             if (data.acknowledged_errors & 2) ackErrs.push("Time Sync Failed");
             if (data.acknowledged_errors & 4) ackErrs.push("Water Temp Sensor Failed");
             if (data.acknowledged_errors & 8) ackErrs.push("Ambient Temp Sensor Failed");
+            if (data.acknowledged_errors & 16) ackErrs.push("External RTC Error");
         }
         
         let msgParts = [];
