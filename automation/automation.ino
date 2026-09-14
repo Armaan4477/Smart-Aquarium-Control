@@ -29,9 +29,10 @@ DNSServer dnsServer;
 #include "soc/rtc_cntl_reg.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
+#include <Adafruit_NeoPixel.h>
 
-#define FIRMWARE_VERSION "V20.5.2"
-#define FIRMWARE_DATE "13/09/2026"
+#define FIRMWARE_VERSION "V20.5.3"
+#define FIRMWARE_DATE "14/09/2026"
 
 #include "page_main.h"
 #include "page_email_config.h"
@@ -232,7 +233,13 @@ const int relay3 = 23;
 const int relay4 = 25;
 const int switch1Pin = 33;
 const int switch2Pin = 32;
-const int errorLEDPin = 2;
+const int errorLEDPin = 4;
+Adafruit_NeoPixel errorLED(1, errorLEDPin, NEO_GRB + NEO_KHZ800);
+
+void setNeoPixelColor(uint8_t r, uint8_t g, uint8_t b) {
+  errorLED.setPixelColor(0, errorLED.Color(r, g, b));
+  errorLED.show();
+}
 
 bool overrideRelay1 = false;
 bool overrideRelay2 = false;
@@ -560,8 +567,8 @@ void setup() {
   digitalWrite(relay4, HIGH);
   pinMode(switch1Pin, INPUT_PULLUP);
   pinMode(switch2Pin, INPUT_PULLUP);
-  pinMode(errorLEDPin, OUTPUT);
-  digitalWrite(errorLEDPin, LOW);
+  errorLED.begin();
+  errorLED.show();
 
   // Serial.begin(115200);
   // delay(2000);
@@ -2428,66 +2435,21 @@ void overrideLEDState() {
   bool anyOverrideActive = overrideRelay1 || overrideRelay2;
 
   if (activeErrors > 0) {
-    unsigned long now = millis();
-    uint16_t priorityError = 0;
-    if (activeErrors & ERR_WIFI) priorityError = ERR_WIFI;
-    else if (activeErrors & ERR_RTC) priorityError = ERR_RTC;
-    else if (activeErrors & ERR_TEMP_INT) priorityError = ERR_TEMP_INT;
-    else if (activeErrors & ERR_TEMP_EXT) priorityError = ERR_TEMP_EXT;
-    else if (activeErrors & ERR_NTP) priorityError = ERR_NTP;
-
-    static int blinkCount = 0;
-    static unsigned long stateStart = 0;
-    static bool isBlinking = false;
-
-    if (priorityError == ERR_WIFI) {
-      if (now - lastBlinkTime >= 250) {
-        lastBlinkTime = now;
-        blinkState = !blinkState;
-        digitalWrite(errorLEDPin, blinkState);
-      }
-      return;
-    }
-
-    int targetBlinks = 0;
-    if      (priorityError == ERR_RTC)      targetBlinks = 5;
-    else if (priorityError == ERR_TEMP_INT) targetBlinks = 2;
-    else if (priorityError == ERR_TEMP_EXT) targetBlinks = 3;
-    else if (priorityError == ERR_NTP)      targetBlinks = 4;
-    else targetBlinks = 1;
-
-    if (isBlinking) {
-      if (now - stateStart >= 200) {
-        stateStart = now;
-        blinkState = !blinkState;
-        digitalWrite(errorLEDPin, blinkState);
-        if (!blinkState) {
-          blinkCount++;
-          if (blinkCount >= targetBlinks) {
-            isBlinking = false;
-            blinkCount = 0;
-          }
-        }
-      }
+    if (activeErrors & ERR_WIFI) {
+      setNeoPixelColor(255, 255, 0); // Yellow for WiFi error
+    } else if (activeErrors & ERR_RTC) {
+      setNeoPixelColor(128, 0, 128); // Purple for RTC error
+    } else if (activeErrors & ERR_TEMP_INT || activeErrors & ERR_TEMP_EXT) {
+      setNeoPixelColor(255, 0, 0); // Red for Sensor error
+    } else if (activeErrors & ERR_NTP) {
+      setNeoPixelColor(0, 0, 255); // Blue for NTP error
     } else {
-      if (now - stateStart >= 1500) {
-        stateStart = now;
-        isBlinking = true;
-        blinkState = true;
-        digitalWrite(errorLEDPin, HIGH);
-      } else {
-        digitalWrite(errorLEDPin, LOW);
-      }
+      setNeoPixelColor(255, 255, 255); // White for other errors
     }
   } else if (anyOverrideActive) {
-    if (millis() - lastBlinkTime >= BLINK_INTERVAL) {
-      lastBlinkTime = millis();
-      blinkState = !blinkState;
-      digitalWrite(errorLEDPin, blinkState);
-    }
+    setNeoPixelColor(0, 255, 255); // Cyan for override active
   } else {
-    digitalWrite(errorLEDPin, LOW);
-    blinkState = false;
+    setNeoPixelColor(0, 0, 0); // Off
   }
 }
 
