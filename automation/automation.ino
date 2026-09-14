@@ -31,7 +31,7 @@ DNSServer dnsServer;
 #include <Adafruit_SH110X.h>
 #include <Adafruit_NeoPixel.h>
 
-#define FIRMWARE_VERSION "V20.5.3"
+#define FIRMWARE_VERSION "V20.5.4"
 #define FIRMWARE_DATE "14/09/2026"
 
 #include "page_main.h"
@@ -349,7 +349,6 @@ bool blinkState = false;
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 DHT externalSensors(EXTERNAL_DHT_PIN, EXTERNAL_DHT_TYPE);
-DeviceAddress sensorAddress = { 0x28, 0x59, 0x71, 0x80, 0xE3, 0xE1, 0x3C, 0x50 };
 unsigned long lastTemp = 0;
 unsigned long lastExternalTemp = 0;
 float lastValidTemperature = 0;
@@ -2630,7 +2629,7 @@ void handleTemperature() {
   if (millis() - lastTemp >= 20000) {
     if (sensorMutex != NULL) xSemaphoreTake(sensorMutex, portMAX_DELAY);
     sensors.requestTemperatures();
-    float tempC = sensors.getTempC(sensorAddress);
+    float tempC = sensors.getTempCByIndex(0);
     if (sensorMutex != NULL) xSemaphoreGive(sensorMutex);
 
     if (tempC != DEVICE_DISCONNECTED_C) {
@@ -2979,7 +2978,7 @@ void updateOLED() {
 void tempTemperature() {
   if (sensorMutex != NULL) xSemaphoreTake(sensorMutex, portMAX_DELAY);
   sensors.requestTemperatures();
-  float tempC = sensors.getTempC(sensorAddress);
+  float tempC = sensors.getTempCByIndex(0);
   
   float externalTempC = externalSensors.readTemperature();
   float hum = externalSensors.readHumidity();
@@ -3110,7 +3109,7 @@ void handleGetRawTemperatureData() {
   if (sensorMutex != NULL) xSemaphoreTake(sensorMutex, portMAX_DELAY);
   sensors.requestTemperatures();
 
-  float internalRaw = sensors.getTempC(sensorAddress);
+  float internalRaw = sensors.getTempCByIndex(0);
   float externalRaw = externalSensors.readTemperature();
   float externalHumRaw = externalSensors.readHumidity();
   if (sensorMutex != NULL) xSemaphoreGive(sensorMutex);
