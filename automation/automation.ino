@@ -23,16 +23,14 @@ DNSServer dnsServer;
 #include <DHT.h>
 #include <time.h>
 #include <Wire.h>
-// Disable ESP32 brownout detector — prevents boot-loop when I2C devices
-// (OLED + DS1307) cause a momentary current spike at startup.
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 #include <Adafruit_NeoPixel.h>
 
-#define FIRMWARE_VERSION "V20.5.4"
-#define FIRMWARE_DATE "14/09/2026"
+#define FIRMWARE_VERSION "V20.5.5"
+#define FIRMWARE_DATE "15/09/2026"
 
 #include "page_main.h"
 #include "page_email_config.h"
@@ -256,11 +254,11 @@ struct AllowedIP {
 
 bool feedingModeActive = false;
 unsigned long feedingModeEndTime = 0;
-const uint16_t ERR_WIFI     = 1 << 0;
-const uint16_t ERR_NTP      = 1 << 1;
+const uint16_t ERR_WIFI = 1 << 0;
+const uint16_t ERR_NTP = 1 << 1;
 const uint16_t ERR_TEMP_INT = 1 << 2;
 const uint16_t ERR_TEMP_EXT = 1 << 3;
-const uint16_t ERR_RTC      = 1 << 4;  // DS1307 external RTC not found / unavailable
+const uint16_t ERR_RTC = 1 << 4;
 
 uint16_t activeErrors = 0;
 uint16_t acknowledgedErrors = 0;
@@ -576,7 +574,7 @@ void setup() {
   loadWifiConfig();
   loadNtpConfig();
   loadAutoRebootConfig();
-  
+
   WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
   const char* currentApSsid = strlen(wifiConfig.apSsid) > 0 ? wifiConfig.apSsid : fallbackApSsid;
@@ -585,7 +583,7 @@ void setup() {
   isApActive = true;
   dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
   storeLogEntry("AP started: " + String(currentApSsid));
-  
+
   if (wifiConfig.magic == 0xA1 && strlen(wifiConfig.ssid) > 0) {
     WiFi.begin(wifiConfig.ssid, wifiConfig.password);
     unsigned long wifiStartTime = millis();
@@ -680,7 +678,7 @@ void setup() {
   server.on("/api/wifi/config", HTTP_GET, handleGetWifiConfig);
   server.on("/api/wifi/config", HTTP_POST, handleSaveWifiConfig);
   server.on("/api/wifi/status", HTTP_GET, handleGetWifiStatus);
-  
+
   server.on("/ntp_settings", HTTP_GET, handleNtpSettingsPage);
   server.on("/api/ntpConfig", HTTP_GET, handleGetNtpConfig);
   server.on("/api/ntpConfig", HTTP_POST, handleSetNtpConfig);
@@ -696,40 +694,42 @@ void setup() {
     server.send(404, "text/plain", "Not Found");
   });
 
-  server.on("/update", HTTP_POST, []() {
-    server.sendHeader("Connection", "close");
-    server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
-    if (!Update.hasError()) {
-      if (server.hasArg("schedule") && server.arg("schedule") == "true") {
-        pendingScheduledUpdate = true;
-        storeLogEntry("Firmware update scheduled for midnight");
-      } else {
-        delay(100);
-        bootCrashCount = 0;
-        ESP.restart();
+  server.on(
+    "/update", HTTP_POST, []() {
+      server.sendHeader("Connection", "close");
+      server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+      if (!Update.hasError()) {
+        if (server.hasArg("schedule") && server.arg("schedule") == "true") {
+          pendingScheduledUpdate = true;
+          storeLogEntry("Firmware update scheduled for midnight");
+        } else {
+          delay(100);
+          bootCrashCount = 0;
+          ESP.restart();
+        }
       }
-    }
-  }, []() {
-    HTTPUpload& upload = server.upload();
-    if (upload.status == UPLOAD_FILE_START) {
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-        storeLogEntry("OTA Update Error: " + String(Update.getError()));
-      } else {
-        storeLogEntry("OTA Update Started");
+    },
+    []() {
+      HTTPUpload& upload = server.upload();
+      if (upload.status == UPLOAD_FILE_START) {
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+          storeLogEntry("OTA Update Error: " + String(Update.getError()));
+        } else {
+          storeLogEntry("OTA Update Started");
+        }
+      } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+        }
+        resetWatchdog();
+        yield();
+      } else if (upload.status == UPLOAD_FILE_END) {
+        if (Update.end(true)) {
+          storeLogEntry("OTA Update Success: " + String(upload.totalSize) + " bytes");
+        } else {
+          storeLogEntry("OTA Update Error: " + String(Update.getError()));
+        }
       }
-    } else if (upload.status == UPLOAD_FILE_WRITE) {
-      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-      }
-      resetWatchdog();
-      yield();
-    } else if (upload.status == UPLOAD_FILE_END) {
-      if (Update.end(true)) {
-        storeLogEntry("OTA Update Success: " + String(upload.totalSize) + " bytes");
-      } else {
-        storeLogEntry("OTA Update Error: " + String(Update.getError()));
-      }
-    }
-  });
+    });
 
   server.begin();
 
@@ -775,6 +775,8 @@ void setup() {
   }
 
   // --- DS1307 External RTC Init ---
+  // On first boot: read DS1307, seed the ESP32 internal RTC, then run entirely
+  // on the internal RTC.  The DS1307 is only written to again on NTP/manual sync.
   esp_task_wdt_reset();  // pet watchdog before I2C device scan
   if (!rtc.begin(&Wire)) {
     storeLogEntry("DS1307 RTC not found! Check I2C wiring.");
@@ -784,13 +786,22 @@ void setup() {
     if (rtc.isrunning()) {
       DateTime now = rtc.now();
       if (now.year() >= 2000) {
+        // Seed the ESP32 internal RTC from the DS1307.
+        // DS1307 stores local IST; convert to UTC for settimeofday(), then
+        // re-apply the GMT offset via configTime() so getLocalTime() returns IST.
+        struct timeval tv;
+        tv.tv_sec = (time_t)(now.unixtime() - gmtOffset_sec);  // IST → UTC
+        tv.tv_usec = 0;
+        settimeofday(&tv, nullptr);
+        configTime(gmtOffset_sec, daylightOffset_sec, "");  // IST offset, no NTP poll
+
         validTimeSync = true;
         validDateSync = true;
         char buf[32];
         sprintf(buf, "%02d/%02d/%04d %02d:%02d:%02d",
                 now.day(), now.month(), now.year(),
                 now.hour(), now.minute(), now.second());
-        storeLogEntry("Time loaded from DS1307: " + String(buf));
+        storeLogEntry("Time loaded from DS1307 and internal RTC synced: " + String(buf));
       } else {
         storeLogEntry("DS1307 time invalid (year < 2000), awaiting NTP sync.");
       }
@@ -824,25 +835,18 @@ void setup() {
     1);
 }
 
-// Reads current time from DS1307 and populates a struct tm.
-// This is the sole time source after boot; replaces all getLocalTime() calls.
+// Reads current time from the ESP32 internal RTC (seeded at boot from DS1307,
+// then kept in sync via NTP).  Non-blocking — returns false when time is not
+// yet valid rather than querying the external DS1307 on every call.
 bool getRTCTime(struct tm* tm_info) {
-  if (!rtcAvailable) return false;
-  DateTime now = rtc.now();
-  if (now.year() < 2000) return false;
-  tm_info->tm_year = now.year() - 1900;
-  tm_info->tm_mon  = now.month() - 1;
-  tm_info->tm_mday = now.day();
-  tm_info->tm_hour = now.hour();
-  tm_info->tm_min  = now.minute();
-  tm_info->tm_sec  = now.second();
-  tm_info->tm_wday = now.dayOfTheWeek();  // 0 = Sunday
-  tm_info->tm_yday = 0;
-  tm_info->tm_isdst = 0;
-  return true;
+  if (!validTimeSync) return false;
+  return getLocalTime(tm_info, 0);  // 0 ms timeout = non-blocking
 }
 
 void attemptTimeSync() {
+  // configTime() drives the ESP32 internal RTC via SNTP — this is the primary
+  // time source at runtime.  We also mirror the result to the DS1307 so it
+  // stays accurate across power cycles.
   configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
 
   struct tm timeinfo;
@@ -858,10 +862,11 @@ void attemptTimeSync() {
     activeErrors &= ~ERR_NTP;
     acknowledgedErrors &= ~ERR_NTP;
 
-    // Write NTP time into DS1307 external RTC
+    // Mirror NTP time to DS1307 external RTC so it stays accurate for next boot.
     if (rtcAvailable) {
       rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
                           timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec));
+      storeLogEntry("DS1307 updated from NTP");
     }
   } else {
     if (!(activeErrors & ERR_NTP) && !(acknowledgedErrors & ERR_NTP)) {
@@ -902,7 +907,7 @@ void saveIpAllowlistToEEPROM() {
   int addr = IP_ALLOWLIST_ADDR;
   EEPROM.write(addr, allowedIPs.size());
   addr++;
-  
+
   for (const AllowedIP& ip : allowedIPs) {
     EEPROM.put(addr, ip);
     addr += sizeof(AllowedIP);
@@ -914,12 +919,12 @@ void loadIpAllowlistFromEEPROM() {
   allowedIPs.clear();
   int addr = IP_ALLOWLIST_ADDR;
   int count = EEPROM.read(addr);
-  
+
   if (count == 255 || count < 0 || count > MAX_ALLOWED_IPS) {
     count = 0;
   }
   addr++;
-  
+
   for (int i = 0; i < count; i++) {
     AllowedIP ip;
     EEPROM.get(addr, ip);
@@ -1108,7 +1113,7 @@ void handleAutoRebootConfigPage() {
 
 void handleGetAutoRebootConfig() {
   if (!checkAuthentication()) return;
-  
+
   DynamicJsonDocument doc(512);
   doc["enabled"] = autoRebootConfig.enabled;
   doc["hour"] = autoRebootConfig.hour;
@@ -1117,7 +1122,7 @@ void handleGetAutoRebootConfig() {
   for (int i = 0; i < 7; i++) {
     daysArray.add(autoRebootConfig.days[i]);
   }
-  
+
   String response;
   serializeJson(doc, response);
   server.send(200, "application/json", response);
@@ -1125,7 +1130,7 @@ void handleGetAutoRebootConfig() {
 
 void handleSaveAutoRebootConfig() {
   if (!checkAuthentication()) return;
-  
+
   if (server.hasArg("enabled")) {
     autoRebootConfig.enabled = server.arg("enabled") == "1";
   }
@@ -1141,9 +1146,9 @@ void handleSaveAutoRebootConfig() {
       autoRebootConfig.days[i] = server.arg(argName) == "1";
     }
   }
-  
+
   saveAutoRebootConfig();
-  
+
   server.send(200, "application/json", "{\"status\":\"success\"}");
 }
 
@@ -1155,7 +1160,7 @@ void loadAutoRebootConfig() {
     autoRebootConfig.hour = 3;
     autoRebootConfig.minute = 0;
     for (int i = 0; i < 7; i++) {
-      autoRebootConfig.days[i] = (i == 0); // Default to Sunday
+      autoRebootConfig.days[i] = (i == 0);  // Default to Sunday
     }
   }
 }
@@ -1490,7 +1495,7 @@ void networkLoop(void* parameter) {
 
     if (WiFi.status() != WL_CONNECTED) {
       pendingApShutdown = false;
-      
+
       if (!(activeErrors & ERR_WIFI) && !(acknowledgedErrors & ERR_WIFI)) {
         storeLogEntry("WiFi disconnected");
         activeErrors |= ERR_WIFI;
@@ -1576,7 +1581,11 @@ void mainLoop(void* parameter) {
     resetWatchdog();
     checkoverride1();
     checkoverride2();
-    overrideLEDState();
+    static unsigned long lastLEDUpdate = 0;
+    if (millis() - lastLEDUpdate >= 500) {
+      overrideLEDState();
+      lastLEDUpdate = millis();
+    }
 
     if (feedingModeActive && millis() >= feedingModeEndTime) {
       feedingModeActive = false;
@@ -1630,10 +1639,8 @@ void mainLoop(void* parameter) {
           }
 
           if (autoRebootConfig.enabled && millis() > 60000) {
-            if (autoRebootConfig.days[timeinfo.tm_wday] && 
-                timeinfo.tm_hour == autoRebootConfig.hour && 
-                timeinfo.tm_min == autoRebootConfig.minute) {
-              
+            if (autoRebootConfig.days[timeinfo.tm_wday] && timeinfo.tm_hour == autoRebootConfig.hour && timeinfo.tm_min == autoRebootConfig.minute) {
+
               if (lastRebootCheckDay != timeinfo.tm_mday) {
                 storeLogEntry("Scheduled Auto-Reboot triggering...");
                 delay(1000);
@@ -2256,7 +2263,17 @@ void handleSyncTime() {
   if (server.hasArg("timestamp")) {
     long timestamp = server.arg("timestamp").toInt();
     if (timestamp > 0) {
-      // Write the provided timestamp directly to the DS1307 external RTC
+      // timestamp is Unix epoch in local IST (as sent by the browser).
+
+      // 1) Update the ESP32 internal RTC.
+      //    settimeofday() expects UTC, so subtract the IST offset before writing.
+      struct timeval tv;
+      tv.tv_sec = (time_t)(timestamp - gmtOffset_sec);  // IST → UTC
+      tv.tv_usec = 0;
+      settimeofday(&tv, nullptr);
+      configTime(gmtOffset_sec, daylightOffset_sec, "");  // re-apply IST, no NTP poll
+
+      // 2) Mirror to the DS1307 external RTC (stores local IST directly).
       if (rtcAvailable) {
         rtc.adjust(DateTime((uint32_t)timestamp));
       }
@@ -2264,7 +2281,7 @@ void handleSyncTime() {
       validTimeSync = true;
       activeErrors &= ~ERR_NTP;
       acknowledgedErrors &= ~ERR_NTP;
-      storeLogEntry("Time manually synced with device");
+      storeLogEntry("Time manually synced — internal RTC and DS1307 updated");
       server.send(200, "application/json", "{\"status\":\"success\"}");
       return;
     }
@@ -2435,20 +2452,20 @@ void overrideLEDState() {
 
   if (activeErrors > 0) {
     if (activeErrors & ERR_WIFI) {
-      setNeoPixelColor(255, 255, 0); // Yellow for WiFi error
+      setNeoPixelColor(255, 255, 0);  // Yellow for WiFi error
     } else if (activeErrors & ERR_RTC) {
-      setNeoPixelColor(128, 0, 128); // Purple for RTC error
+      setNeoPixelColor(128, 0, 128);  // Purple for RTC error
     } else if (activeErrors & ERR_TEMP_INT || activeErrors & ERR_TEMP_EXT) {
-      setNeoPixelColor(255, 0, 0); // Red for Sensor error
+      setNeoPixelColor(255, 0, 0);  // Red for Sensor error
     } else if (activeErrors & ERR_NTP) {
-      setNeoPixelColor(0, 0, 255); // Blue for NTP error
+      setNeoPixelColor(0, 0, 255);  // Blue for NTP error
     } else {
-      setNeoPixelColor(255, 255, 255); // White for other errors
+      setNeoPixelColor(255, 255, 255);  // White for other errors
     }
   } else if (anyOverrideActive) {
-    setNeoPixelColor(0, 255, 255); // Cyan for override active
+    setNeoPixelColor(0, 255, 255);  // Cyan for override active
   } else {
-    setNeoPixelColor(0, 0, 0); // Off
+    setNeoPixelColor(0, 0, 0);  // Off
   }
 }
 
@@ -2979,7 +2996,7 @@ void tempTemperature() {
   if (sensorMutex != NULL) xSemaphoreTake(sensorMutex, portMAX_DELAY);
   sensors.requestTemperatures();
   float tempC = sensors.getTempCByIndex(0);
-  
+
   float externalTempC = externalSensors.readTemperature();
   float hum = externalSensors.readHumidity();
   if (sensorMutex != NULL) xSemaphoreGive(sensorMutex);
@@ -3094,7 +3111,7 @@ void syncRelayHardware() {
       digitalWrite(relay1, HIGH);
       storeLogEntry("Wavemaker remained OFF after Feeding Mode.");
     }
-    
+
     if (relay3State) {
       digitalWrite(relay3, LOW);
       storeLogEntry("Air Pump resumed ON after Feeding Mode.");
@@ -3204,7 +3221,7 @@ void handleBackupRestorePage() {
 void handleBackup() {
   DynamicJsonDocument doc(4096);
   doc["version"] = FIRMWARE_VERSION;
-  
+
   JsonArray scheds = doc.createNestedArray("schedules");
   for (const Schedule& schedule : schedules) {
     JsonObject sched = scheds.createNestedObject();
@@ -3219,43 +3236,43 @@ void handleBackup() {
     }
     sched["enabled"] = schedule.enabled;
   }
-  
+
   JsonObject calib = doc.createNestedObject("sensorCalibration");
   calib["internalOffset"] = sensorCalibration.internalOffset;
   calib["externalOffset"] = sensorCalibration.externalOffset;
-  
+
   JsonObject disp = doc.createNestedObject("displaySchedule");
   disp["onHour"] = displaySchedule.onHour;
   disp["onMinute"] = displaySchedule.onMinute;
   disp["offHour"] = displaySchedule.offHour;
   disp["offMinute"] = displaySchedule.offMinute;
   disp["overrideMode"] = displaySchedule.overrideMode;
-  
+
   JsonObject email = doc.createNestedObject("emailConfig");
   email["enabled"] = emailConfig.enabled;
   email["senderAccount"] = emailConfig.senderAccount;
   email["senderPassword"] = emailConfig.senderPassword;
   email["recipient"] = emailConfig.recipient;
-  
+
   JsonObject docker = doc.createNestedObject("dockerConfig");
   docker["enabled"] = dockerConfig.enabled;
-  
+
   JsonObject auth = doc.createNestedObject("authConfig");
   auth["username"] = authConfig.username;
   auth["password"] = authConfig.password;
-  
+
   JsonObject wifi = doc.createNestedObject("wifiConfig");
   wifi["ssid"] = wifiConfig.ssid;
   wifi["password"] = wifiConfig.password;
   wifi["apSsid"] = strlen(wifiConfig.apSsid) > 0 ? wifiConfig.apSsid : fallbackApSsid;
   wifi["apPassword"] = strlen(wifiConfig.apPassword) > 0 ? wifiConfig.apPassword : fallbackApPassword;
-  
+
   JsonObject theme = doc.createNestedObject("themeConfig");
   theme["isDarkMode"] = themeConfig.isDarkMode;
-  
+
   JsonObject ntp = doc.createNestedObject("ntpConfig");
   ntp["server"] = ntpConfig.server;
-  
+
   JsonObject autoReboot = doc.createNestedObject("autoRebootConfig");
   autoReboot["enabled"] = autoRebootConfig.enabled;
   autoReboot["hour"] = autoRebootConfig.hour;
@@ -3264,14 +3281,14 @@ void handleBackup() {
   for (int i = 0; i < 7; i++) {
     arDays.add(autoRebootConfig.days[i]);
   }
-  
+
   JsonArray ips = doc.createNestedArray("allowedIPs");
   for (const auto& ip : allowedIPs) {
     JsonObject obj = ips.createNestedObject();
     obj["ip"] = ip.ip;
     obj["note"] = ip.note;
   }
-  
+
   String output;
   serializeJson(doc, output);
   server.send(200, "application/json", output);
@@ -3286,15 +3303,15 @@ void handleRestore() {
     server.send(400, "text/plain", "Bad Request");
     return;
   }
-  
+
   DynamicJsonDocument doc(4096);
   DeserializationError error = deserializeJson(doc, server.arg("plain"));
-  
+
   if (error) {
     server.send(400, "application/json", "{\"error\":\"Failed to parse JSON\"}");
     return;
   }
-  
+
   if (doc.containsKey("schedules")) {
     schedules.clear();
     JsonArray scheds = doc["schedules"].as<JsonArray>();
@@ -3316,14 +3333,14 @@ void handleRestore() {
     }
     saveSchedulesToEEPROM();
   }
-  
+
   if (doc.containsKey("sensorCalibration")) {
     sensorCalibration.internalOffset = doc["sensorCalibration"]["internalOffset"];
     sensorCalibration.externalOffset = doc["sensorCalibration"]["externalOffset"];
     EEPROM.put(CALIBRATION_START_ADDR, sensorCalibration);
     EEPROM.commit();
   }
-  
+
   if (doc.containsKey("displaySchedule")) {
     displaySchedule.magic = 0xDA;
     displaySchedule.onHour = doc["displaySchedule"]["onHour"];
@@ -3334,7 +3351,7 @@ void handleRestore() {
     EEPROM.put(DISPLAY_SCHEDULE_ADDR, displaySchedule);
     EEPROM.commit();
   }
-  
+
   if (doc.containsKey("emailConfig")) {
     emailConfig.magic = 0xE2;
     emailConfig.enabled = doc["emailConfig"]["enabled"];
@@ -3344,14 +3361,14 @@ void handleRestore() {
     EEPROM.put(EMAIL_CONFIG_ADDR, emailConfig);
     EEPROM.commit();
   }
-  
+
   if (doc.containsKey("dockerConfig")) {
     dockerConfig.magic = 0xD1;
     dockerConfig.enabled = doc["dockerConfig"]["enabled"];
     EEPROM.put(DOCKER_CONFIG_ADDR, dockerConfig);
     EEPROM.commit();
   }
-  
+
   if (doc.containsKey("authConfig")) {
     authConfig.magic = 0xA1;
     strlcpy(authConfig.username, doc["authConfig"]["username"] | "Admin", sizeof(authConfig.username));
@@ -3359,7 +3376,7 @@ void handleRestore() {
     EEPROM.put(AUTH_CONFIG_ADDR, authConfig);
     EEPROM.commit();
   }
-  
+
   if (doc.containsKey("wifiConfig")) {
     wifiConfig.magic = 0xA1;
     strlcpy(wifiConfig.ssid, doc["wifiConfig"]["ssid"] | "", sizeof(wifiConfig.ssid));
@@ -3369,21 +3386,21 @@ void handleRestore() {
     EEPROM.put(WIFI_CONFIG_ADDR, wifiConfig);
     EEPROM.commit();
   }
-  
+
   if (doc.containsKey("themeConfig")) {
     themeConfig.magic = 0xDC;
     themeConfig.isDarkMode = doc["themeConfig"]["isDarkMode"];
     EEPROM.put(THEME_CONFIG_ADDR, themeConfig);
     EEPROM.commit();
   }
-  
+
   if (doc.containsKey("ntpConfig")) {
     ntpConfig.magic = 0xA2;
     strlcpy(ntpConfig.server, doc["ntpConfig"]["server"] | fallbackNtpServer, sizeof(ntpConfig.server));
     EEPROM.put(NTP_CONFIG_ADDR, ntpConfig);
     EEPROM.commit();
   }
-  
+
   if (doc.containsKey("autoRebootConfig")) {
     autoRebootConfig.magic = 0xA2;
     autoRebootConfig.enabled = doc["autoRebootConfig"]["enabled"];
@@ -3396,7 +3413,7 @@ void handleRestore() {
     EEPROM.put(AUTO_REBOOT_CONFIG_ADDR, autoRebootConfig);
     EEPROM.commit();
   }
-  
+
   if (doc.containsKey("allowedIPs")) {
     allowedIPs.clear();
     JsonArray array = doc["allowedIPs"].as<JsonArray>();
@@ -3409,7 +3426,7 @@ void handleRestore() {
     }
     saveIpAllowlistToEEPROM();
   }
-  
+
   storeLogEntry("Configuration completely restored from backup");
   server.send(200, "application/json", "{\"status\":\"success\"}");
   delay(1000);
@@ -3426,31 +3443,31 @@ void handleRestoreCheck() {
     server.send(400, "text/plain", "Bad Request");
     return;
   }
-  
+
   DynamicJsonDocument doc(4096);
   DeserializationError error = deserializeJson(doc, server.arg("plain"));
-  
+
   if (error) {
     server.send(400, "application/json", "{\"error\":\"Failed to parse JSON\"}");
     return;
   }
-  
+
   String backupVersion = doc["version"] | "Unknown";
   String currentVersion = FIRMWARE_VERSION;
   bool versionMismatch = (backupVersion != currentVersion);
-  
+
   DynamicJsonDocument responseDoc(1024);
   responseDoc["versionMismatch"] = versionMismatch;
   responseDoc["backupVersion"] = backupVersion;
   responseDoc["currentVersion"] = currentVersion;
-  
+
   const char* expected[] = {
-    "version", "schedules", "sensorCalibration", "displaySchedule", "emailConfig", 
-    "dockerConfig", "authConfig", "wifiConfig", "themeConfig", "ntpConfig", 
+    "version", "schedules", "sensorCalibration", "displaySchedule", "emailConfig",
+    "dockerConfig", "authConfig", "wifiConfig", "themeConfig", "ntpConfig",
     "autoRebootConfig", "allowedIPs"
   };
   int expectedCount = sizeof(expected) / sizeof(expected[0]);
-  
+
   JsonArray ignoredFields = responseDoc.createNestedArray("ignoredFields");
   JsonObject obj = doc.as<JsonObject>();
   for (JsonPair kv : obj) {
@@ -3465,14 +3482,14 @@ void handleRestoreCheck() {
       ignoredFields.add(kv.key().c_str());
     }
   }
-  
+
   JsonArray missingFields = responseDoc.createNestedArray("missingFields");
   for (int i = 1; i < expectedCount; i++) {
     if (!doc.containsKey(expected[i])) {
       missingFields.add(expected[i]);
     }
   }
-  
+
   String output;
   serializeJson(responseDoc, output);
   server.send(200, "application/json", output);
@@ -3482,7 +3499,7 @@ void handleReboot() {
   if (!checkAuthentication()) {
     return;
   }
-  
+
   storeLogEntry("System reboot initiated by user");
   server.send(200, "application/json", "{\"status\":\"success\"}");
   delay(1000);
@@ -3494,14 +3511,14 @@ void handleFactoryReset() {
   if (!checkAuthentication()) {
     return;
   }
-  
+
   storeLogEntry("System factory reset initiated by user");
 
   for (int i = 0; i < EEPROM_SIZE; i++) {
     EEPROM.write(i, 0);
   }
   EEPROM.commit();
-  
+
   server.send(200, "application/json", "{\"status\":\"success\"}");
   delay(1000);
   bootCrashCount = 0;
@@ -3586,7 +3603,7 @@ void handleGetAuthConfig() {
 
 void handleSaveAuthConfig() {
   if (!checkAuthentication()) return;
-  
+
   if (server.hasArg("plain")) {
     String body = server.arg("plain");
     StaticJsonDocument<256> doc;
@@ -3596,7 +3613,7 @@ void handleSaveAuthConfig() {
       if (doc.containsKey("username") && doc.containsKey("password")) {
         const char* un = doc["username"];
         const char* pw = doc["password"];
-        
+
         if (strlen(un) > 0 && strlen(pw) > 0 && strlen(un) < 32 && strlen(pw) < 32) {
           strlcpy(authConfig.username, un, sizeof(authConfig.username));
           strlcpy(authConfig.password, pw, sizeof(authConfig.password));
@@ -3615,13 +3632,13 @@ void handleGetIpAllowlist() {
   if (!checkAuthentication()) return;
   DynamicJsonDocument doc(2048);
   JsonArray array = doc.to<JsonArray>();
-  
+
   for (const auto& ip : allowedIPs) {
     JsonObject obj = array.createNestedObject();
     obj["ip"] = ip.ip;
     obj["note"] = ip.note;
   }
-  
+
   String output;
   serializeJson(doc, output);
   server.send(200, "application/json", output);
@@ -3629,11 +3646,11 @@ void handleGetIpAllowlist() {
 
 void handleSaveIpAllowlist() {
   if (!checkAuthentication()) return;
-  
+
   if (server.hasArg("plain")) {
     DynamicJsonDocument doc(2048);
     DeserializationError error = deserializeJson(doc, server.arg("plain"));
-    
+
     if (!error && doc.is<JsonArray>()) {
       allowedIPs.clear();
       JsonArray array = doc.as<JsonArray>();
@@ -3722,7 +3739,7 @@ void handleGetWifiConfig() {
 
 void handleSaveWifiConfig() {
   if (!checkAuthentication()) return;
-  
+
   if (server.hasArg("plain")) {
     String body = server.arg("plain");
     DynamicJsonDocument doc(512);
@@ -3807,7 +3824,7 @@ void handleSetNtpConfig() {
     server.send(400, "application/json", "{\"error\":\"Body not received\"}");
     return;
   }
-  
+
   String body = server.arg("plain");
   StaticJsonDocument<256> doc;
   DeserializationError error = deserializeJson(doc, body);
@@ -3815,24 +3832,24 @@ void handleSetNtpConfig() {
     server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
     return;
   }
-  
+
   if (doc.containsKey("server")) {
     strlcpy(ntpConfig.server, doc["server"], sizeof(ntpConfig.server));
     saveNtpConfig();
-    
+
     configTime(gmtOffset_sec, daylightOffset_sec, ntpConfig.server);
     struct tm timeinfo;
-    if(getLocalTime(&timeinfo, 10000)) {
-        // Write NTP result to DS1307 external RTC
-        if (rtcAvailable) {
-          rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
-                              timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec));
-          validTimeSync = true;
-          validDateSync = true;
-        }
-        server.send(200, "application/json", "{\"success\":true}");
+    if (getLocalTime(&timeinfo, 10000)) {
+      // Write NTP result to DS1307 external RTC
+      if (rtcAvailable) {
+        rtc.adjust(DateTime(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday,
+                            timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec));
+        validTimeSync = true;
+        validDateSync = true;
+      }
+      server.send(200, "application/json", "{\"success\":true}");
     } else {
-        server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to sync time\"}");
+      server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to sync time\"}");
     }
   } else {
     server.send(400, "application/json", "{\"error\":\"Missing server parameter\"}");
@@ -3840,39 +3857,39 @@ void handleSetNtpConfig() {
 }
 
 bool testNtpServerPing(const char* ntpServerName) {
-    WiFiUDP udp;
-    if (!udp.begin(2390)) return false; 
-    
-    byte packetBuffer[48]; 
-    memset(packetBuffer, 0, 48);
-    packetBuffer[0] = 0b11100011;   
-    packetBuffer[1] = 0;     
-    packetBuffer[2] = 6;     
-    packetBuffer[3] = 0xEC;  
-    packetBuffer[12] = 49;
-    packetBuffer[13] = 0x4E;
-    packetBuffer[14] = 49;
-    packetBuffer[15] = 52;
-    
-    if (udp.beginPacket(ntpServerName, 123) == 0) {
-        udp.stop();
-        return false;
-    }
-    udp.write(packetBuffer, 48);
-    udp.endPacket();
-    
-    unsigned long startMs = millis();
-    while (millis() - startMs < 5000) {
-        int size = udp.parsePacket();
-        if (size >= 48) {
-            udp.stop();
-            return true;
-        }
-        delay(10);
-    }
-    
+  WiFiUDP udp;
+  if (!udp.begin(2390)) return false;
+
+  byte packetBuffer[48];
+  memset(packetBuffer, 0, 48);
+  packetBuffer[0] = 0b11100011;
+  packetBuffer[1] = 0;
+  packetBuffer[2] = 6;
+  packetBuffer[3] = 0xEC;
+  packetBuffer[12] = 49;
+  packetBuffer[13] = 0x4E;
+  packetBuffer[14] = 49;
+  packetBuffer[15] = 52;
+
+  if (udp.beginPacket(ntpServerName, 123) == 0) {
     udp.stop();
     return false;
+  }
+  udp.write(packetBuffer, 48);
+  udp.endPacket();
+
+  unsigned long startMs = millis();
+  while (millis() - startMs < 5000) {
+    int size = udp.parsePacket();
+    if (size >= 48) {
+      udp.stop();
+      return true;
+    }
+    delay(10);
+  }
+
+  udp.stop();
+  return false;
 }
 
 void handleTestNtp() {
@@ -3881,7 +3898,7 @@ void handleTestNtp() {
     server.send(400, "application/json", "{\"error\":\"Body not received\"}");
     return;
   }
-  
+
   String body = server.arg("plain");
   StaticJsonDocument<256> doc;
   DeserializationError error = deserializeJson(doc, body);
@@ -3889,14 +3906,14 @@ void handleTestNtp() {
     server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
     return;
   }
-  
+
   if (doc.containsKey("server")) {
     const char* serverStr = doc["server"];
-    
+
     if (testNtpServerPing(serverStr)) {
-        server.send(200, "application/json", "{\"success\":true}");
+      server.send(200, "application/json", "{\"success\":true}");
     } else {
-        server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to reach NTP server\"}");
+      server.send(200, "application/json", "{\"success\":false,\"error\":\"Failed to reach NTP server\"}");
     }
   } else {
     server.send(400, "application/json", "{\"error\":\"Missing server parameter\"}");
